@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.5
+  APP VERSION (shown at the bottom of the page): v1.0.6
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -814,7 +814,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.5'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.6'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3976,7 +3976,8 @@ function explainAiError(r) {
   const detail = data.error ? ` Claude's message: "${data.error}"` : '';
   switch (data.code) {
     case 'access_code': return 'The access code in Settings does not match APP_ACCESS_CODE in your Worker secrets.';
-    case 'origin': return "This site's address is not in ALLOWED_ORIGINS in your Worker secrets.";
+    case 'origin': return `This site (${location.origin}) is not in ALLOWED_ORIGINS in your Worker secrets. Set ALLOWED_ORIGINS to ${location.origin}, then select Deploy in Cloudflare.`;
+    case 'origin_unset': return `Your Worker has no ALLOWED_ORIGINS secret. In Cloudflare, add it with the value ${location.origin}, then select Deploy.`;
     case 'not_configured': return 'Your Cloudflare Worker is missing CLAUDE_API_KEY or APP_ACCESS_CODE. Add both under Settings > Variables and Secrets, then select Deploy.';
     case 'claude_key': return 'Claude rejected the API key in your function. Create a new key in the Claude Console and update CLAUDE_API_KEY in your Worker secrets.';
     case 'billing': return 'Claude reported a billing problem. Check Billing in the Claude Console.';
@@ -4031,8 +4032,8 @@ async function testAiConnection() {
   catch { reachable = false; }
   if (reachable) {
     show(`Your Worker is online, but it did not allow this site to read its reply. One of these needs fixing:
-1. The drafting code isn't deployed. Open the Worker address in a new tab. If it says "Hello World!" instead of "Use POST.", paste worker.js into the Worker in Cloudflare and select Deploy.
-2. ALLOWED_ORIGINS doesn't match this site. It must be exactly ${location.origin} (no path, no slash at the end). After changing it, select Deploy.`, 'err');
+1. The Worker has old or sample code. Paste the latest worker.js from your repo into the Worker in Cloudflare and select Deploy. The latest version reports this problem in plain words.
+2. ALLOWED_ORIGINS doesn't match this site. It should be ${location.origin}. After changing it, select Deploy.`, 'err');
   } else {
     show(`Nothing answered at ${state.settings.aiFunctionUrl}. Copy the address from the Worker's overview page in Cloudflare. It looks like https://jobsearch.YOUR-NAME.workers.dev. Also check your internet connection.`, 'err');
   }

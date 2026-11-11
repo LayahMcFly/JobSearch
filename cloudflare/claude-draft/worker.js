@@ -62,12 +62,21 @@ const ERROR_CODES = {
    ============================================================ */
 const read = (env, name) => String((env && env[name]) || '').trim();
 
-function allowedOrigins(env) {
-  return read(env, 'ALLOWED_ORIGINS').split(',').map(s => s.trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean);
+// Accepts sloppy entries: quotes, spaces, missing https://, or a path such as /JobSearch.
+function normalizeOrigin(s) {
+  s = String(s || '').trim().replace(/^["']+|["']+$/g, '').trim();
+  if (!s) return '';
+  try { return new URL(/^https?:\/\//i.test(s) ? s : 'https://' + s).origin.toLowerCase(); }
+  catch { return s.replace(/\/+$/, '').toLowerCase(); }
 }
-function corsHeaders(env, origin) {
-  const ok = origin && allowedOrigins(env).includes(origin.toLowerCase());
-  return ok
+function allowedOrigins(env) {
+  return read(env, 'ALLOWED_ORIGINS').split(',').map(normalizeOrigin).filter(Boolean);
+}
+// The browser is always allowed to read the reply, so the app can show a clear
+// message (including "this site isn't allowed"). The access code still protects
+// the Worker, and requests from sites not in ALLOWED_ORIGINS are refused below.
+function corsHeaders(origin) {
+  return origin
     ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
     : { Vary: 'Origin' };
@@ -116,13 +125,19 @@ async function callClaude({ key, model, prompt, maxTokens, effort }) {
    ============================================================ */
 async function handle(request, env) {
   const origin = request.headers.get('origin') || '';
-  const cors = corsHeaders(env, origin);
+  const cors = corsHeaders(origin);
   const reply = (status, payload) => json(payload, status, cors);
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply(405, { ok: false, code: 'method', error: 'Use POST.' });
-  if (origin && !cors['Access-Control-Allow-Origin']) {
-    return reply(403, { ok: false, code: 'origin', error: `Requests from ${origin} are not allowed. Add it to ALLOWED_ORIGINS.` });
+  if (origin) {
+    const allowed = allowedOrigins(env);
+    if (!allowed.length) {
+      return reply(403, { ok: false, code: 'origin_unset', error: 'ALLOWED_ORIGINS is not set in the Worker secrets.' });
+    }
+    if (!allowed.includes(normalizeOrigin(origin))) {
+      return reply(403, { ok: false, code: 'origin', error: `Requests from ${origin} are not allowed. Add it to ALLOWED_ORIGINS.` });
+    }
   }
 
   const key = read(env, 'CLAUDE_API_KEY');
