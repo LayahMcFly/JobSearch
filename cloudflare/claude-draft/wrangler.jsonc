@@ -1,0 +1,13 @@
+// Cloudflare settings for the AI drafting Worker.
+// Used when Cloudflare builds this Worker from the GitHub repo
+// (root directory: cloudflare/claude-draft). The name must match the
+// Worker's name in the Cloudflare dashboard.
+{
+  "name": "claude-draft",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  // Keep variables and secrets set in the dashboard when new code deploys
+  "keep_vars": true,
+  // Turns on the Logs tab in Cloudflare
+  "observability": { "enabled": true }
+}
