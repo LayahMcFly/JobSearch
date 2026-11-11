@@ -1,0 +1,8 @@
+{
+  "name": "claude-draft",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Appwrite Function for the Job Search Tracker: sends a draft prompt to the Claude API and returns the text.",
+  "type": "module",
+  "main": "src/main.js"
+}

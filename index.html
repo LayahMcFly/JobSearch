@@ -6,7 +6,15 @@
 <meta name="theme-color" content="#f7f2ea">
 <title>Job Search Tracker</title>
 <!--
-  Tracker v3, Phase 3 complete.
+  Tracker v5, Phase 5 complete.
+
+  APP VERSION (shown at the bottom of the page): v1.0.1
+  Numbering rule, set by the owner. Every update to this file:
+    - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
+    - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
+    - Raise the first number only when the owner asks, or when the middle
+      number would reach 100: v1.99.10 -> v2.0.0
+  Change it in one place: APP_VERSION in section 1.
 
   JOB SEARCH TRACKER
   Single file: HTML, CSS, JavaScript. No libraries, no build step.
@@ -18,6 +26,14 @@
   writing voice, and standard answers, plus a keyword Match button on each
   job. Only facts marked "Verified by me" may be used by later drafting
   (see verifiedFacts() in section 20).
+  Phase 4 adds the Draft screen: it builds a prompt you copy into a Claude
+  chat, stores the drafts you paste back as versions, exports Word and PDF,
+  and requires a review checklist before a job moves to Applied.
+  Phase 5 adds optional AI drafting (Settings > AI drafting, Off by default).
+  When on, Generate Draft sends the same prompt to the owner's Appwrite
+  Function (appwrite-functions/claude-draft), which holds the Claude API key
+  and calls the Claude API. This file never contains an API key. With AI
+  drafting Off, the app makes no calls to the function.
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -31,6 +47,8 @@
     C8. Settings, toast, utilities
     C9. Job Feed
     C10. My Profile, Facts Bank, Match
+    C11. Draft screen, footer
+    C12. AI drafting
   JAVASCRIPT
     1.  Constants
     2.  Utilities (dates, escaping, ids)
@@ -53,8 +71,11 @@
     19. My Profile (contact, master resume, writing voice, standard answers)
     20. Facts Bank (add, edit, verify, filter)
     21. Job match (keyword comparison of a job description with the Facts Bank)
-    22. Event binding
-    23. Startup
+    22. Drafts: storage, prompt builder, Draft screen, review checklist
+    23. Draft exports: Word (.docx), PDF, plain text
+    24. AI drafting (settings, monthly usage, Generate Draft)
+    25. Event binding
+    26. Startup
 -->
 <style>
 /* ============================================================
@@ -329,6 +350,44 @@ legend{font-weight:600;padding:0 .3rem}
 .match-results li p{margin:.15rem 0 0}
 .match-words{color:var(--muted);font-size:.9rem}
 .missing-words{list-style:none;padding:0!important;display:flex!important;flex-wrap:wrap;gap:.35rem!important}
+
+/* ============================================================
+   C11. DRAFT SCREEN, FOOTER
+   ============================================================ */
+.row-flex{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin:0 0 1rem}
+dialog.panel-wide{width:min(1000px,100vw)}
+.panel .panel-shell{display:flex;flex-direction:column;height:100%}
+.panel-head .hint{margin:.1rem 0 0}
+.draft-tabs{display:flex;gap:.3rem;padding:.6rem 1rem 0;border-bottom:1px solid var(--border);background:var(--bg);overflow-x:auto}
+.draft-tabs [role="tab"]{min-height:44px;padding:.45rem 1rem;border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;
+  background:var(--surface-2);color:var(--text);font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+.draft-tabs [role="tab"][aria-selected="true"]{background:var(--surface);border-color:var(--input-border);position:relative;top:1px}
+.draft-step{border-top:1px solid var(--border);padding-top:.4rem;margin-top:1.2rem}
+.draft-step h3{margin-top:.6rem}
+.version-bar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
+.version-bar > div{min-width:240px;flex:1}
+.checklist{background:var(--accent-soft);border:1px solid #e0c3ae;border-radius:var(--radius);padding:.6rem 1rem .8rem;margin:1rem 0 0}
+.checklist legend{font-weight:700;padding:0 .3rem}
+.checklist .check{font-weight:500}
+.checklist.complete{background:#e6f2e1;border-color:#9cc48f}
+.draft-warnings{margin:.6rem 0 0;padding-left:1.2rem;color:#7a5410;font-weight:600;font-size:.95rem}
+textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;background:#fbf8f3}
+.app-footer{text-align:center;color:var(--muted);font-size:.85rem;padding:1.5rem 1rem 2rem}
+
+/* ============================================================
+   C12. AI DRAFTING
+   ============================================================ */
+.switch-row{font-weight:700;font-size:1.05rem}
+.switch-state{display:inline-block;min-width:2.2rem;padding:0 .45rem;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);text-align:center}
+.switch-state.on{background:#dcefd5;border-color:#2d6b22}
+.ai-subs{margin:.3rem 0 0 1.9rem;display:grid;gap:0}
+.ai-subs.is-off{opacity:.65}
+.ai-gen{background:#f6f0e6;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .9rem;margin-top:.8rem}
+.ai-gen .row-flex{margin:0}
+.inline-field{display:flex;gap:.45rem;align-items:center}
+.inline-field label{margin:0}
+.inline-field select{width:auto}
+.gen-error{color:var(--danger);font-weight:600}
 </style>
 </head>
 <body>
@@ -546,6 +605,48 @@ legend{font-weight:600;padding:0 .3rem}
       <div class="row"><button type="submit" class="btn btn-primary">Save settings</button></div>
     </form>
 
+    <form id="aiForm" class="block" aria-labelledby="h-ai">
+      <h3 id="h-ai">AI drafting</h3>
+      <p class="hint">When this is On, the Draft screen gets Generate Draft buttons. They send the same prompt as Build Prompt to your own Appwrite Function, which calls the Claude API and returns a draft for you to review. Claude API usage is billed by Anthropic separately from a Claude Pro subscription. Build Prompt and Copy keep working either way. Switches save as soon as you change them.</p>
+      <label class="check switch-row" for="ai-main"><input type="checkbox" role="switch" id="ai-main" name="aiDrafting"> AI drafting <span class="switch-state" id="ai-main-state">Off</span></label>
+      <div id="aiSubs" class="ai-subs" role="group" aria-labelledby="ai-subs-label">
+        <p id="ai-subs-label" class="hint" style="margin:0">Use AI for these drafts (works only while AI drafting is On):</p>
+        <label class="check" for="ai-resume"><input type="checkbox" role="switch" id="ai-resume" name="aiResume"> AI for resumes</label>
+        <label class="check" for="ai-answers"><input type="checkbox" role="switch" id="ai-answers" name="aiAnswers"> AI for application answers</label>
+        <label class="check" for="ai-email"><input type="checkbox" role="switch" id="ai-email" name="aiEmail"> AI for cover emails</label>
+      </div>
+      <p id="aiNotice" class="feed-note" aria-live="polite"></p>
+      <div class="fields" style="margin-top:.8rem">
+        <div>
+          <label for="ai-model">Default model</label>
+          <select id="ai-model" name="aiModel"></select>
+        </div>
+        <div>
+          <label for="ai-limit">Monthly AI draft limit</label>
+          <input id="ai-limit" name="aiMonthlyLimit" type="number" min="1" max="500" step="1" aria-describedby="ai-limit-hint">
+          <p class="hint" id="ai-limit-hint">When you reach it, AI drafting turns Off and the app tells you why.</p>
+        </div>
+        <div class="field-textarea">
+          <label for="ai-url">Appwrite function address</label>
+          <input id="ai-url" name="aiFunctionUrl" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="ai-url-hint">
+          <p class="hint" id="ai-url-hint">Copy it from the function's Domains tab in Appwrite. It ends in appwrite.run.</p>
+        </div>
+        <div class="field-textarea">
+          <label for="ai-code">Access code</label>
+          <input id="ai-code" name="accessCode" type="password" autocomplete="off" aria-describedby="ai-code-hint">
+          <p class="hint" id="ai-code-hint">The APP_ACCESS_CODE you set in the function. Saved on this device only and left out of backup files.</p>
+        </div>
+      </div>
+      <div class="row">
+        <button type="submit" class="btn btn-primary">Save AI settings</button>
+        <button type="button" class="btn" id="aiTestBtn">Test connection</button>
+        <span id="aiTestResult" class="hint" style="margin:0" aria-live="polite"></span>
+      </div>
+      <h4 class="sub-head">Usage this month</h4>
+      <p id="aiUsageLine" style="margin:0"></p>
+      <p class="hint">This counter covers drafts generated on this device. To cap what you can be billed, set a monthly spend limit in the Claude Console: click your organization name, then Organization settings, Billing, Spend limits. When that limit is reached, the API stops answering until the 1st of the next month.</p>
+    </form>
+
     <section class="block" aria-labelledby="h-backup">
       <h3 id="h-backup">Backup and move between devices</h3>
       <p>Your jobs are saved in this browser on this device only. Export a backup file to keep a copy, then import it on your phone or another computer.</p>
@@ -561,6 +662,8 @@ legend{font-weight:600;padding:0 .3rem}
     </section>
   </section>
 </main>
+
+<footer class="app-footer"><span id="appVersion"></span></footer>
 
 <!-- ============================================================
      ADD JOB DIALOG
@@ -601,6 +704,10 @@ legend{font-weight:600;padding:0 .3rem}
     <div class="panel-body">
       <div id="detailDupWarn"></div>
       <div id="detailMeta" class="meta-line"></div>
+      <div class="row-flex">
+        <button type="button" id="openDraftBtn" class="btn btn-primary">Draft Application</button>
+        <span id="detailDraftSummary" class="hint" style="margin:0"></span>
+      </div>
       <div id="detailFields" class="fields"></div>
       <section class="match-section" aria-labelledby="h-match">
         <h3 id="h-match">Match to my Facts Bank</h3>
@@ -670,6 +777,30 @@ legend{font-weight:600;padding:0 .3rem}
   </form>
 </dialog>
 
+<!-- ============================================================
+     DRAFT DIALOG (Phase 4): Resume, Application Answers, Cover Email
+     ============================================================ -->
+<dialog id="draftDialog" class="panel panel-wide" aria-labelledby="draftTitle">
+  <div class="panel-shell">
+    <div class="panel-head">
+      <div><h2 id="draftTitle">Draft application</h2><p id="draftJobLine" class="hint"></p></div>
+      <button type="button" class="icon-btn" data-close aria-label="Close draft screen">&times;</button>
+    </div>
+    <div role="tablist" aria-label="Draft type" class="draft-tabs" id="draftTabs">
+      <button type="button" role="tab" id="tab-resume" data-kind="resume" aria-controls="draftPanel">Resume</button>
+      <button type="button" role="tab" id="tab-answers" data-kind="answers" aria-controls="draftPanel">Application Answers</button>
+      <button type="button" role="tab" id="tab-email" data-kind="email" aria-controls="draftPanel">Cover Email</button>
+    </div>
+    <div class="panel-body" id="draftPanel" role="tabpanel" tabindex="0"></div>
+    <div class="panel-foot">
+      <span id="draftJobStatus" class="hint" style="margin:0;align-self:center"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>Close</button>
+      <button type="button" id="markAppliedBtn" class="btn btn-primary">Mark job as Applied</button>
+    </div>
+  </div>
+</dialog>
+
 <datalist id="sourceOptions"></datalist>
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -680,7 +811,8 @@ legend{font-weight:600;padding:0 .3rem}
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const SCHEMA_VERSION = 3; // v2 added feed data, v3 adds the profile and Facts Bank to backups
+const APP_VERSION = 'v1.0.1'; // shown in the footer; numbering rule is in the comment at the top of this file
+const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
 const CLOSED_STATUSES = ['Declined', 'Accepted'];   // no follow-up reminders for these
@@ -692,8 +824,36 @@ const COLLECTIONS = {
   dismissed: 'dismissedFeedJobs', // Job Feed openings you dismissed, so they stay hidden
   pasted: 'pastedFeedJobs',       // jobs read from pasted LinkedIn alerts, waiting for review
   profile: 'profile',             // one record (id "me"): contact, master resume, voice, answers
-  facts: 'facts'                  // Facts Bank entries, one record per fact
+  facts: 'facts',                 // Facts Bank entries, one record per fact
+  drafts: 'drafts',               // one record per saved draft version (resume, answers, email) of a job
+  draftMeta: 'draftMeta',         // one record per job (id = job id): pasted questions, chosen versions
+  aiUsage: 'aiUsage',             // one record per month (id "YYYY-MM"): AI drafts generated and tokens used
+  device: 'device'                // this device only, never exported: { id: 'ai', accessCode }
 };
+
+// Phase 5: AI drafting. The Claude API key lives in the Appwrite Function, never here.
+const AI_MODELS = [
+  { id: 'claude-haiku-5-5', label: 'Haiku 5.5', option: 'Haiku 5.5 (lower cost, the default)' },
+  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', option: 'Sonnet 5.5 (for harder jobs, costs more)' }
+];
+const modelLabel = id => (AI_MODELS.find(m => m.id === id) || AI_MODELS[0]).label;
+const AI_KIND_SETTING = { resume: 'aiResume', answers: 'aiAnswers', email: 'aiEmail' };
+const AI_TIMEOUT_MS = 75000; // the function itself stops at 60 seconds
+
+// Phase 4: drafts
+const DRAFT_KINDS = [
+  { key: 'resume', tab: 'Resume', label: 'Resume' },
+  { key: 'answers', tab: 'Application Answers', label: 'Answers' },
+  { key: 'email', tab: 'Cover Email', label: 'Cover Email' }
+];
+const REVIEW_CHECKS = [
+  { key: 'claims', label: 'Every claim matches my Facts Bank' },
+  { key: 'names', label: 'Company name and job title are correct' },
+  { key: 'numbers', label: 'No invented numbers' },
+  { key: 'tone', label: 'Tone matches my voice' }
+];
+const NOTES_MARKER = '=== NOTES FOR ME ==='; // the prompt asks the AI to put its notes after this line; exports leave them out
+const JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.0/jspdf.umd.min.js'; // loaded only when you export a PDF
 
 // Phase 3: profile and Facts Bank definitions
 const PROFILE_ID = 'me';
@@ -860,7 +1020,8 @@ function blankJob() {
     createdAt: '', updatedAt: '',
     isSample: false,
     origin: 'manual',      // future
-    externalId: ''         // future
+    externalId: '',        // future
+    appliedWith: null      // Phase 4: { at, override, drafts: { resume|answers|email: { id, label, version, savedAt, text } } }
   };
 }
 
@@ -883,6 +1044,7 @@ function normalizeJob(raw) {
   if (!job.updatedAt) job.updatedAt = job.createdAt;
   job.isSample = !!job.isSample;
   if (!job.origin) job.origin = 'manual';
+  if (!job.appliedWith || typeof job.appliedWith !== 'object' || typeof job.appliedWith.drafts !== 'object') job.appliedWith = null;
   return job;
 }
 
@@ -905,7 +1067,12 @@ function createJob(values) {
 }
 
 const DEFAULT_FEED_URL = 'jobs-feed.json';
-const DEFAULT_SETTINGS = { id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, sampleSeeded: false };
+const DEFAULT_SETTINGS = {
+  id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, sampleSeeded: false,
+  // Phase 5: AI drafting (main switch Off by default; the three per-draft switches only matter while it is On)
+  aiDrafting: false, aiResume: true, aiAnswers: true, aiEmail: true,
+  aiModel: 'claude-haiku-5-5', aiMonthlyLimit: 30, aiFunctionUrl: ''
+};
 
 function normalizeSettings(raw) {
   const s = Object.assign({}, DEFAULT_SETTINGS, raw || {});
@@ -916,6 +1083,12 @@ function normalizeSettings(raw) {
   s.excludedWords = cleanList(s.excludedWords);
   s.feedUrl = String(s.feedUrl || '').trim() || DEFAULT_FEED_URL;
   s.sampleSeeded = !!s.sampleSeeded;
+  s.aiDrafting = s.aiDrafting === true;
+  ['aiResume', 'aiAnswers', 'aiEmail'].forEach(k => { s[k] = s[k] !== false; });
+  if (!AI_MODELS.some(m => m.id === s.aiModel)) s.aiModel = AI_MODELS[0].id;
+  const lim = parseInt(s.aiMonthlyLimit, 10);
+  s.aiMonthlyLimit = Number.isFinite(lim) ? Math.min(500, Math.max(1, lim)) : 30;
+  s.aiFunctionUrl = String(s.aiFunctionUrl || '').trim();
   return s;
 }
 function cleanList(v) {
@@ -1027,7 +1200,15 @@ const state = {
   profileSnap: {},         // saved form contents, for "unsaved changes" checks
   editingFactId: null,
   factSnapshot: '',
-  factOrig: null
+  factOrig: null,
+  // Drafts (Phase 4)
+  drafts: [],
+  draftMeta: [],
+  draft: { jobId: null, kind: 'resume', versionId: '', snapshot: '', prompt: '', generatedModel: '' }, // what the Draft screen shows
+  // AI drafting (Phase 5)
+  aiUsage: [],
+  device: { id: 'ai', accessCode: '' },
+  gen: { busy: false, ctrl: null }
 };
 
 async function loadAll() {
@@ -1037,6 +1218,11 @@ async function loadAll() {
   state.pasted = (await Storage.list(COLLECTIONS.pasted)).filter(p => p && p.id && p.title);
   state.profile = normalizeProfile(await Storage.get(COLLECTIONS.profile, PROFILE_ID));
   state.facts = (await Storage.list(COLLECTIONS.facts)).map(normalizeFact).filter(Boolean);
+  state.drafts = (await Storage.list(COLLECTIONS.drafts)).map(normalizeDraft).filter(Boolean);
+  state.draftMeta = (await Storage.list(COLLECTIONS.draftMeta)).map(normalizeDraftMeta).filter(Boolean);
+  state.aiUsage = (await Storage.list(COLLECTIONS.aiUsage)).map(normalizeUsage).filter(Boolean);
+  const dev = await Storage.get(COLLECTIONS.device, 'ai');
+  state.device = { id: 'ai', accessCode: String((dev && dev.accessCode) || '') };
 }
 
 async function saveJob(job) {
@@ -1049,6 +1235,11 @@ async function saveJob(job) {
 async function deleteJob(id) {
   await Storage.delete(COLLECTIONS.jobs, id);
   state.jobs = state.jobs.filter(j => j.id !== id);
+  // A deleted job's drafts go with it
+  for (const d of state.drafts.filter(x => x.jobId === id)) await Storage.delete(COLLECTIONS.drafts, d.id);
+  if (state.draftMeta.some(m => m.id === id)) await Storage.delete(COLLECTIONS.draftMeta, id);
+  state.drafts = state.drafts.filter(x => x.jobId !== id);
+  state.draftMeta = state.draftMeta.filter(m => m.id !== id);
 }
 async function saveSettings() {
   await Storage.save(COLLECTIONS.settings, state.settings);
@@ -1295,12 +1486,17 @@ function renderBoard() {
 
 async function changeJobStatus(id, status) {
   const job = getJob(id);
-  if (!job) return;
+  if (!job || job.status === status) return false;
+  // Phase 4: moving to Applied needs a completed review checklist, or an override
+  const gate = appliedGate(job, status);
+  if (!gate.proceed) { render(); return false; }
   const updated = clone(job);
-  if (!setStatus(updated, status, 'manual')) return;
+  setStatus(updated, status, 'manual', gate.note || '');
+  if (gate.applied) recordAppliedWith(updated, gate);
   try { await saveJob(updated); toast(`Moved ${job.title} to ${status}.`); }
   catch (e) { toast(e.message); }
   render();
+  return true;
 }
 
 function bindBoardDragDrop() {
@@ -1475,7 +1671,12 @@ function openDetail(id) {
     `In ${esc(job.status)} for ${plural(daysInStatus(job), 'day')}`
   ];
   if (href) meta.push(`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open job posting<span class="sr-only"> (opens in a new tab)</span></a>`);
+  if (job.appliedWith) {
+    const used = Object.values(job.appliedWith.drafts || {}).map(d => d.label);
+    meta.push(`Applied with ${esc(used.length ? used.join(', ') : 'no saved drafts')}${job.appliedWith.override ? ' (review checklist overridden)' : ''}`);
+  }
   $('#detailMeta').innerHTML = meta.map(m => `<span>${m}</span>`).join('');
+  $('#detailDraftSummary').textContent = draftSummaryText(job.id);
 
   $('#statusHistory').innerHTML = job.statusHistory.slice().reverse().map(h => {
     const change = h.from ? `${esc(h.from)} → <span class="chip" data-status="${statusSlug(h.to)}">${esc(h.to)}</span>`
@@ -1497,26 +1698,36 @@ function showDetailDup() {
   $('#detailDupWarn').innerHTML = dupWarningHtml(findDuplicates(values, state.detailId), 'Another job in your list matches this one.');
 }
 
-async function saveDetail(e) {
-  e.preventDefault();
+// Save the job panel's fields. Returns true when saved.
+async function commitDetail() {
   const form = $('#detailForm');
-  if (!checkRequired(form)) return;
+  if (!checkRequired(form)) return false;
   const job = getJob(state.detailId);
-  if (!job) return;
+  if (!job) return false;
   const values = readForm(form);
   const newStatus = values.status;
   delete values.status;
+  // Phase 4: moving to Applied needs a completed review checklist, or an override
+  const gate = appliedGate(job, newStatus);
+  if (!gate.proceed) { form.elements.status.focus(); return false; }
   const updated = Object.assign(clone(job), values);
-  setStatus(updated, newStatus, 'manual');
+  setStatus(updated, newStatus, 'manual', gate.note || '');
+  if (gate.applied) recordAppliedWith(updated, gate);
   try {
     await saveJob(updated);
-    const id = state.detailId;
-    state.detailSnapshot = '';
-    $('#detailDialog').close();
-    render();
-    refocusJob(id);
-    toast('Saved.');
-  } catch (err) { toast(err.message); }
+    state.detailSnapshot = JSON.stringify(readForm(form));
+    return true;
+  } catch (err) { toast(err.message); return false; }
+}
+async function saveDetail(e) {
+  e.preventDefault();
+  const id = state.detailId;
+  if (!(await commitDetail())) return;
+  state.detailSnapshot = '';
+  $('#detailDialog').close();
+  render();
+  refocusJob(id);
+  toast('Saved.');
 }
 
 async function deleteCurrentJob() {
@@ -1601,6 +1812,7 @@ function renderSettings() {
   }
   const verified = state.facts.filter(f => f.verified).length;
   $('#jobCountLine').textContent = `This browser holds ${plural(state.jobs.length, 'job')} and ${plural(state.facts.length, 'fact')} (${verified} verified).`;
+  renderAiSettings();
 }
 
 async function saveSettingsForm(e) {
@@ -1633,8 +1845,12 @@ async function saveSettingsForm(e) {
    16. EXPORT AND IMPORT
    File format: { app, schemaVersion, exportedAt, jobs: [...], settings: {...},
                   dismissed: [...], pastedJobs: [...],     (added in v2)
-                  profile: {...}, facts: [...] }           (added in v3)
-   Version 1 and 2 backups still import.
+                  profile: {...}, facts: [...],            (added in v3)
+                  drafts: [...], draftMeta: [...],         (added in v4)
+                  aiUsage: [...] }                         (added in v5)
+   AI settings travel inside "settings". The AI access code is device-only
+   and is never written to a backup file.
+   Older backups still import.
    ============================================================ */
 async function exportData() {
   const payload = {
@@ -1646,7 +1862,10 @@ async function exportData() {
     dismissed: await Storage.list(COLLECTIONS.dismissed),
     pastedJobs: await Storage.list(COLLECTIONS.pasted),
     profile: (await Storage.get(COLLECTIONS.profile, PROFILE_ID)) || state.profile,
-    facts: await Storage.list(COLLECTIONS.facts)
+    facts: await Storage.list(COLLECTIONS.facts),
+    drafts: await Storage.list(COLLECTIONS.drafts),
+    draftMeta: await Storage.list(COLLECTIONS.draftMeta),
+    aiUsage: await Storage.list(COLLECTIONS.aiUsage)
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
@@ -1694,6 +1913,22 @@ async function importData(file) {
     }
     for (const f of facts) await Storage.save(COLLECTIONS.facts, f);
     if (hasProfile) await Storage.save(COLLECTIONS.profile, fileProfile);
+    // Phase 4: drafts
+    const drafts = Array.isArray(data.drafts) ? data.drafts.map(normalizeDraft).filter(Boolean) : [];
+    const metas = Array.isArray(data.draftMeta) ? data.draftMeta.map(normalizeDraftMeta).filter(Boolean) : [];
+    if (mode === 'replace') {
+      for (const d of state.drafts) await Storage.delete(COLLECTIONS.drafts, d.id);
+      for (const m of state.draftMeta) await Storage.delete(COLLECTIONS.draftMeta, m.id);
+    }
+    for (const d of drafts) await Storage.save(COLLECTIONS.drafts, d);
+    for (const m of metas) await Storage.save(COLLECTIONS.draftMeta, m);
+    // Phase 5: AI usage. Merge keeps the higher count for each month.
+    const usage = Array.isArray(data.aiUsage) ? data.aiUsage.map(normalizeUsage).filter(Boolean) : [];
+    if (mode === 'replace') for (const u of state.aiUsage) await Storage.delete(COLLECTIONS.aiUsage, u.id);
+    for (const u of usage) {
+      const mine = mode === 'merge' && state.aiUsage.find(x => x.id === u.id);
+      if (!mine || u.count > mine.count) await Storage.save(COLLECTIONS.aiUsage, u);
+    }
     if (data.settings) {
       const incoming = normalizeSettings(data.settings);
       const merged = mode === 'replace' ? incoming : Object.assign({}, state.settings, {
@@ -2841,16 +3076,1046 @@ function runMatch() {
 }
 
 /* ============================================================
-   22. EVENT BINDING
+   22. DRAFTS
+   No AI calls happen here. The app builds a prompt you copy into a
+   Claude chat, then stores the draft you paste back.
+   Records:
+     drafts     { id, jobId, kind: 'resume'|'answers'|'email', version,
+                  text, checklist: { claims, names, numbers, tone },
+                  createdAt, updatedAt }
+     draftMeta  { id: jobId, questions, selected: { resume, answers, email } }
+   "selected" is the version recorded when the job moves to Applied.
+   A newly saved version becomes the selected one.
+   ============================================================ */
+const kindInfo = k => DRAFT_KINDS.find(x => x.key === k) || DRAFT_KINDS[0];
+const draftLabel = d => `${kindInfo(d.kind).label} v${d.version}`;
+const blankChecks = () => Object.fromEntries(REVIEW_CHECKS.map(c => [c.key, false]));
+const checksDone = d => REVIEW_CHECKS.filter(c => d.checklist[c.key]).length;
+
+function normalizeDraft(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.jobId || !DRAFT_KINDS.some(k => k.key === raw.kind)) return null;
+  const now = new Date().toISOString();
+  const checklist = blankChecks();
+  REVIEW_CHECKS.forEach(c => { checklist[c.key] = !!(raw.checklist && raw.checklist[c.key] === true); });
+  return {
+    id: String(raw.id || uid()), jobId: String(raw.jobId), kind: raw.kind,
+    version: Math.max(1, parseInt(raw.version, 10) || 1), text: String(raw.text || ''), checklist,
+    generatedWith: AI_MODELS.some(m => m.id === raw.generatedWith) ? raw.generatedWith : '', // Phase 5: model that wrote it, if AI
+    createdAt: String(raw.createdAt || now), updatedAt: String(raw.updatedAt || now)
+  };
+}
+function normalizeDraftMeta(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.id) return null;
+  const sel = raw.selected || {};
+  return {
+    id: String(raw.id), questions: String(raw.questions || ''),
+    selected: Object.fromEntries(DRAFT_KINDS.map(k => [k.key, String(sel[k.key] || '')])),
+    updatedAt: String(raw.updatedAt || '')
+  };
+}
+function metaFor(jobId) { return state.draftMeta.find(m => m.id === jobId) || normalizeDraftMeta({ id: jobId }); }
+async function saveMeta(meta) {
+  meta.updatedAt = new Date().toISOString();
+  await Storage.save(COLLECTIONS.draftMeta, meta);
+  state.draftMeta = state.draftMeta.filter(m => m.id !== meta.id).concat(meta);
+}
+async function saveDraftRecord(d) {
+  await Storage.save(COLLECTIONS.drafts, d);
+  state.drafts = state.drafts.filter(x => x.id !== d.id).concat(d);
+}
+function draftsFor(jobId, kind) {
+  return state.drafts.filter(d => d.jobId === jobId && d.kind === kind).sort((a, b) => b.version - a.version);
+}
+function selectedDraft(jobId, kind) {
+  const list = draftsFor(jobId, kind);
+  if (!list.length) return null;
+  return list.find(d => d.id === metaFor(jobId).selected[kind]) || list[0];
+}
+function draftSummaryText(jobId) {
+  const parts = DRAFT_KINDS.map(k => {
+    const d = selectedDraft(jobId, k.key);
+    return d ? `${draftLabel(d)}: ${checksDone(d)} of ${REVIEW_CHECKS.length} reviewed` : '';
+  }).filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No drafts yet.';
+}
+
+// --- Review checklist and the Applied gate ---
+// Every selected draft needs all four boxes checked. With no drafts at all,
+// or any box unchecked, you are asked whether to override.
+function draftReviewStatus(jobId) {
+  const used = {}, issues = [];
+  DRAFT_KINDS.forEach(k => {
+    const d = selectedDraft(jobId, k.key);
+    if (!d) return;
+    used[k.key] = d;
+    const n = checksDone(d);
+    if (n < REVIEW_CHECKS.length) issues.push(`${draftLabel(d)}: ${n} of ${REVIEW_CHECKS.length} review boxes checked`);
+  });
+  if (!Object.keys(used).length) issues.push('No drafts are saved for this job');
+  return { ok: !issues.length, issues, used };
+}
+// Called before any status change made by you. Returns { proceed, applied, override, used, note }.
+function appliedGate(job, newStatus) {
+  if (newStatus !== 'Applied' || job.status === 'Applied') return { proceed: true };
+  const r = draftReviewStatus(job.id);
+  const labels = Object.values(r.used).map(draftLabel);
+  const usedNote = labels.length ? `Used ${labels.join(', ')}` : '';
+  if (r.ok) return { proceed: true, applied: true, override: false, used: r.used, note: usedNote };
+  const ok = confirm(`The review checklist for "${job.title}" is not complete:\n\n- ${r.issues.join('\n- ')}\n\nPress OK to mark it Applied anyway (override). Press Cancel to go back.`);
+  if (!ok) return { proceed: false };
+  return { proceed: true, applied: true, override: true, used: r.used, note: [usedNote, 'review checklist overridden'].filter(Boolean).join('; ') };
+}
+// Store a copy of the drafts used, so later edits to a version don't change the record.
+function recordAppliedWith(job, gate) {
+  job.appliedWith = {
+    at: new Date().toISOString(),
+    override: !!gate.override,
+    drafts: Object.fromEntries(Object.entries(gate.used || {}).map(([k, d]) =>
+      [k, { id: d.id, label: draftLabel(d), version: d.version, savedAt: d.updatedAt, text: d.text }]))
+  };
+  const r = gate.used && gate.used.resume;
+  if (r && (!job.resumeVersion || /^Resume v\d+/.test(job.resumeVersion))) {
+    job.resumeVersion = `${draftLabel(r)} (${formatDate(toDateStr(new Date(r.updatedAt)))})`;
+  }
+}
+
+// --- Prompt builder ---
+const PROMPT_RULES = [
+  'Use only the information in this prompt: my verified facts, my master resume, my standard answers, and my contact details.',
+  'Never invent or estimate experience, job titles, employers, clients, dates, numbers, metrics, tools, certifications, or degrees. If a detail is not here, leave it out.',
+  'You may reword, shorten, combine, and reorder what is here. Do not add new claims, and do not make any claim bigger or more specific than its source.',
+  'If the job description asks for something my facts do not support, do not cover the gap with vague wording. List it under Unsupported requirements in your notes.',
+  'Write in my voice, following my style guidelines and samples. If my guidelines conflict with these rules, these rules decide what is true and my guidelines decide how it sounds.',
+  'No buzzwords, filler, or generic advice. Avoid words such as leverage, synergy, game-changer, cutting-edge, results-driven, passionate, dynamic, unlock, and at scale.',
+  'Start each section, paragraph, or answer with its main point. Where it helps, back the point with one concrete example from my facts.',
+  'Return plain text I can paste directly. Do not use Markdown such as # or **. Start bullet points with "- ".'
+];
+const quoted = s => `"""\n${String(s).trim()}\n"""`;
+const promptBlock = (title, body) => `=== ${title} ===\n${body}`;
+
+function buildDraftPrompt(job, kind, questions) {
+  const p = state.profile;
+  const facts = verifiedFacts();
+  const desc = String(job.description || '').trim();
+  const warnings = [];
+  const unverified = state.facts.length - facts.length;
+  if (!desc) warnings.push('This job has no description saved. Open the job, paste the posting into Job description, and save.');
+  if (!facts.length) warnings.push(state.facts.length ? 'None of your facts are verified yet, so none were included.' : 'Your Facts Bank is empty.');
+  else if (unverified) warnings.push(`${plural(unverified, 'unverified fact')} ${unverified === 1 ? 'was' : 'were'} left out.`);
+  if (kind === 'resume' && !p.masterResume.trim()) warnings.push('No master resume is saved in My Profile.');
+  if (!p.voice.guidelines.trim() && !p.voice.samples.some(s => s.trim())) warnings.push('No writing voice is saved in My Profile.');
+  if (kind === 'answers' && !String(questions || '').trim()) warnings.push("The application's questions are missing. Paste them into the box above.");
+
+  // Verified facts, most relevant first (same scoring as the Match button)
+  let ordered = facts, relevant = 0;
+  if (desc && facts.length) {
+    const top = analyzeMatch(desc, facts).topFacts.map(s => s.fd.fact);
+    const ids = new Set(top.map(f => f.id));
+    relevant = top.length;
+    ordered = [...top, ...facts.filter(f => !ids.has(f.id))];
+  }
+  const factLines = ordered.map((f, i) => {
+    const bits = [factTypeLabel(f.type), factDates(f), f.tags.length ? 'tags: ' + f.tags.join(', ') : ''].filter(Boolean).join(' | ');
+    return `F${i + 1}. [${bits}] ${f.text.replace(/\s*\n\s*/g, ' ')}${f.proofLink ? ` (proof: ${f.proofLink})` : ''}`;
+  });
+  let factsBody = '(No verified facts. Do not add any experience that is not in my master resume.)';
+  if (ordered.length && relevant) {
+    factsBody = `Most relevant to this job:\n${factLines.slice(0, relevant).join('\n')}` +
+      (ordered.length > relevant ? `\n\nOther verified facts:\n${factLines.slice(relevant).join('\n')}` : '');
+  } else if (ordered.length) factsBody = factLines.join('\n');
+
+  const contact = CONTACT_FIELDS.map(f => p.contact[f.key] ? `${f.label}: ${p.contact[f.key]}` : '').filter(Boolean).join('\n') || '(No contact details saved.)';
+  const jobLines = [`Job title: ${job.title}`, `Company: ${job.company}`, job.location && `Location: ${job.location}`,
+    job.workType && `Work type: ${job.workType}`, job.payRange && `Pay range: ${job.payRange}`,
+    job.link && `Job link: ${job.link}`, job.contactName && `Hiring contact: ${job.contactName}`].filter(Boolean).join('\n');
+  const voiceParts = [];
+  if (p.voice.guidelines.trim()) voiceParts.push(`Style guidelines:\n${quoted(p.voice.guidelines)}`);
+  p.voice.samples.forEach((s, i) => { if (s.trim()) voiceParts.push(`Sample ${i + 1} of my writing:\n${quoted(s)}`); });
+
+  const what = { resume: 'a resume tailored to one job', answers: 'answers to the questions on one job application', email: 'a short cover email for one job application' }[kind];
+  const tasks = {
+    resume: 'Write a resume tailored to the job below. Use my master resume for the structure, employers, job titles, and dates. Use my verified facts to choose and word the bullet points, and put the facts most relevant to this job first within each section. Keep it to two pages or less. Start with my name and contact details, then use plain-text section headings in capital letters.',
+    answers: 'Answer each question listed under APPLICATION QUESTIONS, in order. Write each question on its own line, then the answer below it. When one of my standard answers fits a question, use it, trimmed if needed, and keep any salary figure, date, or work authorization statement exactly as I wrote it. Respect any word or character limit stated in a question. If a question cannot be answered from this information, write [Needs my input] instead of guessing.',
+    email: `Write a short cover email to send with this application. Put the subject line first, starting with "Subject: ", then a body of 200 words or less. ${job.contactName ? `Address it to ${job.contactName}.` : 'No hiring contact name is known, so open with "Hello,".'} Close with my name and the contact details provided.`
+  };
+  const sections = [
+    `I am applying for a job and will review and submit the application myself. Write ${what}, following the rules below exactly.`,
+    `TASK\n${tasks[kind]}`,
+    `RULES\n${PROMPT_RULES.map((r, i) => `${i + 1}. ${r}`).join('\n')}`,
+    `WHEN YOU FINISH\nWrite the draft first. Then write a line containing only ${NOTES_MARKER} and, under it:\n- Facts used: the fact numbers you drew on, such as F2, F5.\n- Unsupported requirements: each requirement in the job description that my facts do not support, one per line, or "None".`,
+    promptBlock('THE JOB', `${jobLines}\n\nJob description:\n${desc ? quoted(desc) : '(Not provided. Ask me for the job description before you write anything.)'}`),
+    promptBlock('MY VERIFIED FACTS', factsBody),
+    promptBlock('MY MASTER RESUME', p.masterResume.trim() ? quoted(p.masterResume) : '(Not provided.)'),
+    promptBlock('MY WRITING VOICE', voiceParts.length ? voiceParts.join('\n\n') : '(Not provided. Use plain, direct sentences.)'),
+    promptBlock('MY CONTACT DETAILS', contact)
+  ];
+  if (kind === 'email' && p.answers.sampleLinks.trim()) sections.push(promptBlock('LINKS TO MY WRITING SAMPLES', quoted(p.answers.sampleLinks)));
+  if (kind === 'answers') {
+    sections.push(promptBlock('APPLICATION QUESTIONS', String(questions || '').trim() ? quoted(questions) : '(Not provided. Ask me for the questions before you write anything.)'));
+    const std = STANDARD_ANSWERS.filter(a => p.answers[a.key].trim()).map(a => `${a.label}:\n${quoted(p.answers[a.key])}`);
+    p.otherAnswers.forEach(o => { if (o.question.trim() && o.answer.trim()) std.push(`${o.question.trim()}:\n${quoted(o.answer)}`); });
+    sections.push(promptBlock('MY STANDARD ANSWERS', std.length ? std.join('\n\n') : '(None saved.)'));
+  }
+  return { text: sections.join('\n\n') + '\n', warnings };
+}
+
+// --- Draft screen ---
+function draftDirty() {
+  const t = $('#draftText');
+  return !!($('#draftDialog').open && t && t.value !== state.draft.snapshot);
+}
+function confirmDiscardDraft() {
+  return !draftDirty() || confirm('You have unsaved changes in this draft. Discard them?');
+}
+
+function openDraftScreen(jobId, kind = 'resume') {
+  const job = getJob(jobId);
+  if (!job) return;
+  const sel = selectedDraft(jobId, kind);
+  Object.assign(state.draft, { jobId, kind, versionId: sel ? sel.id : '', prompt: '', snapshot: '' });
+  $('#draftJobLine').textContent = `${job.title} at ${job.company}`;
+  renderDraftScreen();
+  const dlg = $('#draftDialog');
+  if (!dlg.open) dlg.showModal();
+  $('#tab-' + kind).focus();
+}
+
+function updateDraftFooter() {
+  const job = getJob(state.draft.jobId);
+  if (!job) return;
+  $('#draftJobStatus').textContent = `Job status: ${job.status}. ${draftSummaryText(job.id)}`;
+  const btn = $('#markAppliedBtn');
+  btn.disabled = job.status === 'Applied';
+  btn.textContent = job.status === 'Applied' ? 'Job is marked Applied' : 'Mark job as Applied';
+}
+
+function renderDraftScreen() {
+  const { jobId, kind, versionId } = state.draft;
+  const job = getJob(jobId);
+  if (!job) return;
+  const info = kindInfo(kind);
+  DRAFT_KINDS.forEach(k => {
+    const tab = $('#tab-' + k.key), on = k.key === kind;
+    tab.setAttribute('aria-selected', String(on));
+    tab.tabIndex = on ? 0 : -1;
+  });
+  $('#draftPanel').setAttribute('aria-labelledby', 'tab-' + kind);
+
+  const versions = draftsFor(jobId, kind);
+  const current = versions.find(d => d.id === versionId) || null;
+  const chosen = selectedDraft(jobId, kind);
+  const next = (versions[0] ? versions[0].version : 0) + 1;
+  const done = current ? checksDone(current) : 0;
+  const ai = aiEnabledFor(kind);
+  const options = versions.map(d =>
+    `<option value="${esc(d.id)}"${current && d.id === current.id ? ' selected' : ''}>${esc(draftLabel(d))} · saved ${esc(formatDateTime(d.updatedAt))}${d.generatedWith ? ' · AI, ' + esc(modelLabel(d.generatedWith)) : ''}${chosen && chosen.id === d.id ? ' · used for this application' : ''}</option>`).join('') +
+    (current ? '' : '<option value="" selected>New draft (not saved yet)</option>');
+  const versionNote = current
+    ? (chosen && chosen.id === current.id
+        ? `${draftLabel(current)} is the version recorded when you mark this job Applied.`
+        : `${draftLabel(chosen)} is set as the version for this application.`)
+    : (versions.length ? `Saving creates ${info.label} v${next}.` : `No ${info.label.toLowerCase()} drafts yet. Saving creates ${info.label} v1.`);
+
+  $('#draftPanel').innerHTML = `
+    <div class="version-bar">
+      <div><label for="dv-select">Version</label><select id="dv-select">${options}</select></div>
+      <button type="button" class="btn" id="dv-new"${current ? '' : ' disabled'}>New version</button>
+      ${current && chosen && chosen.id !== current.id ? '<button type="button" class="btn" id="dv-use">Use this version for the application</button>' : ''}
+    </div>
+    <p class="hint">${esc(versionNote)}</p>
+
+    <fieldset class="checklist${current && done === REVIEW_CHECKS.length ? ' complete' : ''}" id="draftChecklist">
+      <legend>Review checklist${current ? ' for ' + esc(draftLabel(current)) : ''}</legend>
+      ${REVIEW_CHECKS.map(c => `<label class="check"><input type="checkbox" data-check="${c.key}"${current && current.checklist[c.key] ? ' checked' : ''}${current ? '' : ' disabled'}> ${esc(c.label)}</label>`).join('')}
+      <p class="hint" id="checklistNote">${current
+        ? `${done} of ${REVIEW_CHECKS.length} checked. The job can move to Applied once every draft you use has all four checked, or with an override.`
+        : 'Save the draft to start the review.'}</p>
+    </fieldset>
+
+    <section class="draft-step" aria-labelledby="h-step1">
+      <h3 id="h-step1">${ai ? '1. Generate the draft, or build a prompt to copy' : '1. Build the prompt'}</h3>
+      ${kind === 'answers' ? `
+        <label for="dq-questions">Application questions</label>
+        <textarea id="dq-questions" rows="6" aria-describedby="dq-hint">${esc(metaFor(jobId).questions)}</textarea>
+        <p class="hint" id="dq-hint">Paste every question from the application form, with any word limits. Saved with this job.</p>` : ''}
+      ${ai ? aiGenerateHtml() : ''}
+      <div class="row-flex" style="margin-top:.8rem">
+        <button type="button" class="btn${ai ? '' : ' btn-primary'}" id="buildPromptBtn">Build Prompt</button>
+        <button type="button" class="btn" id="copyPromptBtn"${state.draft.prompt ? '' : ' disabled'}>Copy prompt</button>
+        <span class="hint" id="promptInfo" style="margin:0" aria-live="polite"></span>
+      </div>
+      <div id="promptWarnings" aria-live="polite"></div>
+      <label for="promptOut">Prompt to copy</label>
+      <textarea id="promptOut" class="prompt-out" rows="12" readonly aria-describedby="promptOut-hint">${esc(state.draft.prompt)}</textarea>
+      <p class="hint" id="promptOut-hint">Copy the prompt, paste it into a new Claude chat, then paste the reply into step 2.</p>
+    </section>
+
+    <section class="draft-step" aria-labelledby="h-step2">
+      <h3 id="h-step2">2. Paste and edit the draft</h3>
+      <label for="draftText">${esc(info.tab)} draft${current ? ' (' + esc(draftLabel(current)) + ')' : ''}</label>
+      <textarea id="draftText" rows="18" aria-describedby="draftText-hint">${esc(current ? current.text : '')}</textarea>
+      <p class="hint" id="draftText-hint">Keep the AI's notes below the line ${esc(NOTES_MARKER)} while you review. Exports and copies leave them out.</p>
+      <div class="row-flex">
+        ${current ? `<button type="button" class="btn btn-primary" id="saveDraftBtn">Save changes to ${esc(draftLabel(current))}</button>` : ''}
+        <button type="button" class="btn${current ? '' : ' btn-primary'}" id="saveNewVersionBtn">Save as ${esc(info.label)} v${next}</button>
+        <span class="save-state" id="draftSaveState" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <section class="draft-step" aria-labelledby="h-step3">
+      <h3 id="h-step3">3. Export</h3>
+      <div class="row-flex">
+        ${kind === 'resume' ? '<button type="button" class="btn" id="exportDocxBtn">Download Word (.docx)</button><button type="button" class="btn" id="exportPdfBtn">Download PDF</button>' : ''}
+        <button type="button" class="btn" id="copyPlainBtn">Copy as plain text</button>
+      </div>
+      <p class="hint">Exports use the text in the draft box, without the notes section.</p>
+    </section>`;
+  state.draft.snapshot = $('#draftText').value;
+  state.draft.generatedModel = ''; // the box now shows saved text, not a fresh AI draft
+  if (state.draft.prompt) $('#promptInfo').textContent = `${plural(state.draft.prompt.split(/\s+/).length, 'word')}.`;
+  updateDraftFooter();
+}
+
+function switchDraftKind(kind) {
+  if (state.gen.busy) { toast('Wait for the draft to finish, or press Cancel.'); return; }
+  if (kind === state.draft.kind || !confirmDiscardDraft()) return;
+  const sel = selectedDraft(state.draft.jobId, kind);
+  Object.assign(state.draft, { kind, versionId: sel ? sel.id : '', prompt: '' });
+  renderDraftScreen();
+  $('#tab-' + kind).focus();
+}
+
+async function saveQuestions() {
+  const box = $('#dq-questions');
+  if (!box) return;
+  const meta = metaFor(state.draft.jobId);
+  if (meta.questions === box.value) return;
+  meta.questions = box.value;
+  try { await saveMeta(meta); } catch (e) { toast(e.message); }
+}
+
+async function buildPromptClick() {
+  await saveQuestions();
+  const job = getJob(state.draft.jobId);
+  const q = $('#dq-questions') ? $('#dq-questions').value : '';
+  const { text, warnings } = buildDraftPrompt(job, state.draft.kind, q);
+  state.draft.prompt = text;
+  $('#promptOut').value = text;
+  $('#copyPromptBtn').disabled = false;
+  $('#promptInfo').textContent = `Prompt built: ${plural(text.split(/\s+/).length, 'word')}.`;
+  $('#promptWarnings').innerHTML = warnings.length
+    ? `<ul class="draft-warnings">${warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
+}
+
+async function saveDraftChanges() {
+  const current = state.drafts.find(d => d.id === state.draft.versionId);
+  if (!current) return;
+  const text = $('#draftText').value.replace(/\s+$/, '');
+  if (!text.trim()) { toast('The draft is empty.'); $('#draftText').focus(); return; }
+  let cleared = false;
+  if (text !== current.text) {
+    if (checksDone(current)) { current.checklist = blankChecks(); cleared = true; }
+    current.text = text;
+    current.updatedAt = new Date().toISOString();
+  }
+  try {
+    await saveDraftRecord(current);
+    renderDraftScreen();
+    $('#draftSaveState').textContent = cleared
+      ? 'Saved. You changed the text, so the review checklist was cleared. Review it again.'
+      : `Saved ${formatDateTime(current.updatedAt)}.`;
+    $('#saveDraftBtn').focus();
+  } catch (e) { toast(e.message); }
+}
+
+async function saveNewDraftVersion() {
+  const { jobId, kind } = state.draft;
+  const text = $('#draftText').value.replace(/\s+$/, '');
+  if (!text.trim()) { toast('Paste the draft first.'); $('#draftText').focus(); return; }
+  const versions = draftsFor(jobId, kind);
+  const now = new Date().toISOString();
+  const d = normalizeDraft({ id: uid(), jobId, kind, version: (versions[0] ? versions[0].version : 0) + 1, text,
+    generatedWith: state.draft.generatedModel, createdAt: now, updatedAt: now });
+  try {
+    await saveDraftRecord(d);
+    const meta = metaFor(jobId);
+    meta.selected[kind] = d.id;
+    await saveMeta(meta);
+    state.draft.versionId = d.id;
+    renderDraftScreen();
+    $('#draftSaveState').textContent = `Saved as ${draftLabel(d)}. It is now the version for this application.`;
+    $('#saveDraftBtn').focus();
+  } catch (e) { toast(e.message); }
+}
+
+async function toggleDraftCheck(key, checked) {
+  const current = state.drafts.find(d => d.id === state.draft.versionId);
+  if (!current) return;
+  current.checklist[key] = checked;
+  try {
+    await saveDraftRecord(current);
+    const done = checksDone(current);
+    $('#draftChecklist').classList.toggle('complete', done === REVIEW_CHECKS.length);
+    $('#checklistNote').textContent = done === REVIEW_CHECKS.length
+      ? `All ${REVIEW_CHECKS.length} checked. ${draftLabel(current)} is reviewed.`
+      : `${done} of ${REVIEW_CHECKS.length} checked. The job can move to Applied once every draft you use has all four checked, or with an override.`;
+    updateDraftFooter();
+  } catch (e) { toast(e.message); }
+}
+
+async function markAppliedFromDrafts() {
+  if (draftDirty() && !confirm('You have unsaved changes in this draft. Mark the job Applied without saving them?')) return;
+  const moved = await changeJobStatus(state.draft.jobId, 'Applied');
+  updateDraftFooter();
+  if (moved) toast('Job marked Applied. The drafts you used are saved with it.');
+}
+
+// Draft Application button in the job panel: save pending edits first, so the prompt uses them.
+async function openDraftsFromDetail() {
+  const id = state.detailId;
+  const dirty = state.detailSnapshot && JSON.stringify(readForm($('#detailForm'))) !== state.detailSnapshot;
+  if (dirty) {
+    if (!confirm('Save your changes to this job and open the Draft screen?')) return;
+    if (!(await commitDetail())) return;
+  }
+  state.detailSnapshot = '';
+  $('#detailDialog').close();
+  render();
+  openDraftScreen(id);
+}
+
+function bindDrafts() {
+  $('#openDraftBtn').addEventListener('click', openDraftsFromDetail);
+  $('#markAppliedBtn').addEventListener('click', markAppliedFromDrafts);
+  const tabs = $('#draftTabs');
+  tabs.addEventListener('click', e => { const t = e.target.closest('[data-kind]'); if (t) switchDraftKind(t.dataset.kind); });
+  tabs.addEventListener('keydown', e => {
+    const keys = DRAFT_KINDS.map(k => k.key);
+    let i = keys.indexOf(state.draft.kind);
+    if (e.key === 'ArrowRight') i = (i + 1) % keys.length;
+    else if (e.key === 'ArrowLeft') i = (i - 1 + keys.length) % keys.length;
+    else if (e.key === 'Home') i = 0;
+    else if (e.key === 'End') i = keys.length - 1;
+    else return;
+    e.preventDefault();
+    switchDraftKind(keys[i]);
+  });
+  const panel = $('#draftPanel');
+  panel.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'buildPromptBtn') buildPromptClick();
+    else if (b.id === 'copyPromptBtn') copyText(state.draft.prompt).then(ok => toast(ok ? 'Prompt copied. Paste it into a new Claude chat.' : 'Copy did not work. Select the prompt text and copy it.'));
+    else if (b.id === 'saveDraftBtn') saveDraftChanges();
+    else if (b.id === 'saveNewVersionBtn') saveNewDraftVersion();
+    else if (b.id === 'dv-new') {
+      if (!confirmDiscardDraft()) return;
+      state.draft.versionId = '';
+      renderDraftScreen();
+      $('#draftText').focus();
+    }
+    else if (b.id === 'dv-use') {
+      const meta = metaFor(state.draft.jobId);
+      meta.selected[state.draft.kind] = state.draft.versionId;
+      saveMeta(meta).then(() => { renderDraftScreen(); $('#dv-select').focus(); toast('This version will be recorded with the application.'); })
+        .catch(err => toast(err.message));
+    }
+    else if (b.id === 'exportDocxBtn') exportDraftDocx();
+    else if (b.id === 'exportPdfBtn') exportDraftPdf();
+    else if (b.id === 'copyPlainBtn') {
+      const text = toPlainText($('#draftText').value);
+      if (!text) { toast('The draft is empty.'); return; }
+      copyText(text).then(ok => toast(ok ? 'Copied as plain text.' : 'Copy did not work. Select the text and copy it.'));
+    }
+  });
+  panel.addEventListener('change', e => {
+    if (e.target.id === 'dv-select') {
+      if (!confirmDiscardDraft()) { e.target.value = state.draft.versionId; return; }
+      state.draft.versionId = e.target.value;
+      renderDraftScreen();
+      $('#dv-select').focus();
+    } else if (e.target.dataset.check) {
+      toggleDraftCheck(e.target.dataset.check, e.target.checked);
+    } else if (e.target.id === 'dq-questions') {
+      saveQuestions();
+    }
+  });
+  panel.addEventListener('input', e => {
+    if (e.target.id === 'draftText') {
+      const dirty = draftDirty();
+      $('#draftSaveState').textContent = dirty ? 'Unsaved changes' : '';
+      $('#draftSaveState').classList.toggle('dirty', dirty);
+    }
+  });
+}
+
+/* ============================================================
+   23. DRAFT EXPORTS
+   - Word: a .docx built in the browser (a small zip writer, no library)
+   - PDF: jsPDF, loaded from cdnjs only when you press Download PDF.
+     If it can't load, the print window opens; choose "Save as PDF".
+   - Plain text: copied to the clipboard.
+   All exports drop everything from the "=== NOTES FOR ME ===" line down.
+   ============================================================ */
+function stripNotes(text) {
+  const s = String(text || '');
+  const i = s.indexOf(NOTES_MARKER);
+  return (i >= 0 ? s.slice(0, i) : s).replace(/\s+$/, '');
+}
+function toPlainText(text) {
+  return stripNotes(text).split('\n').map(l => l
+    .replace(/^\s*#{1,6}\s+/, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/^(\s*)[*•]\s+/, '$1- ')).join('\n').trim();
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    // Fallback for browsers that block the clipboard API. Inside a modal dialog
+    // the helper box must live in the dialog to be selectable.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    (document.querySelector('dialog[open]') || document.body).appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
+}
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  (document.querySelector('dialog[open]') || document.body).appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function draftFileName(ext) {
+  const job = getJob(state.draft.jobId);
+  const current = state.drafts.find(d => d.id === state.draft.versionId);
+  const name = state.profile.contact.fullName.trim();
+  const base = [name, `${kindInfo(state.draft.kind).label} for ${job.company}`, current ? 'v' + current.version : 'draft'].filter(Boolean).join(' - ');
+  return base.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim() + '.' + ext;
+}
+
+// Turn draft text into blocks: title (first short line), headings, bullets, paragraphs.
+// Handles plain text and simple Markdown (#, **bold**, - bullets).
+function inlineRuns(s) {
+  const runs = [];
+  s.split(/(\*\*[^*]+\*\*)/).forEach(part => {
+    if (!part) return;
+    const bold = /^\*\*[^*]+\*\*$/.test(part);
+    runs.push({ text: bold ? part.slice(2, -2) : part.replace(/\*\*/g, ''), bold });
+  });
+  return runs.length ? runs : [{ text: '', bold: false }];
+}
+function parseDraftBlocks(text) {
+  const blocks = [];
+  stripNotes(text).split(/\r?\n/).forEach(raw => {
+    let line = raw.trim();
+    if (!line || /^(-{3,}|\*{3,}|_{3,}|={3,})$/.test(line)) return;
+    let type = 'p', m;
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
+      type = m[1].length === 1 && !blocks.length ? 'title' : m[1].length <= 2 ? 'h1' : 'h2';
+      line = m[2];
+    } else if ((m = line.match(/^[-*•–]\s+(.*)$/))) {
+      type = 'bullet';
+      line = m[1];
+    } else {
+      const plain = line.replace(/\*\*/g, '');
+      const words = plain.split(/\s+/).length;
+      if (!blocks.length && words <= 6 && !/[.!?:,;]$/.test(plain)) type = 'title';
+      else if (words <= 6 && /[A-Z]/.test(plain) && plain === plain.toUpperCase()) type = 'h1';
+      else if (words <= 6 && /:$/.test(plain)) type = 'h2';
+      else if (/^\*\*[^*]+\*\*$/.test(line) && words <= 10) type = 'h2';
+    }
+    blocks.push({ type, runs: inlineRuns(line) });
+  });
+  return blocks;
+}
+
+// --- Word (.docx) ---
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+// Minimal zip writer (files stored without compression), enough for a .docx.
+function zipStore(entries) {
+  const enc = new TextEncoder();
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const parts = [], central = [];
+  let offset = 0;
+  entries.forEach(e => {
+    const name = enc.encode(e.name), data = e.data, crc = crc32(data), size = data.length;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0, true);
+    cd.setUint16(10, 0, true); cd.setUint16(12, dosTime, true); cd.setUint16(14, dosDate, true); cd.setUint32(16, crc, true);
+    cd.setUint32(20, size, true); cd.setUint32(24, size, true); cd.setUint16(28, name.length, true); cd.setUint16(30, 0, true);
+    cd.setUint16(32, 0, true); cd.setUint16(34, 0, true); cd.setUint16(36, 0, true); cd.setUint32(38, 0, true); cd.setUint32(42, offset, true);
+    central.push(new Uint8Array(cd.buffer), name);
+    offset += 30 + name.length + size;
+  });
+  const cdSize = central.reduce((n, a) => n + a.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(4, 0, true); end.setUint16(6, 0, true);
+  end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true); end.setUint16(20, 0, true);
+  return [...parts, ...central, new Uint8Array(end.buffer)];
+}
+function xmlText(s) {
+  return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function buildDocx(text) {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+  const styleIds = { title: 'Title', h1: 'Heading1', h2: 'Heading2', bullet: 'Bullet', p: '' };
+  const body = parseDraftBlocks(text).map(b => {
+    const pPr = styleIds[b.type] ? `<w:pPr><w:pStyle w:val="${styleIds[b.type]}"/></w:pPr>` : '';
+    const bullet = b.type === 'bullet' ? '<w:r><w:t>•</w:t></w:r><w:r><w:tab/></w:r>' : '';
+    const runs = b.runs.map(r => `<w:r>${r.bold ? '<w:rPr><w:b/></w:rPr>' : ''}<w:t xml:space="preserve">${xmlText(r.text)}</w:t></w:r>`).join('');
+    return `<w:p>${pPr}${bullet}${runs}</w:p>`;
+  }).join('');
+  const styleXml = (id, name, pPr, rPr, extra = '') =>
+    `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>${extra}<w:pPr>${pPr}</w:pPr><w:rPr>${rPr}</w:rPr></w:style>`;
+  const files = {
+    '[Content_Types].xml': head + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
+    '_rels/.rels': head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    'word/_rels/document.xml.rels': head + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+    'word/document.xml': head + `<w:document xmlns:w="${W}"><w:body>${body}` +
+      '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
+    'word/styles.xml': head + `<w:styles xmlns:w="${W}">` +
+      '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="en-US"/></w:rPr></w:rPrDefault>' +
+      '<w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+      styleXml('Title', 'Title', '<w:spacing w:after="60"/>', '<w:b/><w:sz w:val="36"/><w:szCs w:val="36"/>') +
+      styleXml('Heading1', 'heading 1', '<w:keepNext/><w:spacing w:before="240" w:after="80"/><w:outlineLvl w:val="0"/>', '<w:b/><w:sz w:val="26"/><w:szCs w:val="26"/>') +
+      styleXml('Heading2', 'heading 2', '<w:keepNext/><w:spacing w:before="160" w:after="40"/><w:outlineLvl w:val="1"/>', '<w:b/><w:sz w:val="23"/><w:szCs w:val="23"/>') +
+      styleXml('Bullet', 'Bullet', '<w:tabs><w:tab w:val="left" w:pos="360"/></w:tabs><w:spacing w:after="60"/><w:ind w:left="360" w:hanging="360"/>', '') +
+      '</w:styles>'
+  };
+  const enc = new TextEncoder();
+  const parts = zipStore(Object.entries(files).map(([name, xml]) => ({ name, data: enc.encode(xml) })));
+  return new Blob(parts, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+function exportDraftDocx() {
+  const text = $('#draftText').value;
+  if (!stripNotes(text).trim()) { toast('The draft is empty.'); return; }
+  downloadBlob(buildDocx(text), draftFileName('docx'));
+  toast('Word file downloaded.');
+}
+
+// --- PDF ---
+let jsPdfLoading = null;
+function loadJsPdf() {
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  if (!jsPdfLoading) {
+    jsPdfLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = JSPDF_URL;
+      s.async = true;
+      s.onload = () => (window.jspdf && window.jspdf.jsPDF) ? resolve(window.jspdf.jsPDF) : reject(new Error('PDF tool did not load'));
+      s.onerror = () => { jsPdfLoading = null; s.remove(); reject(new Error('PDF tool did not load')); };
+      document.head.appendChild(s);
+    });
+  }
+  return jsPdfLoading;
+}
+// The built-in PDF fonts cover Western European characters only; swap curly quotes and dashes.
+function pdfSafe(s) {
+  return String(s).replace(/[‘’‚‛]/g, "'").replace(/[“”„‟]/g, '"').replace(/[–—―]/g, '-')
+    .replace(/…/g, '...').replace(/ /g, ' ').replace(/[^\x09\x0a\x0d\x20-\x7e\xa0-\xff]/g, '');
+}
+function buildPdf(jsPDF, text) {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const M = 54, width = doc.internal.pageSize.getWidth() - M * 2, height = doc.internal.pageSize.getHeight();
+  const looks = {
+    title: { size: 18, bold: true, before: 0, after: 6 }, h1: { size: 12.5, bold: true, before: 12, after: 4 },
+    h2: { size: 11.5, bold: true, before: 8, after: 2 }, bullet: { size: 10.5, bold: false, before: 0, after: 3 },
+    p: { size: 10.5, bold: false, before: 0, after: 6 }
+  };
+  let y = M;
+  parseDraftBlocks(text).forEach(b => {
+    const look = looks[b.type];
+    const bold = look.bold || b.runs.every(r => r.bold || !r.text.trim());
+    const indent = b.type === 'bullet' ? 14 : 0;
+    const lineH = look.size * 1.3;
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(look.size);
+    y += look.before;
+    doc.splitTextToSize(pdfSafe(b.runs.map(r => r.text).join('')), width - indent).forEach((ln, i) => {
+      if (y + lineH > height - M) { doc.addPage(); y = M; }
+      y += lineH;
+      if (b.type === 'bullet' && i === 0) doc.circle(M + 4, y - look.size * 0.33, 1.6, 'F');
+      doc.text(ln, M + indent, y);
+    });
+    y += look.after;
+  });
+  return doc;
+}
+// Fallback: the browser's print window, where "Save as PDF" is an option.
+function printDraft(text, title) {
+  let html = '', inList = false;
+  parseDraftBlocks(text).forEach(b => {
+    const inner = b.runs.map(r => r.bold ? `<strong>${esc(r.text)}</strong>` : esc(r.text)).join('');
+    if (b.type === 'bullet' && !inList) { html += '<ul>'; inList = true; }
+    if (b.type !== 'bullet' && inList) { html += '</ul>'; inList = false; }
+    html += { title: `<h1>${inner}</h1>`, h1: `<h2>${inner}</h2>`, h2: `<h3>${inner}</h3>`, bullet: `<li>${inner}</li>`, p: `<p>${inner}</p>` }[b.type];
+  });
+  if (inList) html += '</ul>';
+  const frame = document.createElement('iframe');
+  frame.title = 'Print preview';
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(frame);
+  const d = frame.contentDocument;
+  d.open();
+  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+    @page{margin:0} body{font:11pt/1.4 Calibri,Arial,sans-serif;margin:.75in;color:#000}
+    h1{font-size:18pt;margin:0 0 4pt} h2{font-size:12.5pt;margin:12pt 0 4pt} h3{font-size:11.5pt;margin:8pt 0 2pt}
+    p{margin:0 0 6pt} ul{margin:0 0 6pt 16pt;padding:0} li{margin:0 0 3pt}</style></head><body>${html}</body></html>`);
+  d.close();
+  setTimeout(() => { frame.contentWindow.focus(); frame.contentWindow.print(); setTimeout(() => frame.remove(), 60000); }, 300);
+}
+async function exportDraftPdf() {
+  const text = $('#draftText').value;
+  if (!stripNotes(text).trim()) { toast('The draft is empty.'); return; }
+  const name = draftFileName('pdf');
+  try {
+    toast('Preparing PDF…');
+    const jsPDF = await loadJsPdf();
+    buildPdf(jsPDF, text).save(name);
+    toast('PDF downloaded.');
+  } catch (e) {
+    toast('The PDF tool did not load. In the print window, choose Save as PDF.');
+    printDraft(text, name.replace(/\.pdf$/, ''));
+  }
+}
+
+/* ============================================================
+   24. AI DRAFTING
+   Off by default. While Off, no request is ever sent to the function.
+   While On, Generate Draft (on tabs whose own switch is on) sends the
+   Build Prompt text to the owner's Appwrite Function, which holds the
+   Claude API key and calls the Claude API. The reply lands in the draft
+   box for review; nothing is saved until you press a Save button.
+   Monthly usage is counted per device in COLLECTIONS.aiUsage. Reaching
+   the monthly draft limit turns the main switch Off.
+   ============================================================ */
+function normalizeUsage(raw) {
+  if (!raw || typeof raw !== 'object' || !/^\d{4}-\d{2}$/.test(String(raw.id || ''))) return null;
+  const n = v => Math.max(0, parseInt(v, 10) || 0);
+  return {
+    id: raw.id,
+    count: n(raw.count),
+    byKind: Object.fromEntries(DRAFT_KINDS.map(k => [k.key, n((raw.byKind || {})[k.key])])),
+    byModel: Object.fromEntries(AI_MODELS.map(m => [m.id, n((raw.byModel || {})[m.id])])),
+    inputTokens: n(raw.inputTokens),
+    outputTokens: n(raw.outputTokens)
+  };
+}
+const monthKey = () => todayStr().slice(0, 7);
+function monthUsage() { return state.aiUsage.find(u => u.id === monthKey()) || normalizeUsage({ id: monthKey() }); }
+async function recordAiUsage(kind, model, usage) {
+  const u = clone(monthUsage());
+  u.count++;
+  u.byKind[kind] = (u.byKind[kind] || 0) + 1;
+  u.byModel[model] = (u.byModel[model] || 0) + 1;
+  u.inputTokens += (usage && usage.input) || 0;
+  u.outputTokens += (usage && usage.output) || 0;
+  await Storage.save(COLLECTIONS.aiUsage, u);
+  state.aiUsage = state.aiUsage.filter(x => x.id !== u.id).concat(u);
+  return u;
+}
+function aiEnabledFor(kind) {
+  const s = state.settings;
+  return !!(s && s.aiDrafting === true && s[AI_KIND_SETTING[kind]] === true);
+}
+function usageLine() {
+  const u = monthUsage();
+  const month = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  return `${month}: ${u.count} of ${state.settings.aiMonthlyLimit} AI drafts used.` +
+    (u.count ? ` ${u.inputTokens.toLocaleString()} input and ${u.outputTokens.toLocaleString()} output tokens.` : '');
+}
+
+// --- Settings panel ---
+const aiFieldValues = () => {
+  const f = $('#aiForm');
+  return JSON.stringify([f.elements.aiModel.value, f.elements.aiMonthlyLimit.value, f.elements.aiFunctionUrl.value, f.elements.accessCode.value]);
+};
+function renderAiSwitches() {
+  const f = $('#aiForm'), s = state.settings;
+  f.elements.aiDrafting.checked = s.aiDrafting;
+  const st = $('#ai-main-state');
+  st.textContent = s.aiDrafting ? 'On' : 'Off';
+  st.classList.toggle('on', s.aiDrafting);
+  ['aiResume', 'aiAnswers', 'aiEmail'].forEach(k => { f.elements[k].checked = s[k]; f.elements[k].disabled = !s.aiDrafting; });
+  $('#aiSubs').classList.toggle('is-off', !s.aiDrafting);
+  $('#aiTestBtn').disabled = !s.aiDrafting;
+  $('#aiUsageLine').textContent = usageLine();
+}
+function renderAiSettings() {
+  const f = $('#aiForm'), s = state.settings;
+  // Refill the text fields only when they hold no unsaved typing
+  if (state.aiSnap === undefined || aiFieldValues() === state.aiSnap) {
+    fillSelect($('#ai-model'), AI_MODELS.map(m => [m.id, m.option]), s.aiModel);
+    f.elements.aiMonthlyLimit.value = s.aiMonthlyLimit;
+    f.elements.aiFunctionUrl.value = s.aiFunctionUrl;
+    f.elements.accessCode.value = state.device.accessCode;
+    state.aiSnap = aiFieldValues();
+  }
+  renderAiSwitches();
+}
+
+async function setAiSwitch(name, value) {
+  const s = state.settings;
+  if (name === 'aiDrafting' && value && monthUsage().count >= s.aiMonthlyLimit) {
+    $('#aiNotice').textContent = `You have used all ${s.aiMonthlyLimit} AI drafts for this month. Raise the monthly limit and save, then turn AI drafting On.`;
+    renderAiSwitches();
+    return;
+  }
+  s[name] = value;
+  try { await saveSettings(); } catch (e) { toast(e.message); }
+  if (name === 'aiDrafting') {
+    $('#aiNotice').textContent = !value ? 'AI drafting is Off. The app sends nothing to your function.'
+      : (s.aiFunctionUrl && state.device.accessCode ? 'AI drafting is On.' : 'AI drafting is On. Add the function address and access code below, then save.');
+  }
+  renderAiSwitches();
+}
+
+async function saveAiForm(e) {
+  e.preventDefault();
+  const f = $('#aiForm');
+  const limit = parseInt(f.elements.aiMonthlyLimit.value, 10);
+  if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
+    f.elements.aiMonthlyLimit.focus();
+    toast('The monthly AI draft limit must be a whole number from 1 to 500.');
+    return;
+  }
+  let url = cleanLink(f.elements.aiFunctionUrl.value);
+  if (url && !/^https:\/\//i.test(url)) {
+    f.elements.aiFunctionUrl.focus();
+    toast('The function address must start with https://');
+    return;
+  }
+  url = url.replace(/\/+$/, '');
+  f.elements.aiFunctionUrl.value = url;
+  state.settings = normalizeSettings(Object.assign({}, state.settings, { aiModel: f.elements.aiModel.value, aiMonthlyLimit: limit, aiFunctionUrl: url }));
+  state.device = { id: 'ai', accessCode: f.elements.accessCode.value.trim() };
+  try {
+    await saveSettings();
+    await Storage.save(COLLECTIONS.device, state.device); // stays on this device; not in backups
+    state.aiSnap = aiFieldValues();
+    renderAiSwitches();
+    toast('AI settings saved.');
+  } catch (err) { toast(err.message); }
+}
+
+// --- Talking to the function ---
+async function callAiFunction(payload, timeoutMs, ctrl = new AbortController()) {
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, timeoutMs);
+  try {
+    const res = await fetch(state.settings.aiFunctionUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ accessCode: state.device.accessCode }, payload)),
+      signal: ctrl.signal
+    });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    return { status: res.status, data, ok: !!(res.ok && data && data.ok) };
+  } catch (e) {
+    if (e.name === 'AbortError') return timedOut ? { aborted: true } : { userCancel: true };
+    return { netError: e };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+// Every failure becomes one plain sentence or two about what happened and what to do.
+function explainAiError(r) {
+  if (r.userCancel) return 'Generation canceled. Nothing was added to the draft box.';
+  if (r.aborted) return `No reply after ${AI_TIMEOUT_MS / 1000} seconds. Try again, or switch to Haiku 5.5, which is faster.`;
+  if (r.netError) return "The app could not reach your Appwrite function. Check the function address in Settings and your internet connection. If both are right, check that ALLOWED_ORIGINS in the function includes this site's address.";
+  const data = r.data || {};
+  const detail = data.error ? ` Claude's message: "${data.error}"` : '';
+  switch (data.code) {
+    case 'access_code': return 'The access code in Settings does not match APP_ACCESS_CODE in your Appwrite function.';
+    case 'origin': return "This site's address is not in ALLOWED_ORIGINS in your Appwrite function.";
+    case 'not_configured': return 'Your Appwrite function is missing CLAUDE_API_KEY or APP_ACCESS_CODE. Add both, then redeploy the function.';
+    case 'claude_key': return 'Claude rejected the API key in your function. Create a new key in the Claude Console, update CLAUDE_API_KEY, and redeploy.';
+    case 'billing': return 'Claude reported a billing problem. Check Billing in the Claude Console.';
+    case 'claude_request': return `Claude did not accept the request.${detail} If it mentions a spend limit or credit balance, raise the limit or add credits in the Claude Console.`;
+    case 'rate_limit': return `Claude is limiting requests right now.${detail} Wait a minute and try again. If it keeps failing, your account may have reached its monthly cap; check Billing in the Claude Console.`;
+    case 'overloaded': return 'Claude is busy right now. Try again in a minute.';
+    case 'claude_timeout': return 'Claude took too long to finish. Try again, or switch to Haiku 5.5, which is faster.';
+    case 'claude_model': return 'Claude did not recognize the model name. Choose the model again in Settings.';
+    case 'too_large': return 'The prompt is too long. Shorten the job description or your master resume.';
+    case 'refusal': return 'Claude declined to write this draft. Use Build Prompt and Copy instead.';
+    case 'network': return 'Your function could not reach the Claude API. Try again in a minute.';
+    case 'empty': return 'Claude sent back an empty draft. Try again.';
+  }
+  if (r.status === 404) return 'Nothing answered at the function address. Copy the address again from the Domains tab in Appwrite.';
+  if (r.status >= 500) return `Your Appwrite function had an error (${r.status}). Open the function's Executions tab in Appwrite to read the log.`;
+  return `Something went wrong (${r.status || 'no response'}).${detail}`;
+}
+
+async function testAiConnection() {
+  const out = $('#aiTestResult');
+  if (!state.settings.aiDrafting) { out.textContent = 'Turn AI drafting On first.'; return; }
+  if (aiFieldValues() !== state.aiSnap) { out.textContent = 'Save your AI settings first.'; return; }
+  if (!state.settings.aiFunctionUrl || !state.device.accessCode) { out.textContent = 'Add the function address and access code, then save.'; return; }
+  out.textContent = 'Testing…';
+  const r = await callAiFunction({ ping: true }, 20000);
+  out.textContent = r.ok ? 'Connected. The function accepted your access code. This test does not call Claude.' : explainAiError(r);
+}
+
+// Reaching the monthly limit turns AI drafting Off and says why.
+async function hitAiLimit(prefix = '') {
+  const s = state.settings;
+  s.aiDrafting = false;
+  try { await saveSettings(); } catch (e) { /* the message below still shows */ }
+  const msg = `${prefix}You reached your monthly limit of ${s.aiMonthlyLimit} AI drafts, so AI drafting is now Off. Build Prompt and Copy still work. To keep generating, raise the limit in Settings and turn AI drafting back On.`;
+  const gen = $('#aiGen');
+  if (gen) gen.innerHTML = `<p class="gen-error" role="alert" style="margin:0">${esc(msg)}</p>`;
+  $('#aiNotice').textContent = msg;
+  renderAiSwitches();
+  toast('Monthly AI draft limit reached. AI drafting is now Off.');
+}
+
+// --- Generate Draft button ---
+function aiGenerateHtml() {
+  const s = state.settings, u = monthUsage();
+  return `<div class="ai-gen" id="aiGen">
+    <div class="row-flex">
+      <button type="button" class="btn btn-primary" id="generateBtn">Generate Draft</button>
+      <div class="inline-field"><label for="genModel">Model</label>
+        <select id="genModel">${AI_MODELS.map(m => `<option value="${m.id}"${m.id === s.aiModel ? ' selected' : ''}>${esc(m.label)}</option>`).join('')}</select></div>
+      <button type="button" class="btn" id="cancelGenBtn" hidden>Cancel</button>
+    </div>
+    <p class="hint" id="genStatus" role="status">AI drafts this month: ${u.count} of ${s.aiMonthlyLimit}. Generating fills the draft box below. Saved versions stay as they are.</p>
+  </div>`;
+}
+
+async function generateDraft() {
+  const kind = state.draft.kind;
+  if (!aiEnabledFor(kind) || state.gen.busy) return; // AI Off: never contact the function
+  const s = state.settings;
+  const status = $('#genStatus');
+  const fail = msg => { status.textContent = msg; status.classList.add('gen-error'); };
+  status.classList.remove('gen-error');
+  if (!s.aiFunctionUrl) return fail('Add your Appwrite function address in Settings, under AI drafting.');
+  if (!state.device.accessCode) return fail('Add your access code in Settings, under AI drafting. It is saved per device.');
+  if (monthUsage().count >= s.aiMonthlyLimit) return hitAiLimit();
+
+  await saveQuestions();
+  const job = getJob(state.draft.jobId);
+  const questions = $('#dq-questions') ? $('#dq-questions').value : '';
+  const { text: prompt, warnings } = buildDraftPrompt(job, kind, questions);
+  state.draft.prompt = prompt;
+  $('#promptOut').value = prompt;
+  $('#copyPromptBtn').disabled = false;
+  $('#promptWarnings').innerHTML = warnings.length ? `<ul class="draft-warnings">${warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
+  // Don't spend a request on a prompt with nothing to work from
+  if (!String(job.description || '').trim()) return fail('This job has no description saved, so there is nothing to tailor the draft to. Add the description to the job first.');
+  if (kind === 'answers' && !questions.trim()) return fail("Paste the application's questions into the box above first.");
+  const box = $('#draftText');
+  if (box.value.trim() && !confirm('The draft box already has text. Replace it with a new AI draft? Saved versions are not changed.')) return;
+
+  const model = $('#genModel').value;
+  const btn = $('#generateBtn'), cancel = $('#cancelGenBtn');
+  const ctrl = new AbortController();
+  state.gen = { busy: true, ctrl };
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  cancel.hidden = false;
+  $('#draftPanel').setAttribute('aria-busy', 'true');
+  const started = Date.now();
+  status.textContent = `Writing the draft with ${modelLabel(model)}. This usually takes 15 to 45 seconds.`;
+  const tick = setInterval(() => {
+    status.textContent = `Writing the draft with ${modelLabel(model)}… ${Math.round((Date.now() - started) / 1000)} seconds so far.`;
+  }, 5000);
+  const r = await callAiFunction({ prompt, model, kind }, AI_TIMEOUT_MS, ctrl);
+  clearInterval(tick);
+  state.gen = { busy: false, ctrl: null };
+  $('#draftPanel').removeAttribute('aria-busy');
+  if (!$('#generateBtn')) return; // screen changed while waiting
+  btn.disabled = false;
+  btn.textContent = 'Generate Draft';
+  cancel.hidden = true;
+
+  if (!r.ok) { fail(explainAiError(r)); btn.focus(); return; }
+
+  box.value = r.data.text;
+  state.draft.generatedModel = AI_MODELS.some(m => m.id === model) ? model : '';
+  box.dispatchEvent(new Event('input', { bubbles: true })); // shows "Unsaved changes"
+  let u;
+  try { u = await recordAiUsage(kind, model, r.data.usage); } catch (e) { toast(e.message); u = monthUsage(); }
+  const secs = Math.round((Date.now() - started) / 1000);
+  const words = r.data.text.split(/\s+/).filter(Boolean).length;
+  let msg = `Draft generated with ${modelLabel(model)} in ${secs} seconds (${plural(words, 'word')}). Review it, then save it as a version below.`;
+  if (r.data.stopReason === 'max_tokens') msg += ' It reached the length limit, so the end may be cut off.';
+  status.textContent = `${msg} AI drafts this month: ${u.count} of ${s.aiMonthlyLimit}.`;
+  updateDraftFooter();
+  box.focus();
+  if (u.count >= s.aiMonthlyLimit) await hitAiLimit(`Draft generated. Review it below. `);
+}
+
+function bindAi() {
+  const f = $('#aiForm');
+  f.addEventListener('change', e => {
+    if (['aiDrafting', 'aiResume', 'aiAnswers', 'aiEmail'].includes(e.target.name)) setAiSwitch(e.target.name, e.target.checked);
+  });
+  f.addEventListener('submit', saveAiForm);
+  $('#aiTestBtn').addEventListener('click', testAiConnection);
+  $('#draftPanel').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'generateBtn') generateDraft();
+    else if (b.id === 'cancelGenBtn' && state.gen.ctrl) state.gen.ctrl.abort();
+  });
+}
+
+/* ============================================================
+   25. EVENT BINDING
    ============================================================ */
 // Close a dialog, asking first if there are unsaved edits.
 function requestClose(dlg) {
+  if (dlg.id === 'draftDialog' && state.gen.busy) { toast('Wait for the draft to finish, or press Cancel.'); return false; }
   let dirty;
   if (dlg.id === 'detailDialog') dirty = state.detailSnapshot && JSON.stringify(readForm($('#detailForm'))) !== state.detailSnapshot;
   else if (dlg.id === 'factDialog') dirty = state.factSnapshot && formValues($('#factForm')) !== state.factSnapshot;
+  else if (dlg.id === 'draftDialog') dirty = draftDirty();
   else dirty = state.addSnapshot && JSON.stringify(readForm($('#addForm'))) !== state.addSnapshot;
   if (dirty && !confirm('Discard your unsaved changes?')) return false;
-  const id = dlg.id === 'detailDialog' ? state.detailId : null;
+  const id = dlg.id === 'detailDialog' ? state.detailId : dlg.id === 'draftDialog' ? state.draft.jobId : null;
+  if (dlg.id === 'draftDialog') state.draft.snapshot = '';
   dlg.close();
   if (id) refocusJob(id);
   return true;
@@ -2911,6 +4176,8 @@ function bindEvents() {
   bindTable();
   bindFeed();
   bindProfile();
+  bindDrafts();
+  bindAi();
 
   // Job panel: Match button, and the "Go to My Profile" link it may show
   $('#matchBtn').addEventListener('click', runMatch);
@@ -2937,7 +4204,7 @@ function bindEvents() {
 }
 
 /* ============================================================
-   23. STARTUP
+   26. STARTUP
    ============================================================ */
 async function init() {
   bindEvents();
@@ -2950,6 +4217,7 @@ async function init() {
   }
   if (!state.profile) state.profile = blankProfile();
   fillProfileForms();
+  $('#appVersion').textContent = APP_VERSION;
   showView(viewFromHash());
 }
 init();
