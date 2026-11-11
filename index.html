@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.7
+  APP VERSION (shown at the bottom of the page): v1.0.8
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -632,7 +632,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
         <div class="field-textarea">
           <label for="ai-url">Cloudflare Worker address</label>
           <input id="ai-url" name="aiFunctionUrl" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="ai-url-hint">
-          <p class="hint" id="ai-url-hint">It looks like https://claude-draft.YOUR-SUBDOMAIN.workers.dev and is shown on the Worker's page in Cloudflare.</p>
+          <p class="hint" id="ai-url-hint">It looks like https://jobsearch.YOUR-NAME.workers.dev. Copy it from the Worker's page in Cloudflare rather than typing it.</p>
         </div>
         <div class="field-textarea">
           <label for="ai-code">Access code</label>
@@ -814,7 +814,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.7'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.8'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -4030,15 +4030,28 @@ async function testAiConnection() {
   // without permission tells apart "nothing at this address" from "the Worker is
   // there but didn't allow this site" (sample code still in place, or ALLOWED_ORIGINS mismatch).
   show('Checking what went wrong…');
+  const url = state.settings.aiFunctionUrl;
+  // 1. Does the drafting code answer at this exact address? It replies to a plain GET
+  //    with {"code":"method"} and lets this site read it.
+  let codeAnswers = false;
+  try {
+    const g = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const d = await g.json();
+    codeAnswers = !!(d && d.code === 'method');
+  } catch { codeAnswers = false; }
+  // 2. Does anything at all answer there? (Cloudflare answers for any *.workers.dev name, even a misspelled one.)
   let reachable = false;
-  try { await fetch(state.settings.aiFunctionUrl, { method: 'GET', mode: 'no-cors', cache: 'no-store' }); reachable = true; }
+  try { await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store' }); reachable = true; }
   catch { reachable = false; }
-  if (reachable) {
-    show(`Your Worker is online, but it did not allow this site to read its reply. One of these needs fixing:
-1. The Worker has old or sample code. Paste the latest worker.js from your repo into the Worker in Cloudflare and select Deploy. The latest version reports this problem in plain words.
-2. ALLOWED_ORIGINS doesn't match this site. It should be ${location.origin}. After changing it, select Deploy.`, 'err');
+
+  if (codeAnswers) {
+    show(`Your Worker's code answers at ${url}, but the test request itself was blocked on its way. This usually comes from an ad blocker, a privacy or VPN app, or a private DNS setting on this device. Pause it for this site, or try another browser or Wi-Fi, then test again.`, 'err');
+  } else if (reachable) {
+    show(`Cloudflare answered at ${url}, but your drafting code did not. Most likely the address has a small typo. Cloudflare answers for any name ending in .workers.dev, even a misspelled one.
+1. In Cloudflare, open Workers & Pages > jobsearch. Copy the address shown under Domains & Routes (or Preview), and paste it here in place of the current one.
+2. If the address matches exactly, paste the latest worker.js from your repo into the Worker and select Deploy.`, 'err');
   } else {
-    show(`Nothing answered at ${state.settings.aiFunctionUrl}. Copy the address from the Worker's overview page in Cloudflare. It looks like https://jobsearch.YOUR-NAME.workers.dev. Also check your internet connection.`, 'err');
+    show(`Nothing answered at ${url}. Copy the address from the Worker's overview page in Cloudflare. It looks like https://jobsearch.YOUR-NAME.workers.dev. Also check your internet connection.`, 'err');
   }
 }
 
