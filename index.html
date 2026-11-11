@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.4
+  APP VERSION (shown at the bottom of the page): v1.0.5
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -388,7 +388,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 .inline-field label{margin:0}
 .inline-field select{width:auto}
 .gen-error{color:var(--danger);font-weight:600}
-.test-result{margin:.8rem 0 0;padding:.65rem .9rem;border-radius:8px;border:1px solid var(--border);border-left-width:6px;background:var(--surface-2);font-weight:600}
+.test-result{white-space:pre-line;margin:.8rem 0 0;padding:.65rem .9rem;border-radius:8px;border:1px solid var(--border);border-left-width:6px;background:var(--surface-2);font-weight:600}
 .test-result.ok{background:#e6f2e1;border-color:#2d6b22}
 .test-result.err{background:#f8e4e4;border-color:var(--danger)}
 </style>
@@ -814,7 +814,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.4'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.5'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -4019,8 +4019,23 @@ async function testAiConnection() {
   const r = await callAiFunction({ ping: true }, 20000);
   btn.disabled = false;
   if (!r.ok) console.warn('AI connection test failed', { status: r.status, code: r.data && r.data.code, netError: r.netError && String(r.netError) });
-  if (r.ok) show('Connected. The Worker accepted your access code. This test does not call Claude, so it costs nothing.', 'ok');
-  else show(r.aborted ? 'No reply after 20 seconds. Check the Worker address in Settings.' : explainAiError(r), 'err');
+  if (r.ok) return show('Connected. The Worker accepted your access code. This test does not call Claude, so it costs nothing.', 'ok');
+  if (r.aborted) return show('No reply after 20 seconds. Check the Worker address in Settings.', 'err');
+  if (!r.netError) return show(explainAiError(r), 'err');
+  // The browser couldn't read a reply. A simple request the browser lets through
+  // without permission tells apart "nothing at this address" from "the Worker is
+  // there but didn't allow this site" (sample code still in place, or ALLOWED_ORIGINS mismatch).
+  show('Checking what went wrong…');
+  let reachable = false;
+  try { await fetch(state.settings.aiFunctionUrl, { method: 'GET', mode: 'no-cors', cache: 'no-store' }); reachable = true; }
+  catch { reachable = false; }
+  if (reachable) {
+    show(`Your Worker is online, but it did not allow this site to read its reply. One of these needs fixing:
+1. The drafting code isn't deployed. Open the Worker address in a new tab. If it says "Hello World!" instead of "Use POST.", paste worker.js into the Worker in Cloudflare and select Deploy.
+2. ALLOWED_ORIGINS doesn't match this site. It must be exactly ${location.origin} (no path, no slash at the end). After changing it, select Deploy.`, 'err');
+  } else {
+    show(`Nothing answered at ${state.settings.aiFunctionUrl}. Copy the address from the Worker's overview page in Cloudflare. It looks like https://jobsearch.YOUR-NAME.workers.dev. Also check your internet connection.`, 'err');
+  }
 }
 
 // Reaching the monthly limit turns AI drafting Off and says why.
