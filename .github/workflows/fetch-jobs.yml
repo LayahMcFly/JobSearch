@@ -1,0 +1,97 @@
+# ============================================================================
+# FETCH JOBS — Job Search Tracker (Tracker v2, Phase 2)
+#
+# Runs fetch-jobs.mjs once a day (and whenever you press "Run workflow"),
+# then commits the result to jobs-feed.json. The app's Job Feed screen reads
+# that file. Nothing is ever applied to or submitted.
+#
+# ---------------------------------------------------------------------------
+# SETUP GUIDE
+# ---------------------------------------------------------------------------
+# 1. FILES. Put these in the same repo as the app (the repo GitHub Pages serves):
+#      job-tracker.html (or index.html)   fetch-jobs.mjs   job-sources.json
+#      .github/workflows/fetch-jobs.yml   (this file)
+#    jobs-feed.json is created by the first run. Pages must be set to
+#    "Deploy from a branch" (Settings > Pages) on the branch this workflow
+#    commits to, so each new feed file goes live.
+#
+# 2. LET THE WORKFLOW COMMIT. Settings > Actions > General > Workflow
+#    permissions > choose "Read and write permissions" > Save.
+#
+# 3. ADZUNA SECRETS (optional; Adzuna is skipped until both exist).
+#    a. Sign up free at https://developer.adzuna.com and copy your
+#       Application ID and Application Key.
+#    b. In the repo: Settings > Secrets and variables > Actions >
+#       New repository secret. Add two secrets, named exactly:
+#         ADZUNA_APP_ID   = your Application ID
+#         ADZUNA_APP_KEY  = your Application Key
+#    The keys stay in GitHub's encrypted secrets. They never go in a file,
+#    and the script blanks them out of every log message.
+#
+# 4. CHOOSE YOUR SOURCES in job-sources.json (edit it on github.com, then commit):
+#    - "greenhouse": companies that use Greenhouse. From one of their job links,
+#      boards.greenhouse.io/acme/jobs/123 -> token is "acme". Add:
+#        { "token": "acme", "company": "Acme" }
+#    - "lever": companies that use Lever. From jobs.lever.co/acme/... the name
+#      is "acme". Add: { "name": "acme", "company": "Acme" }
+#    - "adzuna" > "searches": one entry per search phrase, for example
+#        { "what": "content strategist", "where": "Atlanta", "maxDaysOld": 14 }
+#    - "remotive": set "enabled" to false to turn it off.
+#    - "rss": any job board RSS feed. Add { "name", "label", "url" }.
+#    - "prefilter" > "titleKeywords": a broad first cut to keep the file small.
+#      Your exact filters live in the app under Settings.
+#    A source that fails (bad token, site down) is logged and skipped; the
+#    others still run. The log shows on the run's Summary page and in the app.
+#
+# 5. FIRST RUN. Actions tab > "Fetch jobs" > "Run workflow". After it finishes
+#    and Pages redeploys (a minute or two), open Job Feed in the app.
+#
+# NOTE: GitHub pauses scheduled workflows in public repos after 60 days with
+# no repository activity. If runs stop, open the Actions tab and re-enable it.
+# ============================================================================
+
+name: Fetch jobs
+
+on:
+  schedule:
+    - cron: '17 10 * * *'   # every day at 10:17 UTC (5:17 AM Eastern in winter, 6:17 AM in summer)
+  workflow_dispatch:         # adds the "Run workflow" button
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fetch-jobs
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Fetch jobs from every source
+        env:
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+        run: node fetch-jobs.mjs
+
+      - name: Commit jobs-feed.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add jobs-feed.json
+          if git diff --cached --quiet; then
+            echo "Feed unchanged. Nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update jobs feed"
+          git pull --rebase
+          git push

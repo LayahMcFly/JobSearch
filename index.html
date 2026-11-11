@@ -1,0 +1,2958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f2ea">
+<title>Job Search Tracker</title>
+<!--
+  Tracker v3, Phase 3 complete.
+
+  JOB SEARCH TRACKER
+  Single file: HTML, CSS, JavaScript. No libraries, no build step.
+  Phase 2 adds the Job Feed screen. It reads jobs-feed.json, which
+  fetch-jobs.mjs writes once a day through .github/workflows/fetch-jobs.yml,
+  plus jobs you paste from LinkedIn alert emails. Nothing enters the tracker
+  until you press Add to Tracker, and nothing is ever submitted for you.
+  Phase 3 adds My Profile: contact details, master resume, Facts Bank,
+  writing voice, and standard answers, plus a keyword Match button on each
+  job. Only facts marked "Verified by me" may be used by later drafting
+  (see verifiedFacts() in section 20).
+
+  CODE MAP (search for the section number to jump there)
+  CSS
+    C1. Theme tokens and base
+    C2. Header and navigation
+    C3. Buttons, chips, forms
+    C4. Dashboard
+    C5. Board
+    C6. Table and filters
+    C7. Dialogs (Add job, Job detail)
+    C8. Settings, toast, utilities
+    C9. Job Feed
+    C10. My Profile, Facts Bank, Match
+  JAVASCRIPT
+    1.  Constants
+    2.  Utilities (dates, escaping, ids)
+    3.  Storage module (the only code that touches localStorage)
+    4.  Data model (job and settings records)
+    5.  Status rules (status changes, 14-day No Word rule)
+    6.  Duplicate detection
+    7.  App state and data loading
+    8.  Form fields (shared by Add form and Detail panel)
+    9.  View switching and main render
+    10. Dashboard view
+    11. Board view
+    12. Table view
+    13. Job detail panel
+    14. Add Job form
+    15. Settings view
+    16. Export and import
+    17. Job Feed (load feed, keyword filter, cards, add, dismiss)
+    18. LinkedIn alert parser (pasted text only, never contacts LinkedIn)
+    19. My Profile (contact, master resume, writing voice, standard answers)
+    20. Facts Bank (add, edit, verify, filter)
+    21. Job match (keyword comparison of a job description with the Facts Bank)
+    22. Event binding
+    23. Startup
+-->
+<style>
+/* ============================================================
+   C1. THEME TOKENS AND BASE
+   ============================================================ */
+:root{
+  --bg:#f7f2ea;          /* warm paper */
+  --surface:#fffdf9;
+  --surface-2:#f0e8db;
+  --text:#2a241f;        /* near-black brown, 14:1 on --bg */
+  --muted:#5c5248;       /* 6.6:1 on --bg */
+  --border:#d8ccbb;
+  --input-border:#8f806c;
+  --accent:#8a3f1f;      /* terracotta, white text passes AA */
+  --accent-hover:#6f3116;
+  --accent-soft:#f4e3d7;
+  --focus:#1d5b86;
+  --danger:#9b2c2c;
+  --warn-bg:#fff4d6;
+  --warn-border:#b9862a;
+  --radius:12px;
+  --shadow:0 1px 2px rgba(60,40,20,.08),0 2px 8px rgba(60,40,20,.06);
+}
+*{box-sizing:border-box}
+html{font-size:106.25%} /* 17px base, keeps iOS from zooming inputs */
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.5}
+h1,h2,h3{font-family:Georgia,"Iowan Old Style","Palatino Linotype",serif;line-height:1.25;font-weight:700}
+h2{font-size:1.6rem;margin:.25rem 0 1rem}
+h3{font-size:1.15rem;margin:1.5rem 0 .6rem}
+a{color:var(--accent)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip-link{position:absolute;left:-9999px;top:.5rem;background:var(--text);color:var(--bg);padding:.6rem 1rem;border-radius:8px;z-index:100}
+.skip-link:focus{left:.5rem}
+main{max-width:1400px;margin:0 auto;padding:1rem 1rem 4rem}
+main:focus{outline:none}
+.view h2:focus{outline:none}
+.hint{color:var(--muted);font-size:.92rem;margin:.25rem 0 0}
+.empty{color:var(--muted);padding:.75rem 0}
+
+/* ============================================================
+   C2. HEADER AND NAVIGATION
+   ============================================================ */
+.app-header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--border);
+  padding:.6rem 1rem;display:grid;grid-template-columns:1fr auto;gap:.5rem 1rem;align-items:center}
+.app-header h1{font-size:1.3rem;margin:0}
+.app-header nav{grid-column:1/-1}
+.tabs{list-style:none;margin:0;padding:0;display:flex;gap:.35rem;overflow-x:auto}
+.tabs button{min-height:44px;padding:.45rem 1.05rem;border:1px solid var(--border);border-radius:999px;
+  background:var(--surface);color:var(--text);font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+.tabs button:hover{background:var(--surface-2)}
+.tabs button[aria-current="page"]{background:var(--text);border-color:var(--text);color:var(--bg)}
+@media (min-width:900px){
+  .app-header{grid-template-columns:auto 1fr auto}
+  .app-header nav{grid-column:auto;grid-row:1;grid-column-start:2}
+  .app-header .add-wrap{grid-column-start:3}
+}
+
+/* ============================================================
+   C3. BUTTONS, CHIPS, FORMS
+   ============================================================ */
+.btn{min-height:44px;padding:.5rem 1rem;border-radius:10px;border:1px solid var(--input-border);
+  background:var(--surface);color:var(--text);font:inherit;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:.4rem;text-decoration:none}
+.btn:hover{background:var(--surface-2)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-danger{color:var(--danger);border-color:#c99a9a}
+.btn-danger:hover{background:#f6e3e3}
+.btn-small{min-height:40px;padding:.3rem .8rem;font-size:.92rem}
+.link-btn{background:none;border:none;padding:.35rem 0;font:inherit;font-weight:600;color:var(--accent);
+  text-align:left;cursor:pointer;text-decoration:underline;text-underline-offset:3px;min-height:40px}
+.icon-btn{min-width:44px;min-height:44px;border-radius:10px;border:1px solid var(--border);background:var(--surface);
+  font-size:1.5rem;line-height:1;cursor:pointer;color:var(--text)}
+
+/* Status colors: every status gets a border color (--s) and a soft fill (--s-bg). Text stays dark. */
+[data-status="found"]{--s:#7a6a55;--s-bg:#efe8dc}
+[data-status="drafting"]{--s:#9a6b12;--s-bg:#f7ebcf}
+[data-status="applied"]{--s:#2f6b4a;--s-bg:#deeee3}
+[data-status="waiting"]{--s:#4b5a8a;--s-bg:#e3e6f3}
+[data-status="no-word"]{--s:#8a5a48;--s-bg:#f1e2db}
+[data-status="declined"]{--s:#8f3434;--s-bg:#f3dede}
+[data-status="interview"]{--s:#1f6380;--s-bg:#dbecf3}
+[data-status="accepted"]{--s:#2d6b22;--s-bg:#dcefd5}
+.chip{display:inline-block;padding:.05rem .55rem;border-radius:999px;background:var(--s-bg,#eee);
+  border:1px solid var(--s,#999);font-size:.85rem;font-weight:600;white-space:nowrap}
+.badge{display:inline-block;padding:.05rem .5rem;border-radius:6px;font-size:.8rem;font-weight:700;
+  background:var(--text);color:var(--bg);letter-spacing:.02em}
+.badge-due{background:var(--warn-bg);color:var(--text);border:1px solid var(--warn-border)}
+
+label{display:block;font-weight:600;margin-bottom:.3rem}
+.req{color:var(--danger)}
+input,select,textarea{font:inherit;color:var(--text);background:#fff;width:100%;min-height:44px;
+  padding:.5rem .65rem;border:1px solid var(--input-border);border-radius:8px}
+textarea{resize:vertical;line-height:1.45}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem 1rem}
+.field-textarea{grid-column:1/-1}
+.warn{background:var(--warn-bg);border:1px solid var(--warn-border);border-left-width:6px;
+  padding:.7rem 1rem;border-radius:8px;margin:0 0 1rem}
+.warn p{margin:.2rem 0}
+.warn ul{margin:.3rem 0 0;padding-left:1.2rem}
+
+/* ============================================================
+   C4. DASHBOARD
+   ============================================================ */
+.notice{background:var(--accent-soft);border:1px solid #e0c3ae;border-radius:var(--radius);
+  padding:.8rem 1rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between}
+.notice p{margin:0}
+.status-cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:.75rem}
+.status-card{width:100%;min-height:88px;text-align:left;cursor:pointer;font:inherit;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-left:7px solid var(--s);
+  border-radius:var(--radius);padding:.7rem .9rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.15rem}
+.status-card:hover{background:var(--s-bg)}
+.status-card .count{font-size:1.9rem;font-weight:700;line-height:1.1;font-family:Georgia,serif}
+.status-card .label{font-weight:600}
+.week-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.8rem 1rem;box-shadow:var(--shadow)}
+.stat .count{font-size:1.9rem;font-weight:700;font-family:Georgia,serif}
+.followups{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
+.followup{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.7rem 1rem;
+  display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between;box-shadow:var(--shadow)}
+.followup .who{min-width:200px;flex:1}
+.followup .actions{display:flex;gap:.5rem}
+.overdue{color:var(--danger);font-weight:700}
+
+/* ============================================================
+   C5. BOARD
+   ============================================================ */
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,1fr);gap:.75rem;overflow-x:auto;padding-bottom:.75rem;align-items:start}
+.column{background:var(--surface-2);border-radius:var(--radius);border-top:6px solid var(--s);padding:.6rem;min-height:160px}
+.column.drop-target{outline:3px dashed var(--s);outline-offset:-3px;background:var(--s-bg)}
+.column-head{margin:.1rem .2rem .6rem;font-size:1.05rem;display:flex;justify-content:space-between;gap:.5rem;font-family:inherit}
+.col-count{font-weight:600;color:var(--muted)}
+.column-list{list-style:none;margin:0;padding:0;display:grid;gap:.55rem;min-height:60px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.55rem .7rem;box-shadow:var(--shadow)}
+.card[draggable="true"]{cursor:grab}
+.card.dragging{opacity:.5}
+.card-open{display:block;width:100%;text-align:left;background:none;border:none;padding:0;font:inherit;color:var(--text);cursor:pointer;min-height:44px}
+.card-title{display:block;font-weight:700}
+.card-company{display:block;color:var(--muted)}
+.card-meta{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.35rem;font-size:.85rem;color:var(--muted);align-items:center}
+.card-move{display:none;margin-top:.5rem;font-size:.9rem}
+.only-touch{display:none}
+/* Phone or touch layout: stack columns, show the status menu instead of drag and drop */
+@media (max-width:760px), (hover:none) and (pointer:coarse){
+  .board{display:flex;flex-direction:column}
+  .card-move{display:block}
+  .only-touch{display:inline}
+  .only-desktop{display:none}
+}
+
+/* ============================================================
+   C6. TABLE AND FILTERS
+   ============================================================ */
+.filters{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.8rem;align-items:end;margin-bottom:.75rem}
+.filters .search{grid-column:1/-1}
+.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--border);vertical-align:top}
+thead th{background:var(--surface-2);position:sticky;top:0}
+th button{background:none;border:none;font:inherit;font-weight:700;color:var(--text);cursor:pointer;padding:.35rem 0;min-height:40px;display:inline-flex;gap:.3rem;align-items:center}
+tbody tr:hover{background:#fbf6ee}
+.sort-ind{font-size:.8rem;color:var(--muted)}
+@media (max-width:760px){
+  table{min-width:0}
+  thead{position:absolute;left:-9999px}
+  table,tbody,tr,td{display:block;width:100%}
+  tr{border-bottom:2px solid var(--border);padding:.5rem 0}
+  td{border:none;padding:.2rem .8rem;display:grid;grid-template-columns:7.5rem 1fr;gap:.5rem}
+  td::before{content:attr(data-label);font-weight:600;color:var(--muted)}
+}
+
+/* ============================================================
+   C7. DIALOGS (Add job, Job detail)
+   Desktop: side panel on the right. Phone: full screen.
+   ============================================================ */
+dialog.panel{margin:0 0 0 auto;padding:0;border:none;width:min(760px,100vw);height:100dvh;max-height:100dvh;max-width:100vw;
+  background:var(--surface);color:var(--text);box-shadow:-6px 0 24px rgba(40,25,10,.18)}
+dialog.panel::backdrop{background:rgba(42,36,31,.45)}
+.panel form{display:flex;flex-direction:column;height:100%}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);background:var(--bg)}
+.panel-head h2{margin:0;font-size:1.35rem}
+.panel-body{flex:1;overflow-y:auto;padding:1rem}
+.panel-foot{display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);background:var(--bg)}
+.panel-foot .spacer{flex:1}
+details.more{margin-top:1rem;border:1px solid var(--border);border-radius:var(--radius);padding:.2rem 1rem .8rem}
+details.more summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
+details.more[open] summary{margin-bottom:.6rem}
+.meta-line{display:flex;flex-wrap:wrap;gap:.4rem 1rem;color:var(--muted);margin:0 0 1rem;font-size:.95rem}
+.history{list-style:none;margin:0;padding:0;display:grid;gap:.4rem}
+.history li{display:flex;flex-wrap:wrap;gap:.4rem .7rem;align-items:center;padding:.45rem .6rem;background:var(--bg);border-radius:8px}
+.history time{color:var(--muted);font-size:.92rem}
+
+/* ============================================================
+   C8. SETTINGS, TOAST, UTILITIES
+   ============================================================ */
+.block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem 1.2rem;margin-bottom:1rem;max-width:760px}
+.block h3{margin-top:.3rem}
+.block .row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.8rem}
+.block .stack{display:grid;gap:1rem}
+fieldset{border:1px solid var(--border);border-radius:8px;padding:.6rem 1rem;margin:.8rem 0 0}
+legend{font-weight:600;padding:0 .3rem}
+.radio{display:flex;gap:.5rem;align-items:center;font-weight:400;min-height:40px;margin:0}
+.radio input{width:auto;min-height:0}
+#toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:var(--text);color:var(--bg);
+  padding:.7rem 1.1rem;border-radius:10px;max-width:min(560px,92vw);box-shadow:var(--shadow);z-index:200;display:none}
+#toast.show{display:block}
+@media (prefers-reduced-motion:no-preference){ .card,.status-card{transition:background .15s} }
+
+/* ============================================================
+   C9. JOB FEED
+   ============================================================ */
+.feed-status p{margin:.2rem 0}
+.feed-status details summary,.paste-block summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+.source-log{list-style:none;margin:.3rem 0 0;padding:0;display:grid;gap:.35rem;font-size:.95rem}
+.source-log .ok{color:#2d6b22;font-weight:700}
+.source-log .fail{color:var(--danger);font-weight:700}
+.source-log .skip{color:var(--muted);font-weight:700}
+.paste-block{max-width:760px;margin:0 0 1rem;background:var(--surface)}
+.paste-block .row{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.8rem}
+.feed-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:.8rem}
+.feed-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.3rem}
+.feed-card.is-hidden{border-style:dashed;background:#fbf7f1}
+.feed-card h3{margin:0;font-size:1.1rem}
+.feed-card p{margin:0}
+.feed-company{font-weight:600}
+.feed-meta{color:var(--muted);font-size:.92rem}
+.feed-snippet{font-size:.95rem;margin-top:.25rem!important}
+.feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
+.feed-note{font-size:.9rem;font-weight:600}
+.feed-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto;padding-top:.6rem}
+.badge-new{background:#dcefd5;color:var(--text);border:1px solid #2d6b22}
+.check{display:flex;gap:.55rem;align-items:center;font-weight:600;min-height:44px;margin:0;cursor:pointer}
+.check input{width:1.35rem;height:1.35rem;min-height:0;margin:0}
+
+/* ============================================================
+   C10. MY PROFILE, FACTS BANK, MATCH
+   ============================================================ */
+.jump-nav{display:flex;flex-wrap:wrap;gap:.4rem;margin:.75rem 0 1rem}
+.block-wide{max-width:none}
+.block > label{margin-top:.2rem}
+.save-state{color:var(--muted);font-size:.92rem}
+.save-state.dirty{color:var(--danger);font-weight:600}
+.sub-head{font-size:1rem;margin:1.2rem 0 .5rem}
+.stack-tight{display:grid;gap:.9rem}
+.other-answer{border-top:1px solid var(--border);padding-top:.8rem;display:grid;gap:.6rem}
+.fact-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:.75rem}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-left:6px solid #2d6b22;border-radius:var(--radius);
+  padding:.75rem .9rem;display:flex;flex-direction:column;gap:.4rem;box-shadow:var(--shadow)}
+.fact-card.unverified{border-left-color:#b9862a;background:#fffaf0}
+.fact-head{display:flex;flex-wrap:wrap;gap:.35rem .6rem;align-items:center}
+.type-chip{--s:#7a6a55;--s-bg:#efe8dc}
+.fact-dates{color:var(--muted);font-size:.9rem}
+.fact-text{margin:0;white-space:pre-wrap}
+.tag-list{display:flex;flex-wrap:wrap;gap:.3rem;margin:0;padding:0;list-style:none}
+.tag{display:inline-block;padding:.05rem .5rem;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);font-size:.85rem}
+.verify-state{font-size:.88rem;font-weight:700}
+.verify-state.yes{color:#2d6b22}
+.verify-state.no{color:#7a5410}
+.fact-actions{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:space-between;margin-top:auto;padding-top:.3rem}
+.tag-picks{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.5rem}
+.tag-pick{min-height:40px;padding:.2rem .7rem;border-radius:999px;border:1px dashed var(--input-border);background:var(--surface);
+  font:inherit;font-size:.9rem;cursor:pointer;color:var(--text)}
+.tag-pick:hover{background:var(--surface-2)}
+.verify-box{background:var(--accent-soft);border-radius:8px;padding:.5rem .8rem}
+.match-section{margin-top:1.4rem;border-top:1px solid var(--border)}
+.match-results h4{margin:1.1rem 0 .4rem;font-size:1rem}
+.match-results ol,.match-results ul{margin:0;padding-left:1.2rem;display:grid;gap:.5rem}
+.match-results li p{margin:.15rem 0 0}
+.match-words{color:var(--muted);font-size:.9rem}
+.missing-words{list-style:none;padding:0!important;display:flex!important;flex-wrap:wrap;gap:.35rem!important}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- ============================================================
+     HEADER AND NAVIGATION
+     ============================================================ -->
+<header class="app-header">
+  <h1>Job Search Tracker</h1>
+  <nav aria-label="Main">
+    <ul class="tabs">
+      <li><button type="button" data-view="dashboard">Dashboard</button></li>
+      <li><button type="button" data-view="feed">Job Feed</button></li>
+      <li><button type="button" data-view="board">Board</button></li>
+      <li><button type="button" data-view="table">Table</button></li>
+      <li><button type="button" data-view="profile">My Profile</button></li>
+      <li><button type="button" data-view="settings">Settings</button></li>
+    </ul>
+  </nav>
+  <div class="add-wrap"><button type="button" id="addJobBtn" class="btn btn-primary">+ Add job</button></div>
+</header>
+
+<main id="main" tabindex="-1">
+
+  <!-- ==================== DASHBOARD VIEW ==================== -->
+  <section id="view-dashboard" class="view" aria-labelledby="h-dashboard" hidden>
+    <h2 id="h-dashboard" tabindex="-1">Dashboard</h2>
+    <div id="sampleNotice"></div>
+    <h3 id="h-status-counts">Jobs by status</h3>
+    <ul id="statusCards" class="status-cards" aria-labelledby="h-status-counts"></ul>
+    <h3>This week</h3>
+    <div id="weekStats" class="week-stats"></div>
+    <h3 id="h-followups">Follow-ups due today or overdue</h3>
+    <div id="followups"></div>
+  </section>
+
+  <!-- ==================== JOB FEED VIEW ==================== -->
+  <section id="view-feed" class="view" aria-labelledby="h-feed" hidden>
+    <h2 id="h-feed" tabindex="-1">Job Feed</h2>
+    <p class="hint" style="margin-bottom:1rem">Openings from your job sources and pasted LinkedIn alerts. A job enters your tracker only when you choose Add to Tracker.</p>
+
+    <div id="feedStatus" class="block feed-status"></div>
+
+    <details class="block paste-block" id="pasteBlock">
+      <summary>Paste a LinkedIn job alert</summary>
+      <p class="hint">Open a LinkedIn job alert email, select all of it, copy, and paste it here. The app reads job titles, companies, locations, and job links from the text you paste. It does not contact LinkedIn.</p>
+      <label for="pasteBox" style="margin-top:.8rem">LinkedIn alert email text</label>
+      <textarea id="pasteBox" rows="7" spellcheck="false"></textarea>
+      <div class="row">
+        <button type="button" id="parsePasteBtn" class="btn btn-primary">Find jobs in this text</button>
+        <button type="button" id="clearPasteBtn" class="btn">Clear box</button>
+      </div>
+      <p id="pasteResult" class="hint" aria-live="polite"></p>
+    </details>
+
+    <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
+      <div class="search"><label for="ff-q">Search the feed</label><input id="ff-q" name="q" type="search" autocomplete="off"></div>
+      <div><label for="ff-source">Source</label><select id="ff-source" name="source"></select></div>
+      <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
+    </form>
+    <p id="feedCount" aria-live="polite"></p>
+    <ul id="feedList" class="feed-list" aria-label="Job openings"></ul>
+    <div id="feedMore" style="margin-top:1rem"></div>
+  </section>
+
+  <!-- ==================== BOARD VIEW ==================== -->
+  <section id="view-board" class="view" aria-labelledby="h-board" hidden>
+    <h2 id="h-board" tabindex="-1">Board</h2>
+    <p class="hint">
+      <span class="only-desktop">Drag a card to another column to change its status. Click a card to open it. Keyboard users can change status inside the job panel.</span>
+      <span class="only-touch">Use the status menu on each card to move it. Tap the job title to open it.</span>
+    </p>
+    <div id="board" class="board"></div>
+  </section>
+
+  <!-- ==================== TABLE VIEW ==================== -->
+  <section id="view-table" class="view" aria-labelledby="h-table" hidden>
+    <h2 id="h-table" tabindex="-1">Table</h2>
+    <form id="filters" class="filters" role="search" aria-label="Filter jobs">
+      <div class="search">
+        <label for="f-q">Search</label>
+        <input id="f-q" name="q" type="search" autocomplete="off" aria-describedby="f-q-hint">
+        <p class="hint" id="f-q-hint">Looks in title, company, location, source, contact, notes, and job description.</p>
+      </div>
+      <div><label for="f-status">Status</label><select id="f-status" name="status"></select></div>
+      <div><label for="f-source">Source</label><select id="f-source" name="source"></select></div>
+      <div><label for="f-workType">Work type</label><select id="f-workType" name="workType"></select></div>
+      <div><label for="f-dateField">Date to filter by</label>
+        <select id="f-dateField" name="dateField">
+          <option value="dateFound">Date found</option>
+          <option value="dateApplied">Date applied</option>
+          <option value="followUpDate">Follow-up date</option>
+        </select></div>
+      <div><label for="f-from">From</label><input id="f-from" name="from" type="date"></div>
+      <div><label for="f-to">To</label><input id="f-to" name="to" type="date"></div>
+      <div><button type="button" id="clearFilters" class="btn">Clear filters</button></div>
+    </form>
+    <p id="tableCount" aria-live="polite"></p>
+    <div class="table-wrap">
+      <table id="jobsTable">
+        <caption class="sr-only">Jobs. Column headers are buttons that sort the table.</caption>
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ==================== MY PROFILE VIEW ==================== -->
+  <section id="view-profile" class="view" aria-labelledby="h-profile" hidden>
+    <h2 id="h-profile" tabindex="-1">My Profile</h2>
+    <p class="hint">Your real career information. It stays in this browser and in your backup files. Later phases draft resumes and answers only from facts you mark "Verified by me." Each section has its own Save button.</p>
+    <nav class="jump-nav" aria-label="Profile sections">
+      <button type="button" class="btn btn-small" data-jump="h-p-contact">Contact</button>
+      <button type="button" class="btn btn-small" data-jump="h-p-resume">Master resume</button>
+      <button type="button" class="btn btn-small" data-jump="h-p-facts">Facts Bank</button>
+      <button type="button" class="btn btn-small" data-jump="h-p-voice">Writing voice</button>
+      <button type="button" class="btn btn-small" data-jump="h-p-answers">Standard answers</button>
+    </nav>
+
+    <!-- Contact details and links -->
+    <form id="contactForm" class="block" aria-labelledby="h-p-contact">
+      <h3 id="h-p-contact" tabindex="-1">Contact details and links</h3>
+      <div id="contactFields" class="fields"></div>
+      <div class="row"><button type="submit" class="btn btn-primary">Save contact details</button><span class="save-state" data-save-state="contact" aria-live="polite"></span></div>
+    </form>
+
+    <!-- Master resume -->
+    <form id="resumeForm" class="block block-wide" aria-labelledby="h-p-resume">
+      <h3 id="h-p-resume" tabindex="-1">Master resume</h3>
+      <label for="pr-masterResume">Master resume text</label>
+      <textarea id="pr-masterResume" name="masterResume" rows="20" aria-describedby="pr-masterResume-hint"></textarea>
+      <p class="hint" id="pr-masterResume-hint">Paste or type your full, current resume as plain text. <span id="resumeCount"></span></p>
+      <div class="row"><button type="submit" class="btn btn-primary">Save master resume</button><span class="save-state" data-save-state="resume" aria-live="polite"></span></div>
+    </form>
+
+    <!-- Facts Bank -->
+    <section class="block block-wide" aria-labelledby="h-p-facts">
+      <h3 id="h-p-facts" tabindex="-1">Facts Bank</h3>
+      <p class="hint">One fact per entry. Check "Verified by me" only after you confirm a fact is accurate. Only verified facts can be used in later drafting.</p>
+      <div class="row" style="margin-bottom:1rem"><button type="button" id="addFactBtn" class="btn btn-primary">+ Add fact</button></div>
+      <form id="factFilters" class="filters" role="search" aria-label="Filter facts">
+        <div class="search"><label for="fb-q">Search facts</label><input id="fb-q" name="q" type="search" autocomplete="off"></div>
+        <div><label for="fb-type">Type</label><select id="fb-type" name="type"></select></div>
+        <div><label for="fb-tag">Tag</label><select id="fb-tag" name="tag"></select></div>
+        <div><label for="fb-verified">Verified</label>
+          <select id="fb-verified" name="verified">
+            <option value="">All facts</option>
+            <option value="yes">Verified only</option>
+            <option value="no">Not verified yet</option>
+          </select></div>
+        <div><button type="button" id="clearFactFilters" class="btn">Clear filters</button></div>
+      </form>
+      <p id="factCount" aria-live="polite"></p>
+      <ul id="factList" class="fact-list" aria-label="Facts"></ul>
+    </section>
+
+    <!-- Writing voice -->
+    <form id="voiceForm" class="block block-wide" aria-labelledby="h-p-voice">
+      <h3 id="h-p-voice" tabindex="-1">Writing voice</h3>
+      <div class="stack-tight">
+        <div>
+          <label for="pv-guidelines">Style and tone guidelines</label>
+          <textarea id="pv-guidelines" name="guidelines" rows="10" aria-describedby="pv-guidelines-hint"></textarea>
+          <p class="hint" id="pv-guidelines-hint">Paste your own rules: words you avoid, sentence length, structure, punctuation habits.</p>
+        </div>
+        <div><label for="pv-sample1">Sample paragraph 1</label><textarea id="pv-sample1" name="sample1" rows="6"></textarea></div>
+        <div><label for="pv-sample2">Sample paragraph 2</label><textarea id="pv-sample2" name="sample2" rows="6"></textarea></div>
+        <div><label for="pv-sample3">Sample paragraph 3 (optional)</label><textarea id="pv-sample3" name="sample3" rows="6"></textarea></div>
+      </div>
+      <p class="hint">Use paragraphs you wrote yourself, without client edits.</p>
+      <div class="row"><button type="submit" class="btn btn-primary">Save writing voice</button><span class="save-state" data-save-state="voice" aria-live="polite"></span></div>
+    </form>
+
+    <!-- Standard answers -->
+    <form id="answersForm" class="block block-wide" aria-labelledby="h-p-answers">
+      <h3 id="h-p-answers" tabindex="-1">Standard answers</h3>
+      <p class="hint">Reusable answers for questions that show up on many applications.</p>
+      <div id="standardAnswers" class="stack-tight" style="margin-top:.8rem"></div>
+      <h4 class="sub-head">Other questions</h4>
+      <div id="otherAnswers" class="stack-tight"></div>
+      <div class="row"><button type="button" id="addOtherAnswerBtn" class="btn">+ Add a question</button></div>
+      <div class="row"><button type="submit" class="btn btn-primary">Save standard answers</button><span class="save-state" data-save-state="answers" aria-live="polite"></span></div>
+    </form>
+  </section>
+
+  <!-- ==================== SETTINGS VIEW ==================== -->
+  <section id="view-settings" class="view" aria-labelledby="h-settings" hidden>
+    <h2 id="h-settings" tabindex="-1">Settings</h2>
+
+    <form id="settingsForm" class="block">
+      <h3>No Word rule</h3>
+      <label for="set-noWordDays">Days with no status change before Applied or Waiting becomes No Word</label>
+      <input id="set-noWordDays" name="noWordDays" type="number" min="1" max="180" step="1" required style="max-width:10rem">
+
+      <h3>Job finder keywords</h3>
+      <p class="hint">The Job Feed uses these to decide which openings to show. Enter one per line.</p>
+      <div class="stack" style="margin-top:.8rem">
+        <div>
+          <label for="set-targetTitles">Target job titles</label>
+          <textarea id="set-targetTitles" name="targetTitles" rows="6" aria-describedby="set-targetTitles-hint"></textarea>
+          <p class="hint" id="set-targetTitles-hint">An opening shows when its title contains any of these. Leave empty to see every opening. Pasted LinkedIn alerts skip this check, since you already chose those alerts.</p>
+        </div>
+        <div>
+          <label for="set-excludedWords">Excluded words</label>
+          <textarea id="set-excludedWords" name="excludedWords" rows="5" aria-describedby="set-excludedWords-hint"></textarea>
+          <p class="hint" id="set-excludedWords-hint">An opening is hidden when its title or description contains any of these as a whole word. Plurals count, so "intern" also hides "interns" but not "international".</p>
+        </div>
+      </div>
+
+      <h3>Job feed file</h3>
+      <label for="set-feedUrl">Feed file location</label>
+      <input id="set-feedUrl" name="feedUrl" type="text" spellcheck="false" autocapitalize="off" aria-describedby="set-feedUrl-hint">
+      <p class="hint" id="set-feedUrl-hint">Keep this as jobs-feed.json when the app and the feed are in the same GitHub repository.</p>
+      <div class="row"><button type="submit" class="btn btn-primary">Save settings</button></div>
+    </form>
+
+    <section class="block" aria-labelledby="h-backup">
+      <h3 id="h-backup">Backup and move between devices</h3>
+      <p>Your jobs are saved in this browser on this device only. Export a backup file to keep a copy, then import it on your phone or another computer.</p>
+      <p id="jobCountLine" class="hint"></p>
+      <div class="row"><button type="button" id="exportBtn" class="btn">Export JSON</button></div>
+      <fieldset>
+        <legend>When importing a file</legend>
+        <label class="radio"><input type="radio" name="importMode" value="merge" checked> Merge: add new jobs and update matching ones, keep the rest</label>
+        <label class="radio"><input type="radio" name="importMode" value="replace"> Replace: delete current jobs and use only the file</label>
+      </fieldset>
+      <div class="row"><button type="button" id="importBtn" class="btn">Import JSON</button></div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </section>
+  </section>
+</main>
+
+<!-- ============================================================
+     ADD JOB DIALOG
+     ============================================================ -->
+<dialog id="addDialog" class="panel" aria-labelledby="addTitle">
+  <form id="addForm" novalidate>
+    <div class="panel-head">
+      <h2 id="addTitle">Add a job</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close add job form">&times;</button>
+    </div>
+    <div class="panel-body">
+      <p class="hint" style="margin-bottom:1rem">Only job title and company are required <span aria-hidden="true">(marked <span class="req">*</span>)</span>.</p>
+      <div id="addDupWarn" aria-live="polite"></div>
+      <div id="addQuickFields" class="fields"></div>
+      <details class="more" id="addMore">
+        <summary>More details (dates, contact, job description, notes)</summary>
+        <div id="addMoreFields" class="fields"></div>
+      </details>
+    </div>
+    <div class="panel-foot">
+      <button type="button" class="btn" data-close>Cancel</button>
+      <span class="spacer"></span>
+      <button type="submit" class="btn" value="another">Save and add another</button>
+      <button type="submit" class="btn btn-primary" value="close" id="addSaveBtn">Save job</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============================================================
+     JOB DETAIL DIALOG
+     ============================================================ -->
+<dialog id="detailDialog" class="panel" aria-labelledby="detailTitle">
+  <form id="detailForm">
+    <div class="panel-head">
+      <h2 id="detailTitle">Job details</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close job details">&times;</button>
+    </div>
+    <div class="panel-body">
+      <div id="detailDupWarn"></div>
+      <div id="detailMeta" class="meta-line"></div>
+      <div id="detailFields" class="fields"></div>
+      <section class="match-section" aria-labelledby="h-match">
+        <h3 id="h-match">Match to my Facts Bank</h3>
+        <p class="hint">Compares the job description above with your facts using shared keywords and tags. No AI is used, and nothing leaves this browser.</p>
+        <div class="row" style="margin-top:.6rem"><button type="button" id="matchBtn" class="btn">Match</button></div>
+        <div id="matchResults" class="match-results" aria-live="polite"></div>
+      </section>
+      <section aria-labelledby="h-history">
+        <h3 id="h-history">Status history</h3>
+        <ol id="statusHistory" class="history" reversed></ol>
+      </section>
+    </div>
+    <div class="panel-foot">
+      <button type="button" id="deleteJobBtn" class="btn btn-danger">Delete job</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============================================================
+     FACT DIALOG (Facts Bank add and edit)
+     ============================================================ -->
+<dialog id="factDialog" class="panel" aria-labelledby="factTitle">
+  <form id="factForm" novalidate>
+    <div class="panel-head">
+      <h2 id="factTitle">Add a fact</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close fact form">&times;</button>
+    </div>
+    <div class="panel-body">
+      <div class="fields">
+        <div><label for="fact-type">Type</label><select id="fact-type" name="type"></select></div>
+        <div class="field-textarea">
+          <label for="fact-text">Fact <span class="req" aria-hidden="true">*</span></label>
+          <textarea id="fact-text" name="text" rows="5" required aria-describedby="fact-text-hint"></textarea>
+          <p class="hint" id="fact-text-hint">One fact, written the way you would say it. Include a number only when you can back it up.</p>
+        </div>
+        <div><label for="fact-start">From</label><input id="fact-start" name="dateStart" autocomplete="off" aria-describedby="fact-dates-hint"></div>
+        <div><label for="fact-end">To</label><input id="fact-end" name="dateEnd" autocomplete="off" aria-describedby="fact-dates-hint"></div>
+        <p class="hint field-textarea" id="fact-dates-hint" style="margin-top:-.5rem">Any format, such as 2021, Mar 2021, or Present. Leave both empty when dates don't apply.</p>
+        <div class="field-textarea">
+          <label for="fact-tags">Tags</label>
+          <input id="fact-tags" name="tags" autocomplete="off" aria-describedby="fact-tags-hint">
+          <p class="hint" id="fact-tags-hint">Separate tags with commas, for example: SEO, B2B, copywriting, editing.</p>
+          <div id="factTagPicks" class="tag-picks"></div>
+        </div>
+        <div class="field-textarea">
+          <label for="fact-proof">Proof link (optional)</label>
+          <input id="fact-proof" name="proofLink" inputmode="url" spellcheck="false" autocapitalize="off" aria-describedby="fact-proof-hint">
+          <p class="hint" id="fact-proof-hint">A published piece, case study, certificate, or review that backs up this fact.</p>
+        </div>
+        <div class="field-textarea verify-box">
+          <label class="check" for="fact-verified"><input type="checkbox" id="fact-verified" name="verified" aria-describedby="fact-verified-hint"> Verified by me</label>
+          <p class="hint" id="fact-verified-hint">Check this only after you confirm the fact is accurate. Only verified facts can be used in later drafting.</p>
+          <p class="feed-note" id="factVerifyNote" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+    <div class="panel-foot">
+      <button type="button" id="deleteFactBtn" class="btn btn-danger">Delete fact</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn" value="another" id="factAnotherBtn">Save and add another</button>
+      <button type="submit" class="btn btn-primary" value="close">Save fact</button>
+    </div>
+  </form>
+</dialog>
+
+<datalist id="sourceOptions"></datalist>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   1. CONSTANTS
+   ============================================================ */
+const APP_ID = 'job-search-tracker';
+const SCHEMA_VERSION = 3; // v2 added feed data, v3 adds the profile and Facts Bank to backups
+const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
+const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
+const CLOSED_STATUSES = ['Declined', 'Accepted'];   // no follow-up reminders for these
+const WORK_TYPES = ['Remote', 'Hybrid', 'Onsite'];
+const VIEWS = ['dashboard', 'feed', 'board', 'table', 'profile', 'settings'];
+const COLLECTIONS = {
+  jobs: 'jobs',
+  settings: 'settings',
+  dismissed: 'dismissedFeedJobs', // Job Feed openings you dismissed, so they stay hidden
+  pasted: 'pastedFeedJobs',       // jobs read from pasted LinkedIn alerts, waiting for review
+  profile: 'profile',             // one record (id "me"): contact, master resume, voice, answers
+  facts: 'facts'                  // Facts Bank entries, one record per fact
+};
+
+// Phase 3: profile and Facts Bank definitions
+const PROFILE_ID = 'me';
+const FACT_TYPES = [
+  { value: 'achievement', label: 'Achievement' },
+  { value: 'skill', label: 'Skill' },
+  { value: 'tool', label: 'Tool' },
+  { value: 'client', label: 'Client or employer' },
+  { value: 'education', label: 'Education' },
+  { value: 'certification', label: 'Certification' },
+  { value: 'sample', label: 'Writing sample' }
+];
+const factTypeLabel = v => (FACT_TYPES.find(t => t.value === v) || {}).label || 'Fact';
+const CONTACT_FIELDS = [
+  { key: 'fullName', label: 'Full name', type: 'text', autocomplete: 'name' },
+  { key: 'email', label: 'Email', type: 'email', autocomplete: 'email' },
+  { key: 'phone', label: 'Phone', type: 'tel', autocomplete: 'tel' },
+  { key: 'location', label: 'City and state', type: 'text', autocomplete: 'address-level2' },
+  { key: 'portfolio', label: 'Portfolio link', type: 'url' },
+  { key: 'linkedin', label: 'LinkedIn profile link', type: 'url' },
+  { key: 'website', label: 'Website', type: 'url' }
+];
+const STANDARD_ANSWERS = [
+  { key: 'salary', label: 'Salary expectations' },
+  { key: 'availability', label: 'Availability and start date' },
+  { key: 'whyLeaving', label: 'Why I am leaving my current work' },
+  { key: 'workAuthorization', label: 'Work authorization' },
+  { key: 'sampleLinks', label: 'Links to writing samples' }
+];
+// Future collections (not used yet): 'facts' (Phase 3 facts bank), 'drafts' (Phase 4, keyed by jobId)
+const SETTINGS_ID = 'app';
+const DEFAULT_SOURCES = ['LinkedIn alert', 'Greenhouse', 'Lever', 'Adzuna', 'Company website', 'Referral', 'Newsletter'];
+const TOUCH_QUERY = '(max-width:760px), (hover:none) and (pointer:coarse)';
+
+const statusSlug = s => String(s).toLowerCase().replace(/\s+/g, '-');
+
+/* ============================================================
+   2. UTILITIES (dates, escaping, ids)
+   ============================================================ */
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function uid() {
+  if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// Dates are stored as local "YYYY-MM-DD" strings (date fields) or ISO timestamps (history).
+const pad = n => String(n).padStart(2, '0');
+function toDateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function todayStr() { return toDateStr(new Date()); }
+function parseDateStr(s) {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function dayDiff(from, to) { // whole calendar days from -> to
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((b - a) / 86400000);
+}
+function formatDate(s) {
+  const d = parseDateStr(s);
+  return d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+}
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ', ' +
+         d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+function startOfWeekStr() { // Monday
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return toDateStr(d);
+}
+function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+// Links: add https:// to bare domains; only http(s) links are ever rendered as hrefs.
+function cleanLink(s) {
+  s = String(s || '').trim();
+  if (s && !/^[a-z][a-z0-9+.-]*:\/\//i.test(s) && /\.[a-z]{2,}/i.test(s)) s = 'https://' + s;
+  return s;
+}
+function safeHref(s) { return /^https?:\/\//i.test(s || '') ? s : ''; }
+
+let toastTimer;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+/* ============================================================
+   3. STORAGE MODULE
+   The only code that reads or writes saved data.
+   To move to Appwrite later, replace the four method bodies with
+   Appwrite Databases calls. Every method already returns a Promise,
+   so the rest of the app will not need to change.
+     get(collection, id)      -> record or null
+     save(collection, record) -> saved record (record.id required)
+     delete(collection, id)   -> true
+     list(collection)         -> array of records
+   ============================================================ */
+const Storage = (() => {
+  const PREFIX = 'jst:v1:'; // one localStorage key per collection, e.g. "jst:v1:jobs"
+
+  function read(collection) {
+    try { return JSON.parse(localStorage.getItem(PREFIX + collection)) || {}; }
+    catch (e) { console.error('Storage read failed', e); return {}; }
+  }
+  function write(collection, data) {
+    try { localStorage.setItem(PREFIX + collection, JSON.stringify(data)); }
+    catch (e) {
+      console.error('Storage write failed', e);
+      throw new Error('Could not save. Browser storage may be full or blocked. Export a backup now.');
+    }
+  }
+
+  return {
+    async get(collection, id) {
+      const rec = read(collection)[id];
+      return rec ? clone(rec) : null;
+    },
+    async save(collection, record) {
+      if (!record || !record.id) throw new Error('Record needs an id');
+      const data = read(collection);
+      data[record.id] = clone(record);
+      write(collection, data);
+      return clone(record);
+    },
+    async delete(collection, id) {
+      const data = read(collection);
+      delete data[id];
+      write(collection, data);
+      return true;
+    },
+    async list(collection) {
+      return Object.values(read(collection)).map(clone);
+    }
+  };
+})();
+
+/* ============================================================
+   4. DATA MODEL
+   Job fields marked "future" are stored now so Phase 2-4 can use them:
+     origin     'manual' | 'finder' (Phase 2 job finder sets 'finder')
+     externalId  feed's own job id, used by the finder to skip repeats
+   ============================================================ */
+function blankJob() {
+  return {
+    id: '', title: '', company: '', link: '', source: '', location: '', workType: '', payRange: '',
+    dateFound: todayStr(), dateApplied: '', status: 'Found', resumeVersion: '', followUpDate: '',
+    contactName: '', contactEmail: '', notes: '', description: '',
+    statusHistory: [],     // [{ from, to, at (ISO), by: 'created'|'manual'|'auto'|'import', note }]
+    statusChangedAt: '',   // ISO timestamp of the last status change, drives the No Word rule
+    createdAt: '', updatedAt: '',
+    isSample: false,
+    origin: 'manual',      // future
+    externalId: ''         // future
+  };
+}
+
+// Clean any job record (used on load and import) so bad data can't break the app.
+function normalizeJob(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const job = Object.assign(blankJob(), raw);
+  const strFields = ['id', 'title', 'company', 'link', 'source', 'location', 'workType', 'payRange', 'dateFound',
+    'dateApplied', 'status', 'resumeVersion', 'followUpDate', 'contactName', 'contactEmail', 'notes',
+    'description', 'statusChangedAt', 'createdAt', 'updatedAt', 'origin', 'externalId'];
+  strFields.forEach(k => { job[k] = job[k] == null ? '' : String(job[k]); });
+  if (!job.id) job.id = uid();
+  if (!STATUSES.includes(job.status)) job.status = 'Found';
+  if (!WORK_TYPES.includes(job.workType)) job.workType = '';
+  ['dateFound', 'dateApplied', 'followUpDate'].forEach(k => { if (job[k] && !parseDateStr(job[k])) job[k] = ''; });
+  job.statusHistory = Array.isArray(job.statusHistory) ? job.statusHistory.filter(h => h && h.to) : [];
+  const now = new Date().toISOString();
+  if (!job.createdAt) job.createdAt = now;
+  if (!job.statusChangedAt) job.statusChangedAt = job.createdAt;
+  if (!job.updatedAt) job.updatedAt = job.createdAt;
+  job.isSample = !!job.isSample;
+  if (!job.origin) job.origin = 'manual';
+  return job;
+}
+
+// Build a new job from Add form values.
+function createJob(values) {
+  const job = normalizeJob(Object.assign(blankJob(), values, { id: uid() }));
+  const now = new Date();
+  job.createdAt = job.updatedAt = now.toISOString();
+  if (job.status === 'Applied' && !job.dateApplied) job.dateApplied = todayStr();
+  // Logging an older application: start the No Word clock from the date applied.
+  let changedAt = now;
+  const applied = parseDateStr(job.dateApplied);
+  if (AUTO_NO_WORD_FROM.includes(job.status) && applied && job.dateApplied < todayStr()) {
+    changedAt = new Date(applied.getFullYear(), applied.getMonth(), applied.getDate(), 12);
+  }
+  job.statusChangedAt = changedAt.toISOString();
+  job.statusHistory = [{ from: null, to: job.status, at: job.statusChangedAt, by: 'created',
+    note: changedAt < now ? 'Dated from the date applied' : '' }];
+  return job;
+}
+
+const DEFAULT_FEED_URL = 'jobs-feed.json';
+const DEFAULT_SETTINGS = { id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, sampleSeeded: false };
+
+function normalizeSettings(raw) {
+  const s = Object.assign({}, DEFAULT_SETTINGS, raw || {});
+  s.id = SETTINGS_ID;
+  const n = parseInt(s.noWordDays, 10);
+  s.noWordDays = Number.isFinite(n) ? Math.min(180, Math.max(1, n)) : 14;
+  s.targetTitles = cleanList(s.targetTitles);
+  s.excludedWords = cleanList(s.excludedWords);
+  s.feedUrl = String(s.feedUrl || '').trim() || DEFAULT_FEED_URL;
+  s.sampleSeeded = !!s.sampleSeeded;
+  return s;
+}
+function cleanList(v) {
+  const arr = Array.isArray(v) ? v : String(v || '').split('\n');
+  const seen = new Set();
+  return arr.map(x => String(x).trim()).filter(x => {
+    const k = x.toLowerCase();
+    if (!x || seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+
+/* ============================================================
+   5. STATUS RULES
+   ============================================================ */
+// Change a job's status in memory and log it. Returns true if it changed. Caller saves.
+function setStatus(job, status, by = 'manual', note = '') {
+  if (!STATUSES.includes(status) || job.status === status) return false;
+  const at = new Date().toISOString();
+  job.statusHistory.push({ from: job.status, to: status, at, by, note });
+  job.status = status;
+  job.statusChangedAt = at;
+  job.updatedAt = at;
+  if (status === 'Applied' && !job.dateApplied) job.dateApplied = todayStr();
+  return true;
+}
+
+function daysInStatus(job) {
+  const since = new Date(job.statusChangedAt || job.createdAt);
+  return isNaN(since) ? 0 : dayDiff(since, new Date());
+}
+
+// No Word rule: Applied or Waiting with no status change for N days becomes No Word.
+// The change is saved and logged in the history, so exports and future features see it too.
+async function applyNoWordRule() {
+  const limit = state.settings.noWordDays;
+  const changed = [];
+  for (const job of state.jobs) {
+    if (!AUTO_NO_WORD_FROM.includes(job.status)) continue;
+    if (daysInStatus(job) >= limit) {
+      setStatus(job, 'No Word', 'auto', `No status change for ${plural(limit, 'day')}`);
+      changed.push(job);
+    }
+  }
+  try { for (const job of changed) await Storage.save(COLLECTIONS.jobs, job); }
+  catch (e) { toast(e.message); }
+  return changed.length;
+}
+
+/* ============================================================
+   6. DUPLICATE DETECTION
+   Matches on (company + title) or on the job link.
+   Phase 2's job finder can call findDuplicates() before adding a job.
+   ============================================================ */
+function normText(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function normLink(s) {
+  let u = String(s || '').trim().toLowerCase();
+  if (!u) return '';
+  u = u.replace(/^[a-z]+:\/\//, '').replace(/^www\./, '').split('#')[0];
+  const [path, query = ''] = u.split('?');
+  const kept = query.split('&')
+    .filter(p => p && !/^(utm_[^=]*|ref|refid|trk|trackingid|gh_src|lever-source|lever-origin|src|source)=/.test(p))
+    .sort().join('&');
+  return path.replace(/\/+$/, '') + (kept ? '?' + kept : '');
+}
+function findDuplicates(candidate, excludeId = '') {
+  const key = normText(candidate.company) + '|' + normText(candidate.title);
+  const hasKey = normText(candidate.company) && normText(candidate.title);
+  const link = normLink(candidate.link);
+  const out = [];
+  for (const job of state.jobs) {
+    if (job.id === excludeId) continue;
+    const reasons = [];
+    if (hasKey && normText(job.company) + '|' + normText(job.title) === key) reasons.push('same company and title');
+    if (link && normLink(job.link) === link) reasons.push('same link');
+    if (reasons.length) out.push({ job, reasons });
+  }
+  return out;
+}
+function dupWarningHtml(dups, extra) {
+  if (!dups.length) return '';
+  return `<div class="warn"><p><strong>Possible duplicate.</strong> ${extra || ''}</p><ul>` +
+    dups.map(d => `<li><button type="button" class="link-btn" data-open-dup="${esc(d.job.id)}">${esc(d.job.title)} at ${esc(d.job.company)}</button>
+      <span class="chip" data-status="${statusSlug(d.job.status)}">${esc(d.job.status)}</span> (${esc(d.reasons.join(', '))})</li>`).join('') +
+    '</ul></div>';
+}
+
+/* ============================================================
+   7. APP STATE AND DATA LOADING
+   ============================================================ */
+const state = {
+  jobs: [],
+  settings: normalizeSettings(),
+  view: 'dashboard',
+  detailId: null,
+  detailSnapshot: '',
+  addSnapshot: '',
+  table: { sortKey: 'dateFound', sortDir: 'desc', q: '', status: '', source: '', workType: '', dateField: 'dateFound', from: '', to: '' },
+  // Job Feed (Phase 2)
+  dismissed: [],   // records from COLLECTIONS.dismissed
+  pasted: [],      // records from COLLECTIONS.pasted
+  feed: { data: null, loading: false, loaded: false, error: '' },
+  feedUi: { q: '', source: '', showHidden: false, limit: 50 },
+  feedIndex: new Map(),
+  // My Profile and Facts Bank (Phase 3)
+  profile: null,           // filled by loadAll()
+  facts: [],
+  factsUi: { q: '', type: '', tag: '', verified: '' },
+  profileSnap: {},         // saved form contents, for "unsaved changes" checks
+  editingFactId: null,
+  factSnapshot: '',
+  factOrig: null
+};
+
+async function loadAll() {
+  state.jobs = (await Storage.list(COLLECTIONS.jobs)).map(normalizeJob).filter(Boolean);
+  state.settings = normalizeSettings(await Storage.get(COLLECTIONS.settings, SETTINGS_ID));
+  state.dismissed = (await Storage.list(COLLECTIONS.dismissed)).filter(d => d && d.id);
+  state.pasted = (await Storage.list(COLLECTIONS.pasted)).filter(p => p && p.id && p.title);
+  state.profile = normalizeProfile(await Storage.get(COLLECTIONS.profile, PROFILE_ID));
+  state.facts = (await Storage.list(COLLECTIONS.facts)).map(normalizeFact).filter(Boolean);
+}
+
+async function saveJob(job) {
+  job.updatedAt = new Date().toISOString();
+  await Storage.save(COLLECTIONS.jobs, job);
+  const i = state.jobs.findIndex(j => j.id === job.id);
+  if (i >= 0) state.jobs[i] = job; else state.jobs.push(job);
+  return job;
+}
+async function deleteJob(id) {
+  await Storage.delete(COLLECTIONS.jobs, id);
+  state.jobs = state.jobs.filter(j => j.id !== id);
+}
+async function saveSettings() {
+  await Storage.save(COLLECTIONS.settings, state.settings);
+}
+const getJob = id => state.jobs.find(j => j.id === id);
+
+// One clearly labeled sample job on first run only.
+async function seedSample() {
+  if (state.jobs.length === 0) {
+    const sample = createJob({
+      title: 'SAMPLE JOB (delete me)',
+      company: 'Sample Company (not real)',
+      source: 'Sample',
+      workType: 'Remote',
+      notes: 'This record shows how a job looks on the board, the table, and this panel. Delete it with the Delete job button below.',
+      description: 'Paste the full job posting here when you add a real job.'
+    });
+    sample.isSample = true;
+    await saveJob(sample);
+  }
+  state.settings.sampleSeeded = true;
+  await saveSettings();
+}
+
+/* ============================================================
+   8. FORM FIELDS
+   One field list drives both the Add form and the Detail panel.
+   To add a field: add it to blankJob() and to FIELDS.
+   ============================================================ */
+const FIELDS = [
+  { key: 'title', label: 'Job title', type: 'text', required: true, quick: true },
+  { key: 'company', label: 'Company', type: 'text', required: true, quick: true },
+  { key: 'link', label: 'Job link', type: 'url', quick: true },
+  { key: 'source', label: 'Source', type: 'text', list: 'sourceOptions', quick: true, hint: 'For example: LinkedIn alert, Greenhouse, referral' },
+  { key: 'status', label: 'Status', type: 'select', options: STATUSES, quick: true },
+  { key: 'workType', label: 'Remote, hybrid, or onsite', type: 'select', options: ['', ...WORK_TYPES], optionLabels: { '': 'Not set' }, quick: true },
+  { key: 'location', label: 'Location', type: 'text' },
+  { key: 'payRange', label: 'Pay range (optional)', type: 'text', hint: 'For example: $60–75/hr' },
+  { key: 'dateFound', label: 'Date found', type: 'date' },
+  { key: 'dateApplied', label: 'Date applied', type: 'date', hint: 'Fills in today when status becomes Applied' },
+  { key: 'resumeVersion', label: 'Resume version used', type: 'text' },
+  { key: 'followUpDate', label: 'Follow-up date', type: 'date' },
+  { key: 'contactName', label: 'Contact name (optional)', type: 'text', autocomplete: 'off' },
+  { key: 'contactEmail', label: 'Contact email (optional)', type: 'email', autocomplete: 'off' },
+  { key: 'notes', label: 'Notes', type: 'textarea', rows: 4 },
+  { key: 'description', label: 'Job description', type: 'textarea', rows: 10, hint: 'Paste the full posting. Later phases draft resumes and answers from this text.' }
+];
+
+function fieldHtml(f, value, prefix) {
+  const id = `${prefix}-${f.key}`;
+  const hintId = f.hint ? id + '-hint' : '';
+  const describedBy = hintId ? ` aria-describedby="${hintId}"` : '';
+  const required = f.required ? ' required' : '';
+  const label = `<label for="${id}">${esc(f.label)}${f.required ? ' <span class="req" aria-hidden="true">*</span>' : ''}</label>`;
+  let control;
+  if (f.type === 'select') {
+    control = `<select id="${id}" name="${f.key}"${describedBy}>` + f.options.map(o =>
+      `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc((f.optionLabels && f.optionLabels[o]) || o)}</option>`).join('') + '</select>';
+  } else if (f.type === 'textarea') {
+    control = `<textarea id="${id}" name="${f.key}" rows="${f.rows || 4}"${describedBy}>${esc(value)}</textarea>`;
+  } else {
+    const type = f.type === 'url' ? 'text' : f.type;
+    const extra = (f.type === 'url' ? ' inputmode="url" spellcheck="false" autocapitalize="off"' : '') +
+      (f.list ? ` list="${f.list}"` : '') + (f.autocomplete ? ` autocomplete="${f.autocomplete}"` : '');
+    control = `<input id="${id}" name="${f.key}" type="${type}" value="${esc(value)}"${required}${describedBy}${extra}>`;
+  }
+  return `<div class="field field-${f.type}">${label}${control}${f.hint ? `<p class="hint" id="${hintId}">${esc(f.hint)}</p>` : ''}</div>`;
+}
+function renderFields(container, fields, values, prefix) {
+  container.innerHTML = fields.map(f => fieldHtml(f, values[f.key] ?? '', prefix)).join('');
+}
+function readForm(form) {
+  const out = {};
+  FIELDS.forEach(f => {
+    const el = form.elements[f.key];
+    if (el) out[f.key] = f.type === 'textarea' ? el.value.replace(/\s+$/, '') : el.value.trim();
+  });
+  if ('link' in out) out.link = cleanLink(out.link);
+  return out;
+}
+// Simple required check that announces the first problem and moves focus to it.
+function checkRequired(form) {
+  for (const f of FIELDS.filter(x => x.required)) {
+    const el = form.elements[f.key];
+    if (el && !el.value.trim()) {
+      const more = el.closest('details');
+      if (more) more.open = true;
+      el.setAttribute('aria-invalid', 'true');
+      el.focus();
+      toast(`${f.label} is required.`);
+      return false;
+    }
+    if (el) el.removeAttribute('aria-invalid');
+  }
+  const email = form.elements.contactEmail;
+  if (email && email.value && !email.checkValidity()) {
+    const more = email.closest('details');
+    if (more) more.open = true;
+    email.focus();
+    toast('Contact email does not look like an email address.');
+    return false;
+  }
+  return true;
+}
+function updateSourceOptions() {
+  const used = state.jobs.map(j => j.source.trim()).filter(Boolean);
+  const all = [...new Set([...DEFAULT_SOURCES, ...used])].filter(s => s !== 'Sample').sort((a, b) => a.localeCompare(b));
+  $('#sourceOptions').innerHTML = all.map(s => `<option value="${esc(s)}"></option>`).join('');
+}
+
+/* ============================================================
+   9. VIEW SWITCHING AND MAIN RENDER
+   ============================================================ */
+function viewFromHash() {
+  const v = location.hash.replace('#', '');
+  return VIEWS.includes(v) ? v : 'dashboard';
+}
+function showView(name, focusHeading = false) {
+  if (!VIEWS.includes(name)) name = 'dashboard';
+  // Leaving My Profile with unsaved edits: ask first
+  if (state.view === 'profile' && name !== 'profile' && profileDirtyKeys().length &&
+      !confirm('You have unsaved changes in My Profile. Leave without saving them?')) {
+    history.replaceState(null, '', '#profile');
+    return;
+  }
+  state.view = name;
+  VIEWS.forEach(v => { $('#view-' + v).hidden = v !== name; });
+  $$('[data-view]').forEach(b => {
+    if (b.dataset.view === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
+  render();
+  if (name === 'feed' && !state.feed.loaded && !state.feed.loading) loadFeed();
+  if (focusHeading) $('#h-' + name).focus();
+}
+function render() {
+  updateSourceOptions();
+  if (state.view === 'dashboard') renderDashboard();
+  if (state.view === 'feed') renderFeed();
+  if (state.view === 'profile') renderFacts();
+  if (state.view === 'board') renderBoard();
+  if (state.view === 'table') renderTable();
+  if (state.view === 'settings') renderSettings();
+}
+// After a dialog closes, put focus back on the control that opened that job.
+function refocusJob(id) {
+  const view = $('#view-' + state.view);
+  const el = id && view.querySelector(`[data-open="${CSS.escape(id)}"]`);
+  if (el) el.focus();
+}
+
+/* ============================================================
+   10. DASHBOARD VIEW
+   ============================================================ */
+function renderDashboard() {
+  // Sample notice
+  const sample = state.jobs.find(j => j.isSample);
+  $('#sampleNotice').innerHTML = sample ? `<div class="notice"><p>The job marked <span class="badge">SAMPLE</span> is a demo record. Delete it when you are ready to start.</p>
+    <button type="button" class="btn btn-small" id="deleteSampleBtn">Delete sample job</button></div>` : '';
+
+  // Count per status
+  $('#statusCards').innerHTML = STATUSES.map(s => {
+    const n = state.jobs.filter(j => j.status === s).length;
+    return `<li><button type="button" class="status-card" data-status="${statusSlug(s)}" data-status-filter="${esc(s)}"
+      aria-label="${esc(s)}: ${plural(n, 'job')}. Show in table.">
+      <span class="count" aria-hidden="true">${n}</span><span class="label" aria-hidden="true">${esc(s)}</span></button></li>`;
+  }).join('');
+
+  // This week (Monday to today)
+  const weekStart = startOfWeekStr(), today = todayStr();
+  const inWeek = d => d && d >= weekStart && d <= today;
+  const found = state.jobs.filter(j => inWeek(j.dateFound)).length;
+  const applied = state.jobs.filter(j => inWeek(j.dateApplied)).length;
+  const since = `Since Monday, ${formatDate(weekStart)}`;
+  $('#weekStats').innerHTML =
+    `<div class="stat"><div class="count">${found}</div><div><strong>Found</strong></div><div class="hint">${since}</div></div>
+     <div class="stat"><div class="count">${applied}</div><div><strong>Applied</strong></div><div class="hint">${since}</div></div>`;
+
+  // Follow-ups due today or overdue
+  const due = state.jobs
+    .filter(j => j.followUpDate && j.followUpDate <= today && !CLOSED_STATUSES.includes(j.status))
+    .sort((a, b) => a.followUpDate.localeCompare(b.followUpDate));
+  $('#followups').innerHTML = due.length
+    ? `<ul class="followups" aria-labelledby="h-followups">` + due.map(j => {
+        const late = dayDiff(parseDateStr(j.followUpDate), new Date());
+        const when = late === 0 ? 'Due today' : `<span class="overdue">Overdue by ${plural(late, 'day')}</span>`;
+        return `<li class="followup">
+          <div class="who"><strong>${esc(j.title)}</strong> at ${esc(j.company)}<br>
+            <span class="chip" data-status="${statusSlug(j.status)}">${esc(j.status)}</span> ${when} (${esc(formatDate(j.followUpDate))})</div>
+          <div class="actions">
+            <button type="button" class="btn btn-small" data-open="${esc(j.id)}">Open<span class="sr-only"> ${esc(j.title)} at ${esc(j.company)}</span></button>
+            <button type="button" class="btn btn-small" data-followup-done="${esc(j.id)}">Done<span class="sr-only">: followed up on ${esc(j.title)}</span></button>
+          </div></li>`;
+      }).join('') + '</ul>'
+    : '<p class="empty">No follow-ups due. Set a follow-up date on any job to see it here.</p>';
+}
+
+// "Done" clears the follow-up date and adds a dated line to the notes.
+async function markFollowupDone(id) {
+  const job = getJob(id);
+  if (!job) return;
+  const updated = clone(job);
+  updated.followUpDate = '';
+  updated.notes = (updated.notes ? updated.notes + '\n' : '') + `Followed up on ${formatDate(todayStr())}.`;
+  try { await saveJob(updated); toast(`Follow-up done for ${job.title}.`); }
+  catch (e) { toast(e.message); }
+  render();
+}
+
+/* ============================================================
+   11. BOARD VIEW
+   Desktop: HTML drag and drop between columns.
+   Phone/touch: a status menu on each card.
+   ============================================================ */
+const isTouchLayout = () => window.matchMedia(TOUCH_QUERY).matches;
+
+function renderBoard() {
+  const touch = isTouchLayout();
+  const limit = state.settings.noWordDays;
+  $('#board').innerHTML = STATUSES.map(s => {
+    const jobs = state.jobs.filter(j => j.status === s)
+      .sort((a, b) => (b.statusChangedAt || '').localeCompare(a.statusChangedAt || ''));
+    const slug = statusSlug(s);
+    const cards = jobs.map(j => {
+      const meta = [];
+      if (j.isSample) meta.push('<span class="badge">SAMPLE</span>');
+      if (j.workType) meta.push(esc(j.workType));
+      if (AUTO_NO_WORD_FROM.includes(j.status)) meta.push(`No reply: ${Math.min(daysInStatus(j), limit)} of ${limit} days`);
+      if (j.followUpDate && j.followUpDate <= todayStr() && !CLOSED_STATUSES.includes(j.status)) meta.push('<span class="badge badge-due">Follow up</span>');
+      const opts = STATUSES.map(o => `<option value="${esc(o)}"${o === s ? ' selected' : ''}>${esc(o)}</option>`).join('');
+      return `<li class="card" data-id="${esc(j.id)}"${touch ? '' : ' draggable="true"'}>
+        <button type="button" class="card-open" data-open="${esc(j.id)}">
+          <span class="card-title">${esc(j.title)}</span><span class="card-company">${esc(j.company)}</span></button>
+        ${meta.length ? `<div class="card-meta">${meta.join(' · ')}</div>` : ''}
+        <label class="card-move">Status<span class="sr-only"> for ${esc(j.title)} at ${esc(j.company)}</span>
+          <select data-move="${esc(j.id)}">${opts}</select></label>
+      </li>`;
+    }).join('');
+    return `<section class="column" data-status="${slug}" data-drop-status="${esc(s)}" aria-labelledby="col-${slug}">
+      <h3 class="column-head" id="col-${slug}"><span>${esc(s)}</span><span class="col-count">${jobs.length}</span></h3>
+      <ul class="column-list">${cards || ''}</ul></section>`;
+  }).join('');
+}
+
+async function changeJobStatus(id, status) {
+  const job = getJob(id);
+  if (!job) return;
+  const updated = clone(job);
+  if (!setStatus(updated, status, 'manual')) return;
+  try { await saveJob(updated); toast(`Moved ${job.title} to ${status}.`); }
+  catch (e) { toast(e.message); }
+  render();
+}
+
+function bindBoardDragDrop() {
+  const board = $('#board');
+  board.addEventListener('dragstart', e => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    e.dataTransfer.setData('text/plain', card.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+    card.classList.add('dragging');
+  });
+  board.addEventListener('dragend', () => {
+    $$('.dragging, .drop-target', board).forEach(el => el.classList.remove('dragging', 'drop-target'));
+  });
+  board.addEventListener('dragover', e => {
+    const col = e.target.closest('.column');
+    if (!col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    $$('.drop-target', board).forEach(c => { if (c !== col) c.classList.remove('drop-target'); });
+    col.classList.add('drop-target');
+  });
+  board.addEventListener('dragleave', e => {
+    const col = e.target.closest('.column');
+    if (col && !col.contains(e.relatedTarget)) col.classList.remove('drop-target');
+  });
+  board.addEventListener('drop', e => {
+    const col = e.target.closest('.column');
+    if (!col) return;
+    e.preventDefault();
+    col.classList.remove('drop-target');
+    const id = e.dataTransfer.getData('text/plain');
+    if (id) changeJobStatus(id, col.dataset.dropStatus);
+  });
+  board.addEventListener('change', e => {
+    const sel = e.target.closest('[data-move]');
+    if (sel) changeJobStatus(sel.dataset.move, sel.value);
+  });
+}
+
+/* ============================================================
+   12. TABLE VIEW
+   ============================================================ */
+const TABLE_COLUMNS = [
+  { key: 'title', label: 'Job title' },
+  { key: 'company', label: 'Company' },
+  { key: 'status', label: 'Status' },
+  { key: 'source', label: 'Source' },
+  { key: 'workType', label: 'Work type' },
+  { key: 'dateFound', label: 'Found' },
+  { key: 'dateApplied', label: 'Applied' },
+  { key: 'followUpDate', label: 'Follow-up' }
+];
+
+function filteredJobs() {
+  const t = state.table;
+  const q = t.q.trim().toLowerCase();
+  let rows = state.jobs.filter(j => {
+    if (t.status && j.status !== t.status) return false;
+    if (t.source && j.source.trim().toLowerCase() !== t.source) return false;
+    if (t.workType === '__none' ? j.workType : (t.workType && j.workType !== t.workType)) return false;
+    const d = j[t.dateField];
+    if ((t.from || t.to) && !d) return false;
+    if (t.from && d < t.from) return false;
+    if (t.to && d > t.to) return false;
+    if (q) {
+      const hay = [j.title, j.company, j.location, j.source, j.contactName, j.contactEmail, j.notes, j.description, j.payRange, j.resumeVersion].join(' ').toLowerCase();
+      if (!q.split(/\s+/).every(word => hay.includes(word))) return false;
+    }
+    return true;
+  });
+  const dir = t.sortDir === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    let va = a[t.sortKey] || '', vb = b[t.sortKey] || '';
+    if (t.sortKey === 'status') { va = STATUSES.indexOf(a.status); vb = STATUSES.indexOf(b.status); return (va - vb) * dir; }
+    if (!va && vb) return 1;      // empty values always last
+    if (va && !vb) return -1;
+    return String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' }) * dir;
+  });
+  return rows;
+}
+
+function fillSelect(sel, options, current) {
+  sel.innerHTML = options.map(([v, l]) => `<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+
+function renderTable() {
+  const t = state.table;
+  // Filter controls
+  fillSelect($('#f-status'), [['', 'All statuses'], ...STATUSES.map(s => [s, s])], t.status);
+  const sources = [...new Map(state.jobs.filter(j => j.source.trim()).map(j => [j.source.trim().toLowerCase(), j.source.trim()])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]));
+  if (t.source && !sources.some(([v]) => v === t.source)) t.source = '';
+  fillSelect($('#f-source'), [['', 'All sources'], ...sources], t.source);
+  fillSelect($('#f-workType'), [['', 'All work types'], ...WORK_TYPES.map(w => [w, w]), ['__none', 'Not set']], t.workType);
+  const f = $('#filters');
+  if (document.activeElement !== f.elements.q) f.elements.q.value = t.q;
+  f.elements.dateField.value = t.dateField;
+  f.elements.from.value = t.from;
+  f.elements.to.value = t.to;
+
+  // Header with sort buttons
+  $('#jobsTable thead').innerHTML = '<tr>' + TABLE_COLUMNS.map(c => {
+    const active = c.key === t.sortKey;
+    const sort = active ? (t.sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
+    const ind = active ? (t.sortDir === 'asc' ? '▲' : '▼') : '↕';
+    return `<th scope="col" aria-sort="${sort}"><button type="button" data-sort="${c.key}">${esc(c.label)} <span class="sort-ind" aria-hidden="true">${ind}</span></button></th>`;
+  }).join('') + '</tr>';
+
+  // Rows
+  const rows = filteredJobs();
+  $('#jobsTable tbody').innerHTML = rows.map(j => `<tr>
+      <td data-label="Job title"><button type="button" class="link-btn" data-open="${esc(j.id)}">${esc(j.title)}</button>${j.isSample ? ' <span class="badge">SAMPLE</span>' : ''}</td>
+      <td data-label="Company">${esc(j.company)}</td>
+      <td data-label="Status"><span class="chip" data-status="${statusSlug(j.status)}">${esc(j.status)}</span></td>
+      <td data-label="Source">${esc(j.source)}</td>
+      <td data-label="Work type">${esc(j.workType)}</td>
+      <td data-label="Found">${esc(formatDate(j.dateFound))}</td>
+      <td data-label="Applied">${esc(formatDate(j.dateApplied))}</td>
+      <td data-label="Follow-up">${esc(formatDate(j.followUpDate))}</td>
+    </tr>`).join('') ||
+    `<tr><td colspan="${TABLE_COLUMNS.length}" class="empty">${state.jobs.length ? 'No jobs match these filters.' : 'No jobs yet. Use Add job to log your first one.'}</td></tr>`;
+  $('#tableCount').textContent = `Showing ${rows.length} of ${plural(state.jobs.length, 'job')}.`;
+}
+
+function bindTable() {
+  const f = $('#filters');
+  f.addEventListener('submit', e => e.preventDefault());
+  const update = () => {
+    Object.assign(state.table, {
+      q: f.elements.q.value, status: f.elements.status.value, source: f.elements.source.value,
+      workType: f.elements.workType.value, dateField: f.elements.dateField.value,
+      from: f.elements.from.value, to: f.elements.to.value
+    });
+    renderTable();
+  };
+  f.addEventListener('change', e => { if (e.target.name !== 'q') update(); });
+  f.elements.q.addEventListener('input', debounce(update, 200));
+  $('#clearFilters').addEventListener('click', () => {
+    Object.assign(state.table, { q: '', status: '', source: '', workType: '', from: '', to: '', dateField: 'dateFound' });
+    f.elements.q.value = '';
+    renderTable();
+    toast('Filters cleared.');
+  });
+  $('#jobsTable thead').addEventListener('click', e => {
+    const btn = e.target.closest('[data-sort]');
+    if (!btn) return;
+    const key = btn.dataset.sort;
+    if (state.table.sortKey === key) state.table.sortDir = state.table.sortDir === 'asc' ? 'desc' : 'asc';
+    else { state.table.sortKey = key; state.table.sortDir = key.startsWith('date') || key === 'followUpDate' ? 'desc' : 'asc'; }
+    renderTable();
+    $(`#jobsTable [data-sort="${key}"]`).focus();
+  });
+}
+
+/* ============================================================
+   13. JOB DETAIL PANEL
+   ============================================================ */
+const HISTORY_BY = { created: 'Added', manual: 'Changed by you', auto: 'Automatic', import: 'Imported' };
+
+function openDetail(id) {
+  const job = getJob(id);
+  if (!job) return;
+  state.detailId = id;
+  const form = $('#detailForm');
+  $('#detailTitle').textContent = job.isSample ? 'Sample job' : 'Job details';
+  renderFields($('#detailFields'), FIELDS, job, 'd');
+
+  const href = safeHref(job.link);
+  const meta = [
+    `Added ${esc(formatDateTime(job.createdAt))}`,
+    `In ${esc(job.status)} for ${plural(daysInStatus(job), 'day')}`
+  ];
+  if (href) meta.push(`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open job posting<span class="sr-only"> (opens in a new tab)</span></a>`);
+  $('#detailMeta').innerHTML = meta.map(m => `<span>${m}</span>`).join('');
+
+  $('#statusHistory').innerHTML = job.statusHistory.slice().reverse().map(h => {
+    const change = h.from ? `${esc(h.from)} → <span class="chip" data-status="${statusSlug(h.to)}">${esc(h.to)}</span>`
+                          : `<span class="chip" data-status="${statusSlug(h.to)}">${esc(h.to)}</span>`;
+    return `<li>${change} <time datetime="${esc(h.at)}">${esc(formatDateTime(h.at))}</time>
+      <span class="hint">${esc(HISTORY_BY[h.by] || '')}${h.note ? ': ' + esc(h.note) : ''}</span></li>`;
+  }).join('') || '<li>No changes logged yet.</li>';
+
+  showDetailDup();
+  $('#matchResults').innerHTML = '';
+  state.detailSnapshot = JSON.stringify(readForm(form));
+  const dlg = $('#detailDialog');
+  if (!dlg.open) dlg.showModal();
+  $('#d-title').focus();
+}
+
+function showDetailDup() {
+  const values = readForm($('#detailForm'));
+  $('#detailDupWarn').innerHTML = dupWarningHtml(findDuplicates(values, state.detailId), 'Another job in your list matches this one.');
+}
+
+async function saveDetail(e) {
+  e.preventDefault();
+  const form = $('#detailForm');
+  if (!checkRequired(form)) return;
+  const job = getJob(state.detailId);
+  if (!job) return;
+  const values = readForm(form);
+  const newStatus = values.status;
+  delete values.status;
+  const updated = Object.assign(clone(job), values);
+  setStatus(updated, newStatus, 'manual');
+  try {
+    await saveJob(updated);
+    const id = state.detailId;
+    state.detailSnapshot = '';
+    $('#detailDialog').close();
+    render();
+    refocusJob(id);
+    toast('Saved.');
+  } catch (err) { toast(err.message); }
+}
+
+async function deleteCurrentJob() {
+  const job = getJob(state.detailId);
+  if (!job) return;
+  if (!confirm(`Delete "${job.title}" at ${job.company}? This cannot be undone.`)) return;
+  try {
+    await deleteJob(job.id);
+    state.detailSnapshot = '';
+    $('#detailDialog').close();
+    render();
+    $('#h-' + state.view).focus();
+    toast('Job deleted.');
+  } catch (err) { toast(err.message); }
+}
+
+/* ============================================================
+   14. ADD JOB FORM
+   ============================================================ */
+function openAdd(keep = {}) {
+  const values = Object.assign(blankJob(), keep);
+  renderFields($('#addQuickFields'), FIELDS.filter(f => f.quick), values, 'a');
+  renderFields($('#addMoreFields'), FIELDS.filter(f => !f.quick), values, 'a');
+  const form = $('#addForm');
+  delete form.dataset.dupOk;
+  $('#addSaveBtn').textContent = 'Save job';
+  $('#addDupWarn').innerHTML = '';
+  state.addSnapshot = JSON.stringify(readForm(form));
+  const dlg = $('#addDialog');
+  if (!dlg.open) dlg.showModal();
+  $('#a-title').focus();
+}
+
+function checkAddDup(confirming = false) {
+  const values = readForm($('#addForm'));
+  const dups = findDuplicates(values);
+  $('#addDupWarn').innerHTML = dupWarningHtml(dups, confirming
+    ? 'This looks like a job you already saved. Press Save again to add it anyway.'
+    : 'A job you already saved matches this one.');
+  return dups;
+}
+
+async function saveAdd(e) {
+  e.preventDefault();
+  const form = $('#addForm');
+  if (!checkRequired(form)) return;
+  const values = readForm(form);
+  // Duplicate check: first Save shows the warning, second Save adds anyway.
+  if (form.dataset.dupOk !== '1' && findDuplicates(values).length) {
+    checkAddDup(true);
+    form.dataset.dupOk = '1';
+    $('#addSaveBtn').textContent = 'Save anyway';
+    $('#addDupWarn').scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  const job = createJob(values);
+  try {
+    await saveJob(job);
+    const flipped = await applyNoWordRule();
+    render();
+    toast(`Added ${job.title}${flipped ? '. It is past the No Word limit, so it was moved to No Word.' : '.'}`);
+    if (e.submitter && e.submitter.value === 'another') {
+      openAdd({ source: values.source, status: values.status, workType: values.workType });
+    } else {
+      state.addSnapshot = '';
+      $('#addDialog').close();
+    }
+  } catch (err) { toast(err.message); }
+}
+
+/* ============================================================
+   15. SETTINGS VIEW
+   ============================================================ */
+function renderSettings() {
+  const f = $('#settingsForm');
+  // Don't overwrite what the user is typing
+  if (!f.contains(document.activeElement)) {
+    f.elements.noWordDays.value = state.settings.noWordDays;
+    f.elements.targetTitles.value = state.settings.targetTitles.join('\n');
+    f.elements.excludedWords.value = state.settings.excludedWords.join('\n');
+    f.elements.feedUrl.value = state.settings.feedUrl;
+  }
+  const verified = state.facts.filter(f => f.verified).length;
+  $('#jobCountLine').textContent = `This browser holds ${plural(state.jobs.length, 'job')} and ${plural(state.facts.length, 'fact')} (${verified} verified).`;
+}
+
+async function saveSettingsForm(e) {
+  e.preventDefault();
+  const f = $('#settingsForm');
+  const days = parseInt(f.elements.noWordDays.value, 10);
+  if (!Number.isFinite(days) || days < 1 || days > 180) {
+    f.elements.noWordDays.focus();
+    toast('No Word days must be a whole number from 1 to 180.');
+    return;
+  }
+  const oldFeedUrl = state.settings.feedUrl;
+  state.settings = normalizeSettings(Object.assign({}, state.settings, {
+    noWordDays: days,
+    targetTitles: f.elements.targetTitles.value,
+    excludedWords: f.elements.excludedWords.value,
+    feedUrl: f.elements.feedUrl.value
+  }));
+  if (state.settings.feedUrl !== oldFeedUrl) Object.assign(state.feed, { data: null, loaded: false, error: '' });
+  try {
+    await saveSettings();
+    const flipped = await applyNoWordRule();
+    f.elements.noWordDays.blur();
+    render();
+    toast('Settings saved.' + (flipped ? ` ${plural(flipped, 'job')} moved to No Word.` : ''));
+  } catch (err) { toast(err.message); }
+}
+
+/* ============================================================
+   16. EXPORT AND IMPORT
+   File format: { app, schemaVersion, exportedAt, jobs: [...], settings: {...},
+                  dismissed: [...], pastedJobs: [...],     (added in v2)
+                  profile: {...}, facts: [...] }           (added in v3)
+   Version 1 and 2 backups still import.
+   ============================================================ */
+async function exportData() {
+  const payload = {
+    app: APP_ID,
+    schemaVersion: SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    jobs: await Storage.list(COLLECTIONS.jobs),
+    settings: (await Storage.get(COLLECTIONS.settings, SETTINGS_ID)) || state.settings,
+    dismissed: await Storage.list(COLLECTIONS.dismissed),
+    pastedJobs: await Storage.list(COLLECTIONS.pasted),
+    profile: (await Storage.get(COLLECTIONS.profile, PROFILE_ID)) || state.profile,
+    facts: await Storage.list(COLLECTIONS.facts)
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `job-tracker-backup-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  toast(`Exported ${plural(payload.jobs.length, 'job')}.`);
+}
+
+async function importData(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch { toast('That file is not valid JSON.'); return; }
+  if (!data || !Array.isArray(data.jobs)) { toast('That file is not a Job Search Tracker backup.'); return; }
+  if (data.schemaVersion > SCHEMA_VERSION) { toast('That backup comes from a newer version of this app. Update this file first.'); return; }
+
+  const jobs = data.jobs.map(normalizeJob).filter(Boolean);
+  const facts = Array.isArray(data.facts) ? data.facts.map(normalizeFact).filter(Boolean) : [];
+  const fileProfile = data.profile ? normalizeProfile(data.profile) : null;
+  const hasProfile = fileProfile && !profileIsEmpty(fileProfile);
+  const mode = (document.querySelector('input[name="importMode"]:checked') || {}).value || 'merge';
+  let msg = mode === 'replace'
+    ? `Replace all ${plural(state.jobs.length, 'current job')} and ${plural(state.facts.length, 'fact')} with ${plural(jobs.length, 'job')} and ${plural(facts.length, 'fact')} from the file? This cannot be undone. Export a backup first if you are unsure.`
+    : `Import ${plural(jobs.length, 'job')} and ${plural(facts.length, 'fact')}? Items with the same id are updated. Items not in the file stay as they are.`;
+  if (hasProfile) msg += ' The profile in the file (contact, resume, voice, answers) replaces the one on this device.';
+  if (!confirm(msg)) return;
+
+  try {
+    const dismissed = Array.isArray(data.dismissed) ? data.dismissed.filter(d => d && d.id) : [];
+    const pasted = Array.isArray(data.pastedJobs) ? data.pastedJobs.filter(p => p && p.id && p.title) : [];
+    if (mode === 'replace') {
+      for (const j of state.jobs) await Storage.delete(COLLECTIONS.jobs, j.id);
+      for (const d of state.dismissed) await Storage.delete(COLLECTIONS.dismissed, d.id);
+      for (const p of state.pasted) await Storage.delete(COLLECTIONS.pasted, p.id);
+    }
+    for (const j of jobs) await Storage.save(COLLECTIONS.jobs, j);
+    for (const d of dismissed) await Storage.save(COLLECTIONS.dismissed, d);
+    for (const p of pasted) await Storage.save(COLLECTIONS.pasted, p);
+    // Phase 3: Facts Bank and profile
+    if (mode === 'replace') {
+      for (const f of state.facts) await Storage.delete(COLLECTIONS.facts, f.id);
+      if (!hasProfile) await Storage.delete(COLLECTIONS.profile, PROFILE_ID);
+    }
+    for (const f of facts) await Storage.save(COLLECTIONS.facts, f);
+    if (hasProfile) await Storage.save(COLLECTIONS.profile, fileProfile);
+    if (data.settings) {
+      const incoming = normalizeSettings(data.settings);
+      const merged = mode === 'replace' ? incoming : Object.assign({}, state.settings, {
+        targetTitles: cleanList([...state.settings.targetTitles, ...incoming.targetTitles]),
+        excludedWords: cleanList([...state.settings.excludedWords, ...incoming.excludedWords])
+      });
+      merged.sampleSeeded = true;
+      state.settings = normalizeSettings(merged);
+      await saveSettings();
+    }
+    await loadAll();
+    fillProfileForms();
+    await applyNoWordRule();
+    render();
+    toast(`Imported ${plural(jobs.length, 'job')} and ${plural(facts.length, 'fact')}${hasProfile ? ', plus your profile' : ''}.`);
+  } catch (err) { toast(err.message); }
+}
+
+/* ============================================================
+   17. JOB FEED
+   Shows openings from jobs-feed.json (written by fetch-jobs.mjs in
+   GitHub Actions) and from pasted LinkedIn alerts (section 18).
+   - Hidden: dismissed openings, openings already in the tracker
+     (same link, or same company + title), and openings filtered out
+     by the keyword lists in Settings.
+   - Add to Tracker creates a Found job. Nothing is applied for you.
+   - Dismissed openings and pasted jobs are saved through Storage.
+   ============================================================ */
+const FEED_PAGE_SIZE = 50;
+const FEED_NEW_DAYS = 2; // "New" badge for openings first seen in the last 2 days
+
+function relativeTime(iso) {
+  const ms = Date.now() - new Date(iso);
+  if (isNaN(ms)) return '';
+  const m = Math.round(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return plural(m, 'minute') + ' ago';
+  const h = Math.round(m / 60);
+  if (h < 48) return plural(h, 'hour') + ' ago';
+  return plural(Math.round(h / 24), 'day') + ' ago';
+}
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const titleKey = x => (normText(x.company) && normText(x.title)) ? normText(x.company) + '|' + normText(x.title) : '';
+
+async function loadFeed() {
+  state.feed.loading = true;
+  if (state.view === 'feed') renderFeedStatus();
+  const url = state.settings.feedUrl || DEFAULT_FEED_URL;
+  try {
+    const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now(), { cache: 'no-store' });
+    if (res.status === 404) throw new Error('No feed file yet. In GitHub, open the Actions tab, run "Fetch jobs" once, wait for Pages to update, then reload.');
+    if (!res.ok) throw new Error(`The feed did not load (error ${res.status}).`);
+    const data = await res.json();
+    if (!data || !Array.isArray(data.jobs)) throw new Error('The feed file is not in the expected format.');
+    state.feed.data = data;
+    state.feed.error = '';
+  } catch (e) {
+    state.feed.error = location.protocol === 'file:'
+      ? 'The feed loads only when the app is opened from GitHub Pages, not from a file on this device. Pasted LinkedIn alerts still work here.'
+      : (e instanceof SyntaxError ? 'The feed file is not valid JSON.' : (e.message || 'The feed did not load.'));
+  }
+  state.feed.loading = false;
+  state.feed.loaded = true;
+  if (state.view === 'feed') renderFeed();
+}
+
+// --- Filters ------------------------------------------------
+// Excluded words: whole word, plurals included. Target titles: title contains the phrase.
+function wholeWordRe(word) {
+  return new RegExp('(^|[^a-z0-9])' + escapeRe(word.toLowerCase()) + '(s|es)?(?![a-z0-9])', 'i');
+}
+function buildKeywordFilter() {
+  const targets = state.settings.targetTitles.map(normText).filter(Boolean);
+  const excluded = state.settings.excludedWords.map(w => ({ word: w, re: wholeWordRe(w) }));
+  return item => {
+    const hit = excluded.find(x => x.re.test(item.title || '') || x.re.test(item.description || ''));
+    if (hit) return `Excluded word: ${hit.word}`;
+    if (item.origin !== 'pasted' && targets.length && !targets.some(t => normText(item.title).includes(t))) {
+      return 'Title does not match your target titles';
+    }
+    return '';
+  };
+}
+function buildTrackerCheck() {
+  const links = new Set(), keys = new Set();
+  state.jobs.forEach(j => {
+    const l = normLink(j.link); if (l) links.add(l);
+    const k = titleKey(j); if (k) keys.add(k);
+  });
+  return item => (item.link && links.has(normLink(item.link))) || (titleKey(item) && keys.has(titleKey(item)));
+}
+// Returns the id of the dismissed record that hides this item, or ''.
+function buildDismissedCheck() {
+  const ids = new Map(), links = new Map(), keys = new Map();
+  state.dismissed.forEach(d => {
+    ids.set(d.id, d.id);
+    if (d.linkKey) links.set(d.linkKey, d.id);
+    if (d.titleKey) keys.set(d.titleKey, d.id);
+  });
+  return item => ids.get(item.id) || (item.link && links.get(normLink(item.link))) || (titleKey(item) && keys.get(titleKey(item))) || '';
+}
+
+// All openings: pasted ones first (newest paste first), then the feed by date posted.
+function feedItems() {
+  const pasted = state.pasted.map(p => Object.assign({}, p, { origin: 'pasted' }))
+    .sort((a, b) => (b.pastedAt || '').localeCompare(a.pastedAt || ''));
+  const fetched = ((state.feed.data && state.feed.data.jobs) || [])
+    .filter(j => j && j.title)
+    .map(j => Object.assign({}, j, { origin: 'feed', id: String(j.id || ('feed:' + (normLink(j.link) || titleKey(j)))) }))
+    .sort((a, b) => String(b.datePosted || '').localeCompare(String(a.datePosted || '')));
+  return [...pasted, ...fetched];
+}
+function classifyFeed() {
+  const keywordReason = buildKeywordFilter(), inTracker = buildTrackerCheck(), dismissedBy = buildDismissedCheck();
+  return feedItems().map(item => {
+    item.dismissedId = dismissedBy(item);
+    if (item.dismissedId) { item.hiddenType = 'dismissed'; item.hidden = 'Dismissed'; }
+    else if (inTracker(item)) { item.hiddenType = 'tracker'; item.hidden = 'Already in your tracker'; }
+    else { item.hidden = keywordReason(item); item.hiddenType = item.hidden ? 'keywords' : ''; }
+    return item;
+  });
+}
+
+// --- Rendering ----------------------------------------------
+function renderFeedStatus() {
+  const f = state.feed;
+  let html = '';
+  if (f.loading && !f.data) html += '<p>Loading the job feed…</p>';
+  if (f.error) html += `<div class="warn"><p>${esc(f.error)}</p></div>`;
+  const data = f.data;
+  if (data) {
+    const sources = Array.isArray(data.sources) ? data.sources : [];
+    const ran = sources.filter(s => s.status !== 'skipped');
+    const ok = ran.filter(s => s.status === 'ok');
+    const when = data.generatedAt ? `${formatDateTime(data.generatedAt)} (${relativeTime(data.generatedAt)})` : 'unknown';
+    html += `<p><strong>Last updated:</strong> ${esc(when)}</p>`;
+    if (sources.length) {
+      html += `<p class="hint">${ok.length} of ${plural(ran.length, 'source')} worked on the last run.</p>
+        <details><summary>Source log</summary><ul class="source-log">` +
+        sources.map(s => {
+          const cls = s.status === 'ok' ? 'ok' : s.status === 'skipped' ? 'skip' : 'fail';
+          const label = s.status === 'ok' ? 'Worked' : s.status === 'skipped' ? 'Skipped' : 'Failed';
+          const detail = s.status === 'ok' ? plural(s.count || 0, 'job') : (s.message || '');
+          return `<li><span class="${cls}">${label}</span> ${esc(s.name)}${detail ? ' · ' + esc(detail) : ''}</li>`;
+        }).join('') + '</ul></details>';
+    }
+  }
+  html += `<div class="row"><button type="button" class="btn btn-small" id="reloadFeedBtn"${f.loading ? ' disabled' : ''}>${f.loading ? 'Loading…' : 'Reload feed'}</button></div>`;
+  $('#feedStatus').innerHTML = html;
+}
+
+function feedCardHtml(i) {
+  const href = safeHref(i.link);
+  const company = i.company || 'Company not listed';
+  const who = `${esc(i.title)} at ${esc(company)}`;
+  const where = [i.location, i.remoteType, i.payRange].filter(Boolean).map(esc).join(' · ');
+  const when = i.origin === 'pasted'
+    ? (i.pastedAt ? `Pasted ${esc(formatDate(toDateStr(new Date(i.pastedAt))))}` : 'Pasted')
+    : (i.datePosted ? `Posted ${esc(formatDate(String(i.datePosted).slice(0, 10)))}` : '');
+  const isNew = i.origin === 'feed' && i.firstSeenAt && (Date.now() - new Date(i.firstSeenAt)) / 86400000 < FEED_NEW_DAYS;
+  const meta = [esc(i.source || ''), when].filter(Boolean).join(' · ') + (isNew ? ' <span class="badge badge-new">New</span>' : '');
+  const text = String(i.description || '').replace(/\s+/g, ' ').trim();
+  const snippet = text ? esc(text.slice(0, 260)) + (text.length > 260 ? '…' : '')
+    : (i.origin === 'pasted' ? 'Alert emails have no job description. Open the link to read the full posting.' : '');
+  let actions = '';
+  if (i.hiddenType === 'tracker') {
+    actions = '<span class="feed-note">Already in your tracker.</span>';
+  } else if (i.hiddenType === 'dismissed') {
+    actions = `<button type="button" class="btn btn-small" data-feed-restore="${esc(i.dismissedId)}">Restore<span class="sr-only"> ${who}</span></button>`;
+  } else {
+    actions = `<button type="button" class="btn btn-primary btn-small" data-feed-add="${esc(i.id)}">Add to Tracker<span class="sr-only">: ${who}</span></button>
+      <button type="button" class="btn btn-small" data-feed-dismiss="${esc(i.id)}">Dismiss<span class="sr-only"> ${who}</span></button>`;
+  }
+  if (href) actions += `<a class="btn btn-small" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open link<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
+  return `<li class="feed-card${i.hidden ? ' is-hidden' : ''}">
+    <h3>${esc(i.title)}</h3>
+    <p class="feed-company">${esc(company)}</p>
+    ${where ? `<p class="feed-meta">${where}</p>` : ''}
+    ${meta ? `<p class="feed-meta">${meta}</p>` : ''}
+    ${i.needsCheck ? '<p class="feed-note">Check the title and company. This alert did not use the usual layout.</p>' : ''}
+    ${snippet ? `<p class="feed-snippet">${snippet}</p>` : ''}
+    ${i.descriptionIsSnippet ? '<p class="feed-meta">This source shares only a short part of the description.</p>' : ''}
+    ${i.hidden ? `<p class="feed-reason">Hidden: ${esc(i.hidden)}</p>` : ''}
+    <div class="feed-actions">${actions}</div>
+  </li>`;
+}
+
+function renderFeed() {
+  renderFeedStatus();
+  const ui = state.feedUi;
+  const all = classifyFeed();
+  state.feedIndex = new Map(all.map(i => [i.id, i]));
+
+  const sources = [...new Set(all.map(i => i.source).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  if (ui.source && !sources.includes(ui.source)) ui.source = '';
+  fillSelect($('#ff-source'), [['', 'All sources'], ...sources.map(s => [s, s])], ui.source);
+  const ff = $('#feedFilters');
+  if (document.activeElement !== ff.elements.q) ff.elements.q.value = ui.q;
+  ff.elements.showHidden.checked = ui.showHidden;
+
+  const q = ui.q.trim().toLowerCase();
+  const matches = all.filter(i => (!ui.source || i.source === ui.source) &&
+    (!q || q.split(/\s+/).every(w => [i.title, i.company, i.location, i.description].join(' ').toLowerCase().includes(w))));
+  const visible = matches.filter(i => !i.hidden);
+  const counts = { keywords: 0, tracker: 0, dismissed: 0 };
+  matches.forEach(i => { if (i.hiddenType) counts[i.hiddenType]++; });
+  const shown = ui.showHidden ? matches : visible;
+
+  const hiddenParts = [
+    counts.keywords && `${counts.keywords} by your keywords`,
+    counts.tracker && `${counts.tracker} already in your tracker`,
+    counts.dismissed && `${counts.dismissed} dismissed`
+  ].filter(Boolean);
+  $('#feedCount').textContent = `${plural(visible.length, 'opening')} to review.` + (hiddenParts.length ? ` Hidden: ${hiddenParts.join(', ')}.` : '');
+
+  let empty = '';
+  if (!all.length) empty = state.feed.loading ? '' : 'No openings yet. Run the GitHub workflow or paste a LinkedIn alert above.';
+  else if (!shown.length) empty = matches.length ? 'Every opening here is hidden. Turn on Show hidden jobs to see why.' : 'No openings match your search.';
+  $('#feedList').innerHTML = empty ? `<li class="empty">${esc(empty)}</li>` : shown.slice(0, ui.limit).map(feedCardHtml).join('');
+  const left = shown.length - ui.limit;
+  $('#feedMore').innerHTML = left > 0
+    ? `<button type="button" class="btn" id="feedMoreBtn">Show ${Math.min(FEED_PAGE_SIZE, left)} more (${left} not shown)</button>` : '';
+}
+
+// After a card leaves the list, keep keyboard focus nearby.
+function focusFeedCard(pos) {
+  const cards = $$('#feedList > li');
+  const card = cards[Math.min(pos, cards.length - 1)];
+  const target = card && card.querySelector('button, a');
+  (target || $('#h-feed')).focus();
+}
+function cardPosition(btn) {
+  return $$('#feedList > li').findIndex(li => li.contains(btn));
+}
+
+// --- Actions ------------------------------------------------
+async function removePasted(id) {
+  if (!state.pasted.some(p => p.id === id)) return;
+  await Storage.delete(COLLECTIONS.pasted, id);
+  state.pasted = state.pasted.filter(p => p.id !== id);
+}
+
+async function addFeedItem(id, btn) {
+  const item = state.feedIndex.get(id);
+  if (!item) return;
+  if (!item.company) {
+    // Company is required in the tracker; let the user fill it in.
+    openAdd({ title: item.title, link: item.link || '', source: item.source || '', location: item.location || '',
+      workType: WORK_TYPES.includes(item.remoteType) ? item.remoteType : '', payRange: item.payRange || '', description: item.description || '' });
+    toast('This opening has no company name. Add it, then save.');
+    return;
+  }
+  if (findDuplicates(item).length) { toast(`${item.title} is already in your tracker.`); renderFeed(); return; }
+  const notes = [];
+  if (item.datePosted) notes.push(`Posted ${formatDate(String(item.datePosted).slice(0, 10))} (${item.source || 'Job Feed'}).`);
+  if (item.descriptionIsSnippet) notes.push('The job description below is a short part of the posting. Paste the full posting from the job link.');
+  if (item.origin === 'pasted') notes.push('Added from a pasted LinkedIn alert. Paste the full posting from the job link into Job description.');
+  const job = createJob({
+    title: item.title, company: item.company, link: cleanLink(item.link || ''), source: item.source || 'Job Feed',
+    location: item.location || '', workType: WORK_TYPES.includes(item.remoteType) ? item.remoteType : '',
+    payRange: item.payRange || '', dateFound: todayStr(), status: 'Found',
+    description: item.description || '', notes: notes.join('\n')
+  });
+  job.origin = 'finder';
+  job.externalId = item.id;
+  const pos = cardPosition(btn);
+  try {
+    await saveJob(job);
+    if (item.origin === 'pasted') await removePasted(item.id);
+    renderFeed();
+    focusFeedCard(pos);
+    toast(`Added ${item.title} to your tracker as Found.`);
+  } catch (e) { toast(e.message); }
+}
+
+async function dismissFeedItem(id, btn) {
+  const item = state.feedIndex.get(id);
+  if (!item) return;
+  const rec = { id: item.id, linkKey: normLink(item.link), titleKey: titleKey(item), title: item.title,
+    company: item.company || '', source: item.source || '', dismissedAt: new Date().toISOString() };
+  const pos = cardPosition(btn);
+  try {
+    await Storage.save(COLLECTIONS.dismissed, rec);
+    state.dismissed = state.dismissed.filter(d => d.id !== rec.id).concat(rec);
+    if (item.origin === 'pasted') await removePasted(item.id);
+    renderFeed();
+    focusFeedCard(pos);
+    toast(`Dismissed ${item.title}.`);
+  } catch (e) { toast(e.message); }
+}
+
+async function restoreFeedItem(dismissedId, btn) {
+  const pos = cardPosition(btn);
+  try {
+    await Storage.delete(COLLECTIONS.dismissed, dismissedId);
+    state.dismissed = state.dismissed.filter(d => d.id !== dismissedId);
+    renderFeed();
+    focusFeedCard(pos);
+    toast('Restored to the feed.');
+  } catch (e) { toast(e.message); }
+}
+
+function bindFeed() {
+  const ff = $('#feedFilters');
+  ff.addEventListener('submit', e => e.preventDefault());
+  ff.elements.q.addEventListener('input', debounce(() => {
+    state.feedUi.q = ff.elements.q.value;
+    state.feedUi.limit = FEED_PAGE_SIZE;
+    renderFeed();
+  }, 200));
+  ff.addEventListener('change', e => {
+    if (e.target.name === 'q') return;
+    state.feedUi.source = ff.elements.source.value;
+    state.feedUi.showHidden = ff.elements.showHidden.checked;
+    state.feedUi.limit = FEED_PAGE_SIZE;
+    renderFeed();
+  });
+  $('#view-feed').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'reloadFeedBtn') loadFeed();
+    else if (b.id === 'feedMoreBtn') {
+      const first = state.feedUi.limit;
+      state.feedUi.limit += FEED_PAGE_SIZE;
+      renderFeed();
+      focusFeedCard(first);
+    }
+    else if (b.dataset.feedAdd) addFeedItem(b.dataset.feedAdd, b);
+    else if (b.dataset.feedDismiss) dismissFeedItem(b.dataset.feedDismiss, b);
+    else if (b.dataset.feedRestore) restoreFeedItem(b.dataset.feedRestore, b);
+    else if (b.id === 'parsePasteBtn') parsePastedAlert();
+    else if (b.id === 'clearPasteBtn') { $('#pasteBox').value = ''; $('#pasteResult').textContent = ''; $('#pasteBox').focus(); }
+  });
+  // Pasting from an email copies links too: keep them by converting the HTML version.
+  $('#pasteBox').addEventListener('paste', e => {
+    const html = e.clipboardData && e.clipboardData.getData('text/html');
+    if (!html) return;
+    const text = htmlToTextWithJobLinks(html);
+    if (!text.trim()) return;
+    e.preventDefault();
+    const box = e.target, start = box.selectionStart, end = box.selectionEnd;
+    box.value = box.value.slice(0, start) + text + box.value.slice(end);
+    box.selectionStart = box.selectionEnd = start + text.length;
+  });
+}
+
+/* ============================================================
+   18. LINKEDIN ALERT PARSER
+   Works only on text you paste. It never opens or requests any
+   LinkedIn page. Job links are rebuilt in the short form
+   https://www.linkedin.com/jobs/view/<id>/ for you to open yourself.
+
+   LinkedIn alerts list each job as:
+     Job title
+     Company · Location            <- the "·" line anchors each job
+     $pay (sometimes), extra lines, and a jobs/view/<id> link
+   ============================================================ */
+const LI_SEP = /\s[·•]\s/;
+const LI_NOISE = new RegExp('^(' + [
+  'view( this)? job', 'view (all|more|similar) jobs', 'see (all|more) jobs', 'easy apply', 'apply( now| with .*)?',
+  'actively (recruiting|hiring)', 'promoted', '(be an )?early applicant', 'top applicant', 'new', 'reposted.*',
+  '\\d+\\s+(school\\s+)?alum(ni)?\\b.*', '\\d+\\s+connections?\\b.*', '\\d+\\s+applicants?\\b.*', '\\d+\\s+(new )?jobs?\\b.*',
+  '(your )?job alert.*', 'jobs? (you might|similar|recommended).*', 'unsubscribe.*', 'manage (your )?(job )?alerts?.*',
+  'search other jobs.*', 'this email was.*', 'you are receiving.*', '©.*', 'linkedin( corporation)?( ©.*)?', 'help',
+  'learn why.*', '.*\\bmatch(es)? your (preferences|profile)\\b.*', '[-–—_=*•·|:\\s]+'
+].join('|') + ')$', 'i');
+
+function findLinkedInJobIds(line) {
+  const out = [];
+  const patterns = [
+    /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/(?:comm\/)?jobs\/view\/(?:[^\s"'<>?#\/]*?-)?(\d{6,})(?![0-9])[^\s"'<>]*/gi,
+    /https?:\/\/(?:[a-z]{2,3}\.)?(?:www\.)?linkedin\.com\/[^\s"'<>]*?currentJobId=(\d{6,})[^\s"'<>]*/gi
+  ];
+  patterns.forEach(re => { let m; while ((m = re.exec(line))) out.push(m[1]); });
+  return out;
+}
+function inferRemoteType(s) {
+  if (/\bhybrid\b/i.test(s)) return 'Hybrid';
+  if (/\bremote\b/i.test(s)) return 'Remote';
+  if (/\bon[- ]?site\b/i.test(s)) return 'Onsite';
+  return '';
+}
+
+// Turn pasted email HTML into plain text, keeping each job link on its own line after its anchor.
+function htmlToTextWithJobLinks(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script, style, head, img').forEach(n => n.remove());
+  doc.querySelectorAll('a[href]').forEach(a => {
+    const href = a.getAttribute('href') || '';
+    if (findLinkedInJobIds(href).length) a.after(doc.createTextNode('\n' + href + '\n'));
+  });
+  doc.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
+  doc.querySelectorAll('p, div, li, tr, td, th, h1, h2, h3, h4, h5, h6, table, section').forEach(el => el.append('\n'));
+  return (doc.body ? doc.body.textContent : '')
+    .split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+}
+
+function parseLinkedInText(text) {
+  // 1. Break the paste into tokens: job links, "Company · Location" lines, pay lines, other text.
+  const tokens = [];
+  String(text).replace(/ /g, ' ').split(/\r?\n/).forEach(raw => {
+    const line = raw.trim();
+    if (!line) return;
+    const ids = findLinkedInJobIds(line);
+    const rest = line.replace(/<?https?:\/\/[^\s>]+>?/g, ' ').replace(/\s+/g, ' ').trim().replace(/\s*[:\-–]\s*$/, '').trim();
+    if (rest && !LI_NOISE.test(rest)) {
+      if (LI_SEP.test(rest)) tokens.push({ type: 'sep', text: rest });
+      else if (/^(\$|£|€)\s?\d/.test(rest) || /^(salary|pay)\b/i.test(rest)) tokens.push({ type: 'pay', text: rest });
+      else tokens.push({ type: 'text', text: rest });
+    }
+    ids.forEach(id => {
+      const prev = tokens[tokens.length - 1];
+      if (!(prev && prev.type === 'url' && prev.id === id)) tokens.push({ type: 'url', id });
+    });
+  });
+
+  const jobs = [];
+  const usedIds = new Set();
+  const usedText = new Set();
+
+  // 2. Each "Company · Location" line is one job: title just above it, nearest unused link around it.
+  tokens.forEach((t, k) => {
+    if (t.type !== 'sep') return;
+    let title = '';
+    for (let i = k - 1; i >= Math.max(0, k - 3); i--) {
+      if (tokens[i].type === 'sep') break;
+      if (tokens[i].type === 'text' && !usedText.has(i)) { title = tokens[i].text; usedText.add(i); break; }
+    }
+    if (!title) return;
+    const parts = t.text.split(LI_SEP).map(s => s.trim()).filter(Boolean);
+    const company = parts[0] || '';
+    const location = parts.slice(1).join(', ');
+    let best = -1, bestDist = Infinity;
+    for (let i = Math.max(0, k - 4); i <= Math.min(tokens.length - 1, k + 5); i++) {
+      const u = tokens[i];
+      if (u.type === 'url' && !usedIds.has(u.id) && Math.abs(i - k) < bestDist) { best = i; bestDist = Math.abs(i - k); }
+    }
+    let pay = '';
+    for (let i = k + 1; i <= Math.min(tokens.length - 1, k + 3); i++) {
+      if (tokens[i].type === 'sep') break;
+      if (tokens[i].type === 'pay') { pay = tokens[i].text; break; }
+    }
+    const linkedinId = best >= 0 ? tokens[best].id : '';
+    if (linkedinId) usedIds.add(linkedinId);
+    jobs.push({ title, company, location, remoteType: inferRemoteType(location), payRange: pay, linkedinId });
+  });
+
+  // 3. Fallback when no "·" lines exist: read the text lines before each link as title, company, location.
+  if (!jobs.length) {
+    let block = [];
+    tokens.forEach(t => {
+      if (t.type !== 'url') { block.push(t); return; }
+      const texts = block.filter(b => b.type === 'text').map(b => b.text);
+      if (!usedIds.has(t.id) && texts.length >= 2) {
+        const [title, company, location = ''] = texts.slice(-3).length === 3 ? texts.slice(-3) : texts.slice(-2);
+        jobs.push({ title, company, location, remoteType: inferRemoteType(location), payRange: (block.find(b => b.type === 'pay') || {}).text || '',
+          linkedinId: t.id, needsCheck: true });
+        usedIds.add(t.id);
+      }
+      block = [];
+    });
+  }
+  return jobs;
+}
+
+async function parsePastedAlert() {
+  const box = $('#pasteBox'), result = $('#pasteResult');
+  if (!box.value.trim()) { result.textContent = 'Paste the alert email text first.'; box.focus(); return; }
+  const found = parseLinkedInText(box.value);
+  if (!found.length) {
+    result.textContent = 'No jobs found in this text. Copy the whole alert email, including the job titles and the company lines, and paste it again.';
+    return;
+  }
+  const existing = new Set(state.pasted.map(p => p.id));
+  const newIds = new Set();
+  let repeats = 0;
+  try {
+    for (const f of found) {
+      const id = f.linkedinId ? 'linkedin:' + f.linkedinId : 'pasted:' + (titleKey(f) || normText(f.title));
+      if (existing.has(id)) { repeats++; continue; }
+      existing.add(id);
+      newIds.add(id);
+      const rec = {
+        id, title: f.title, company: f.company, location: f.location, remoteType: f.remoteType, payRange: f.payRange,
+        link: f.linkedinId ? `https://www.linkedin.com/jobs/view/${f.linkedinId}/` : '',
+        source: 'LinkedIn alert', datePosted: '', description: '', needsCheck: !!f.needsCheck,
+        pastedAt: new Date().toISOString()
+      };
+      await Storage.save(COLLECTIONS.pasted, rec);
+      state.pasted.push(rec);
+    }
+  } catch (e) { toast(e.message); }
+  renderFeed();
+  const hiddenNew = classifyFeed().filter(i => newIds.has(i.id) && i.hidden).length;
+  let msg = `Found ${plural(found.length, 'job')}. ${newIds.size} added to this screen`;
+  if (repeats) msg += `, ${repeats} already here`;
+  msg += '.';
+  if (hiddenNew) msg += ` ${hiddenNew} of the new ones ${hiddenNew === 1 ? 'is' : 'are'} hidden because ${hiddenNew === 1 ? 'it is' : 'they are'} already in your tracker, dismissed, or excluded.`;
+  result.textContent = msg;
+}
+
+/* ============================================================
+   19. MY PROFILE
+   One record in COLLECTIONS.profile (id "me"):
+     contact      { fullName, email, phone, location, portfolio, linkedin, website }
+     masterResume  plain text
+     voice        { guidelines, samples: [3 paragraphs] }
+     answers      { salary, availability, whyLeaving, workAuthorization, sampleLinks }
+     otherAnswers [{ id, question, answer }]
+   Every section starts empty. Each form saves on its own.
+   ============================================================ */
+function blankProfile() {
+  return {
+    id: PROFILE_ID,
+    contact: Object.fromEntries(CONTACT_FIELDS.map(f => [f.key, ''])),
+    masterResume: '',
+    voice: { guidelines: '', samples: ['', '', ''] },
+    answers: Object.fromEntries(STANDARD_ANSWERS.map(a => [a.key, ''])),
+    otherAnswers: [],
+    updatedAt: ''
+  };
+}
+function normalizeProfile(raw) {
+  const p = blankProfile();
+  if (!raw || typeof raw !== 'object') return p;
+  const str = v => (v === null || v === undefined) ? '' : String(v);
+  CONTACT_FIELDS.forEach(f => { p.contact[f.key] = str((raw.contact || {})[f.key]); });
+  p.masterResume = str(raw.masterResume);
+  const v = raw.voice || {};
+  p.voice.guidelines = str(v.guidelines);
+  p.voice.samples = [0, 1, 2].map(i => str(Array.isArray(v.samples) ? v.samples[i] : ''));
+  STANDARD_ANSWERS.forEach(a => { p.answers[a.key] = str((raw.answers || {})[a.key]); });
+  p.otherAnswers = (Array.isArray(raw.otherAnswers) ? raw.otherAnswers : [])
+    .filter(x => x && (x.question || x.answer))
+    .map(x => ({ id: str(x.id) || uid(), question: str(x.question), answer: str(x.answer) }));
+  p.updatedAt = str(raw.updatedAt);
+  return p;
+}
+function profileIsEmpty(p) {
+  return !Object.values(p.contact).some(Boolean) && !p.masterResume && !p.voice.guidelines &&
+    !p.voice.samples.some(Boolean) && !Object.values(p.answers).some(Boolean) && !p.otherAnswers.length;
+}
+async function saveProfile() {
+  state.profile.updatedAt = new Date().toISOString();
+  await Storage.save(COLLECTIONS.profile, state.profile);
+}
+
+// --- Unsaved-change tracking for the four profile forms ---
+const PROFILE_FORMS = { contact: '#contactForm', resume: '#resumeForm', voice: '#voiceForm', answers: '#answersForm' };
+function formValues(form) {
+  return JSON.stringify($$('input, textarea, select', form).map(el => el.type === 'checkbox' ? el.checked : el.value));
+}
+function setSaveState(key, text, dirty = false) {
+  const el = $(`[data-save-state="${key}"]`);
+  el.textContent = text;
+  el.classList.toggle('dirty', dirty);
+}
+function markClean(key) {
+  state.profileSnap[key] = formValues($(PROFILE_FORMS[key]));
+  setSaveState(key, '');
+}
+function profileDirtyKeys() {
+  return Object.keys(PROFILE_FORMS).filter(k => state.profileSnap[k] !== undefined && formValues($(PROFILE_FORMS[k])) !== state.profileSnap[k]);
+}
+
+// --- Filling the forms from the saved profile ---
+function otherAnswerHtml(item) {
+  const id = esc(item.id);
+  return `<div class="other-answer" data-oa="${id}">
+    <div><label for="oa-q-${id}">Question</label><input id="oa-q-${id}" data-oa-q value="${esc(item.question)}"></div>
+    <div><label for="oa-a-${id}">Answer</label><textarea id="oa-a-${id}" data-oa-a rows="3">${esc(item.answer)}</textarea></div>
+    <div><button type="button" class="btn btn-small btn-danger" data-oa-remove="${id}">Remove<span class="sr-only"> this question</span></button></div>
+  </div>`;
+}
+function fillProfileForms() {
+  const p = state.profile;
+  $('#contactFields').innerHTML = CONTACT_FIELDS.map(f => {
+    const type = f.type === 'url' ? 'text' : f.type;
+    const extra = f.type === 'url' ? ' inputmode="url" spellcheck="false" autocapitalize="off"' : '';
+    return `<div><label for="pc-${f.key}">${esc(f.label)}</label>
+      <input id="pc-${f.key}" name="${f.key}" type="${type}" value="${esc(p.contact[f.key])}"${f.autocomplete ? ` autocomplete="${f.autocomplete}"` : ''}${extra}></div>`;
+  }).join('');
+  $('#pr-masterResume').value = p.masterResume;
+  updateResumeCount();
+  $('#pv-guidelines').value = p.voice.guidelines;
+  [1, 2, 3].forEach(n => { $('#pv-sample' + n).value = p.voice.samples[n - 1]; });
+  $('#standardAnswers').innerHTML = STANDARD_ANSWERS.map(a =>
+    `<div><label for="pa-${a.key}">${esc(a.label)}</label><textarea id="pa-${a.key}" name="${a.key}" rows="3">${esc(p.answers[a.key])}</textarea></div>`).join('');
+  $('#otherAnswers').innerHTML = p.otherAnswers.map(otherAnswerHtml).join('');
+  Object.keys(PROFILE_FORMS).forEach(markClean);
+}
+function updateResumeCount() {
+  const text = $('#pr-masterResume').value.trim();
+  const words = text ? text.split(/\s+/).length : 0;
+  $('#resumeCount').textContent = words ? `${plural(words, 'word')}.` : '';
+}
+
+// --- Saving each form ---
+async function saveContact(e) {
+  e.preventDefault();
+  const f = $('#contactForm');
+  if (!f.elements.email.checkValidity()) { f.elements.email.focus(); toast('That email address does not look right.'); return; }
+  CONTACT_FIELDS.forEach(c => {
+    let v = f.elements[c.key].value.trim();
+    if (c.type === 'url') { v = cleanLink(v); f.elements[c.key].value = v; }
+    state.profile.contact[c.key] = v;
+  });
+  await saveSection('contact', 'Contact details saved.');
+}
+async function saveResume(e) {
+  e.preventDefault();
+  state.profile.masterResume = $('#pr-masterResume').value.replace(/\s+$/, '');
+  await saveSection('resume', 'Master resume saved.');
+}
+async function saveVoice(e) {
+  e.preventDefault();
+  state.profile.voice.guidelines = $('#pv-guidelines').value.replace(/\s+$/, '');
+  state.profile.voice.samples = [1, 2, 3].map(n => $('#pv-sample' + n).value.replace(/\s+$/, ''));
+  await saveSection('voice', 'Writing voice saved.');
+}
+async function saveAnswers(e) {
+  e.preventDefault();
+  STANDARD_ANSWERS.forEach(a => { state.profile.answers[a.key] = $('#pa-' + a.key).value.replace(/\s+$/, ''); });
+  state.profile.otherAnswers = $$('#otherAnswers [data-oa]').map(row => ({
+    id: row.dataset.oa,
+    question: row.querySelector('[data-oa-q]').value.trim(),
+    answer: row.querySelector('[data-oa-a]').value.replace(/\s+$/, '')
+  })).filter(x => x.question || x.answer);
+  $('#otherAnswers').innerHTML = state.profile.otherAnswers.map(otherAnswerHtml).join('');
+  await saveSection('answers', 'Standard answers saved.');
+}
+async function saveSection(key, message) {
+  try {
+    await saveProfile();
+    markClean(key);
+    setSaveState(key, `Saved ${formatDateTime(state.profile.updatedAt)}`);
+    toast(message);
+  } catch (err) { toast(err.message); }
+}
+
+function bindProfile() {
+  $('#contactForm').addEventListener('submit', saveContact);
+  $('#resumeForm').addEventListener('submit', saveResume);
+  $('#voiceForm').addEventListener('submit', saveVoice);
+  $('#answersForm').addEventListener('submit', saveAnswers);
+  Object.entries(PROFILE_FORMS).forEach(([key, sel]) => {
+    $(sel).addEventListener('input', () => {
+      const dirty = formValues($(sel)) !== state.profileSnap[key];
+      setSaveState(key, dirty ? 'Unsaved changes' : '', dirty);
+    });
+  });
+  $('#pr-masterResume').addEventListener('input', debounce(updateResumeCount, 300));
+  $('#addOtherAnswerBtn').addEventListener('click', () => {
+    const item = { id: uid(), question: '', answer: '' };
+    $('#otherAnswers').insertAdjacentHTML('beforeend', otherAnswerHtml(item));
+    setSaveState('answers', 'Unsaved changes', true);
+    $(`#oa-q-${CSS.escape(item.id)}`).focus();
+  });
+  $('#otherAnswers').addEventListener('click', e => {
+    const b = e.target.closest('[data-oa-remove]');
+    if (!b) return;
+    b.closest('[data-oa]').remove();
+    const dirty = formValues($('#answersForm')) !== state.profileSnap.answers;
+    setSaveState('answers', dirty ? 'Unsaved changes' : '', dirty);
+    $('#addOtherAnswerBtn').focus();
+  });
+  $('#view-profile').addEventListener('click', e => {
+    const j = e.target.closest('[data-jump]');
+    if (!j) return;
+    const h = document.getElementById(j.dataset.jump);
+    h.scrollIntoView({ block: 'start' });
+    h.focus({ preventScroll: true });
+  });
+  // Warn before closing the tab with unsaved profile edits
+  window.addEventListener('beforeunload', e => {
+    if (profileDirtyKeys().length) { e.preventDefault(); e.returnValue = ''; }
+  });
+  bindFacts();
+}
+
+/* ============================================================
+   20. FACTS BANK
+   Record: { id, type, text, dateStart, dateEnd, tags: [], proofLink,
+             verified (true only when you check the box), createdAt, updatedAt }
+   Later drafting must use verifiedFacts() and nothing else.
+   ============================================================ */
+function verifiedFacts() { return state.facts.filter(f => f.verified === true); }
+
+function parseTags(v) {
+  const arr = Array.isArray(v) ? v : String(v || '').split(',');
+  const seen = new Set();
+  return arr.map(t => String(t).replace(/\s+/g, ' ').trim()).filter(t => {
+    const k = t.toLowerCase();
+    if (!t || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+function normalizeFact(raw) {
+  if (!raw || typeof raw !== 'object' || !String(raw.text || '').trim()) return null;
+  const now = new Date().toISOString();
+  return {
+    id: String(raw.id || uid()),
+    type: FACT_TYPES.some(t => t.value === raw.type) ? raw.type : 'achievement',
+    text: String(raw.text).trim(),
+    dateStart: String(raw.dateStart || '').trim(),
+    dateEnd: String(raw.dateEnd || '').trim(),
+    tags: parseTags(raw.tags),
+    proofLink: String(raw.proofLink || '').trim(),
+    verified: raw.verified === true,   // only an explicit true counts
+    createdAt: String(raw.createdAt || now),
+    updatedAt: String(raw.updatedAt || now)
+  };
+}
+function factDates(f) {
+  if (f.dateStart && f.dateEnd) return `${f.dateStart} – ${f.dateEnd}`;
+  if (f.dateStart) return f.dateStart;
+  if (f.dateEnd) return `Until ${f.dateEnd}`;
+  return '';
+}
+function allFactTags() {
+  const map = new Map();
+  state.facts.forEach(f => f.tags.forEach(t => {
+    const k = t.toLowerCase();
+    const cur = map.get(k) || { label: t, count: 0 };
+    cur.count++;
+    map.set(k, cur);
+  }));
+  return [...map.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label));
+}
+
+// --- List and filters ---
+function filteredFacts() {
+  const ui = state.factsUi;
+  const q = ui.q.trim().toLowerCase();
+  return state.facts.filter(f => {
+    if (ui.type && f.type !== ui.type) return false;
+    if (ui.tag && !f.tags.some(t => t.toLowerCase() === ui.tag)) return false;
+    if (ui.verified === 'yes' && !f.verified) return false;
+    if (ui.verified === 'no' && f.verified) return false;
+    if (q) {
+      const hay = [f.text, f.tags.join(' '), factTypeLabel(f.type), f.dateStart, f.dateEnd].join(' ').toLowerCase();
+      if (!q.split(/\s+/).every(w => hay.includes(w))) return false;
+    }
+    return true;
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+function factCardHtml(f) {
+  const id = esc(f.id);
+  const dates = factDates(f);
+  const proof = safeHref(f.proofLink);
+  const short = esc(f.text.length > 60 ? f.text.slice(0, 57) + '…' : f.text);
+  return `<li class="fact-card${f.verified ? '' : ' unverified'}">
+    <div class="fact-head"><span class="chip type-chip">${esc(factTypeLabel(f.type))}</span>${dates ? `<span class="fact-dates">${esc(dates)}</span>` : ''}</div>
+    <p class="fact-text">${esc(f.text)}</p>
+    ${f.tags.length ? `<ul class="tag-list" aria-label="Tags">${f.tags.map(t => `<li class="tag">${esc(t)}</li>`).join('')}</ul>` : ''}
+    ${proof ? `<p><a href="${esc(proof)}" target="_blank" rel="noopener noreferrer">Proof link<span class="sr-only"> for: ${short} (opens in a new tab)</span></a></p>` : ''}
+    <div class="fact-actions">
+      <label class="check"><input type="checkbox" data-fact-verify="${id}"${f.verified ? ' checked' : ''}>
+        <span class="verify-state ${f.verified ? 'yes' : 'no'}">${f.verified ? 'Verified by me' : 'Not verified yet'}</span>
+        <span class="sr-only">: ${short}</span></label>
+      <button type="button" class="btn btn-small" data-fact-edit="${id}">Edit<span class="sr-only">: ${short}</span></button>
+    </div>
+  </li>`;
+}
+function renderFacts() {
+  const ui = state.factsUi;
+  fillSelect($('#fb-type'), [['', 'All types'], ...FACT_TYPES.map(t => [t.value, t.label])], ui.type);
+  const tags = allFactTags();
+  if (ui.tag && !tags.some(([k]) => k === ui.tag)) ui.tag = '';
+  fillSelect($('#fb-tag'), [['', 'All tags'], ...tags.map(([k, v]) => [k, `${v.label} (${v.count})`])], ui.tag);
+  const ff = $('#factFilters');
+  if (document.activeElement !== ff.elements.q) ff.elements.q.value = ui.q;
+  ff.elements.verified.value = ui.verified;
+
+  const list = filteredFacts();
+  const verified = verifiedFacts().length;
+  $('#factCount').textContent = state.facts.length
+    ? `Showing ${list.length} of ${plural(state.facts.length, 'fact')}. ${verified} verified.`
+    : '';
+  $('#factList').innerHTML = list.length ? list.map(factCardHtml).join('')
+    : `<li class="empty">${state.facts.length ? 'No facts match these filters.' : 'No facts yet. Use Add fact to enter your first one.'}</li>`;
+}
+
+// --- Fact dialog ---
+function renderTagPicks() {
+  const current = new Set(parseTags($('#fact-tags').value).map(t => t.toLowerCase()));
+  const picks = allFactTags().filter(([k]) => !current.has(k));
+  $('#factTagPicks').innerHTML = picks.length
+    ? `<span class="hint" style="margin:0;align-self:center">Your tags:</span>` +
+      picks.map(([, v]) => `<button type="button" class="tag-pick" data-tag-pick="${esc(v.label)}">+ ${esc(v.label)}<span class="sr-only"> (add tag)</span></button>`).join('')
+    : '';
+}
+function openFactDialog(id = null, keep = {}) {
+  const f = id ? state.facts.find(x => x.id === id) : null;
+  state.editingFactId = f ? f.id : null;
+  const v = f || Object.assign({ type: 'achievement', text: '', dateStart: '', dateEnd: '', tags: [], proofLink: '', verified: false }, keep);
+  const form = $('#factForm');
+  fillSelect($('#fact-type'), FACT_TYPES.map(t => [t.value, t.label]), v.type);
+  form.elements.text.value = v.text;
+  form.elements.dateStart.value = v.dateStart;
+  form.elements.dateEnd.value = v.dateEnd;
+  form.elements.tags.value = v.tags.join(', ');
+  form.elements.proofLink.value = v.proofLink;
+  form.elements.verified.checked = !!v.verified;
+  form.elements.text.removeAttribute('aria-invalid');
+  $('#factVerifyNote').textContent = '';
+  $('#factTitle').textContent = f ? 'Edit fact' : 'Add a fact';
+  $('#deleteFactBtn').hidden = !f;
+  $('#factAnotherBtn').hidden = !!f;
+  state.factOrig = f ? { text: f.text, dateStart: f.dateStart, dateEnd: f.dateEnd, verified: f.verified, autoCleared: false } : null;
+  renderTagPicks();
+  state.factSnapshot = formValues(form);
+  const dlg = $('#factDialog');
+  if (!dlg.open) dlg.showModal();
+  form.elements.text.focus();
+}
+
+// Editing the wording or dates of a verified fact clears "Verified by me" once,
+// so the changed fact has to be confirmed again.
+function checkFactReverify() {
+  const o = state.factOrig;
+  if (!o || !o.verified || o.autoCleared) return;
+  const form = $('#factForm');
+  const changed = form.elements.text.value.trim() !== o.text ||
+    form.elements.dateStart.value.trim() !== o.dateStart || form.elements.dateEnd.value.trim() !== o.dateEnd;
+  if (changed && form.elements.verified.checked) {
+    form.elements.verified.checked = false;
+    o.autoCleared = true;
+    $('#factVerifyNote').textContent = 'You changed this fact, so "Verified by me" was cleared. Check it again once the new wording is accurate.';
+  }
+}
+
+async function saveFact(e) {
+  e.preventDefault();
+  const form = $('#factForm');
+  const text = form.elements.text.value.trim();
+  if (!text) {
+    form.elements.text.setAttribute('aria-invalid', 'true');
+    form.elements.text.focus();
+    toast('Write the fact before saving.');
+    return;
+  }
+  const existing = state.editingFactId ? state.facts.find(x => x.id === state.editingFactId) : null;
+  const now = new Date().toISOString();
+  const fact = normalizeFact({
+    id: existing ? existing.id : uid(),
+    type: form.elements.type.value,
+    text,
+    dateStart: form.elements.dateStart.value,
+    dateEnd: form.elements.dateEnd.value,
+    tags: form.elements.tags.value,
+    proofLink: cleanLink(form.elements.proofLink.value),
+    verified: form.elements.verified.checked,
+    createdAt: existing ? existing.createdAt : now,
+    updatedAt: now
+  });
+  try {
+    await Storage.save(COLLECTIONS.facts, fact);
+    state.facts = state.facts.filter(x => x.id !== fact.id).concat(fact);
+    renderFacts();
+    toast(existing ? 'Fact updated.' : `Fact added${fact.verified ? '' : '. It is not verified yet'}.`);
+    if (!existing && e.submitter && e.submitter.value === 'another') {
+      openFactDialog(null, { type: fact.type, tags: fact.tags });
+    } else {
+      state.factSnapshot = '';
+      $('#factDialog').close();
+      const btn = $(`[data-fact-edit="${CSS.escape(fact.id)}"]`);
+      (btn || $('#addFactBtn')).focus();
+    }
+  } catch (err) { toast(err.message); }
+}
+
+async function deleteFact() {
+  const f = state.facts.find(x => x.id === state.editingFactId);
+  if (!f) return;
+  if (!confirm('Delete this fact? This cannot be undone.')) return;
+  try {
+    await Storage.delete(COLLECTIONS.facts, f.id);
+    state.facts = state.facts.filter(x => x.id !== f.id);
+    state.factSnapshot = '';
+    $('#factDialog').close();
+    renderFacts();
+    $('#addFactBtn').focus();
+    toast('Fact deleted.');
+  } catch (err) { toast(err.message); }
+}
+
+async function toggleFactVerified(id, checked) {
+  const f = state.facts.find(x => x.id === id);
+  if (!f) return;
+  const updated = Object.assign({}, f, { verified: checked, updatedAt: new Date().toISOString() });
+  try {
+    await Storage.save(COLLECTIONS.facts, updated);
+    state.facts = state.facts.map(x => x.id === id ? updated : x);
+    renderFacts();
+    const box = $(`[data-fact-verify="${CSS.escape(id)}"]`);
+    if (box) box.focus();
+    toast(checked ? 'Marked as verified by you.' : 'Marked as not verified.');
+  } catch (err) { toast(err.message); }
+}
+
+function bindFacts() {
+  $('#addFactBtn').addEventListener('click', () => openFactDialog());
+  $('#factForm').addEventListener('submit', saveFact);
+  $('#deleteFactBtn').addEventListener('click', deleteFact);
+  $('#factForm').addEventListener('input', e => {
+    if (['text', 'dateStart', 'dateEnd'].includes(e.target.name)) checkFactReverify();
+    if (e.target.name === 'tags') renderTagPicks();
+  });
+  $('#factTagPicks').addEventListener('click', e => {
+    const b = e.target.closest('[data-tag-pick]');
+    if (!b) return;
+    const input = $('#fact-tags');
+    input.value = parseTags([...parseTags(input.value), b.dataset.tagPick]).join(', ');
+    renderTagPicks();
+    input.focus();
+  });
+  $('#factList').addEventListener('click', e => {
+    const b = e.target.closest('[data-fact-edit]');
+    if (b) openFactDialog(b.dataset.factEdit);
+  });
+  $('#factList').addEventListener('change', e => {
+    const box = e.target.closest('[data-fact-verify]');
+    if (box) toggleFactVerified(box.dataset.factVerify, box.checked);
+  });
+  const ff = $('#factFilters');
+  ff.addEventListener('submit', e => e.preventDefault());
+  ff.elements.q.addEventListener('input', debounce(() => { state.factsUi.q = ff.elements.q.value; renderFacts(); }, 200));
+  ff.addEventListener('change', e => {
+    if (e.target.name === 'q') return;
+    Object.assign(state.factsUi, { type: ff.elements.type.value, tag: ff.elements.tag.value, verified: ff.elements.verified.value });
+    renderFacts();
+  });
+  $('#clearFactFilters').addEventListener('click', () => {
+    state.factsUi = { q: '', type: '', tag: '', verified: '' };
+    ff.elements.q.value = '';
+    renderFacts();
+    toast('Fact filters cleared.');
+  });
+}
+
+/* ============================================================
+   21. JOB MATCH
+   Plain keyword matching, no AI. Steps:
+   1. Pull requirement lines from the job description (lines under
+      headings such as "Requirements" or "Qualifications"; otherwise
+      lines that mention experience, knowledge, years, and similar).
+   2. Reduce words to simple stems ("writing", "writer" -> "writ")
+      and drop common filler words.
+   3. Score each fact by the stems and tags it shares with the posting.
+   4. A requirement counts as matched when one fact shares at least two
+      of its stems (one, for very short requirements) or one of its tags.
+   ============================================================ */
+const MATCH_STOP = new Set(('a about above across after again against all also am an and any are as at be because been before being below ' +
+  'between both but by can could did do does doing down during each either else etc even ever every few for from further get gets ' +
+  'had has have having he her here him his how i if in into is it its itself just less like may me might more most much must my no ' +
+  'nor not now of off on once only or other our ours out over own per please same shall she should so some such than that the their ' +
+  'them then there these they this those through to too under until up upon us very via was we were what when where whether which ' +
+  'while who whom whose why will with within without would yet you your yours ' +
+  'ability able actively additional applicant applicants apply based benefit benefits best bring candidate candidates company day ' +
+  'days demonstrated desire desired eager environment equal excellent exceptional expected experience experienced familiar ' +
+  'familiarity field great high highly ideal ideally include including job join key knowledge least level looking make minimum ' +
+  'need needs new nice offer opportunity others plus position preferred preferably prior proficiency proficient proven ' +
+  'qualification qualifications qualified related relevant require required requirement requirements responsibilities ' +
+  'responsible role self skill skills solid strong success successful team teams track record understanding using variety well ' +
+  'willing work working works year years').split(/\s+/));
+
+function matchStem(word) {
+  let w = word;
+  if (w.length <= 3) return w;
+  const rules = [['ies', 'y', 3], ['ments', '', 4], ['ment', '', 4], ['ings', '', 4], ['ing', '', 3], ['ists', '', 5], ['ist', '', 5],
+    ['ers', '', 4], ['er', '', 4], ['ors', '', 4], ['or', '', 4], ['ical', '', 5], ['ic', '', 5], ['ed', '', 4], ['es', '', 4], ['s', '', 4], ['y', '', 5]];
+  for (const [suffix, repl, min] of rules) {
+    if (w.endsWith(suffix) && w.length - suffix.length >= min) {
+      if (suffix === 's' && /(ss|us|is)$/.test(w)) continue;
+      w = w.slice(0, -suffix.length) + repl;
+      break;
+    }
+  }
+  if (w.length > 4 && w.endsWith('e')) w = w.slice(0, -1);
+  return w;
+}
+// Words -> [{ stem, word }]. Hyphenated words count as their parts and as one word.
+function matchTokens(text) {
+  const out = [];
+  const raw = String(text || '').toLowerCase().replace(/[’']/g, '').match(/[a-z0-9][a-z0-9+#.\-]*[a-z0-9+#]|[a-z0-9]/g) || [];
+  raw.forEach(tok => {
+    const parts = tok.includes('-') ? [...tok.split('-'), tok.replace(/-/g, '')] : [tok];
+    parts.forEach(w => {
+      if (w.length < 2 || MATCH_STOP.has(w) || /^\d+$/.test(w)) return;
+      out.push({ stem: matchStem(w), word: w });
+    });
+  });
+  return out;
+}
+
+const REQ_HEAD = /^(basic |minimum |preferred |key |required |desired |additional |your )?(requirements|qualifications|skills( (and|&) (experience|qualifications))?|what you('|’)?ll (bring|need)|what you (bring|need|have)|you (have|bring|are|will have)|who you are|about you|must[- ]haves?|nice[- ]to[- ]haves?|bonus points|the ideal candidate|ideal candidate|we('|’)?re looking for|what we('|’)?re looking for)\b/i;
+const OTHER_HEAD = /^(key |main |your |core )?(responsibilities|what you('|’)?ll do|what you will do|day[- ]to[- ]day|the role|about (us|the company|the team|the role)|benefits|perks|compensation|salary|pay|why (join|work)|our (team|values|culture|mission)|how to apply|equal opportunity|eeo|location)\b/i;
+const REQ_SIGNAL = /\b(experience|years?|proficien\w*|familiar\w*|knowledge|degree|bachelor\w*|ability to|skilled|expert\w*|background in|track record|portfolio|understanding of|comfortable with|fluent)\b/i;
+const BULLET = /^([•\-*·▪◦●–]|\d+[.)])\s*/;
+
+function extractRequirements(desc) {
+  const units = [];
+  let section = 'none';
+  String(desc || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(line => {
+    const isBullet = BULLET.test(line);
+    const words = line.split(/\s+/).length;
+    const bare = line.replace(BULLET, '').replace(/:$/, '').trim();
+    const colonHead = !isBullet && /:$/.test(line) && words <= 10;
+    const shortHead = !isBullet && words <= 7 && !/[.!?]$/.test(line);
+    if ((colonHead || shortHead) && REQ_HEAD.test(bare)) { section = 'req'; return; }
+    if ((colonHead || shortHead) && OTHER_HEAD.test(bare)) { section = 'other'; return; }
+    if (colonHead) return; // some other heading
+    const parts = isBullet ? [bare] : bare.split(/(?<=[.!?])\s+(?=[A-Z])/);
+    parts.forEach(p => { if (p.split(/\s+/).length >= 3) units.push({ text: p, section }); });
+  });
+  let reqs = units.filter(u => u.section === 'req');
+  if (!reqs.length) reqs = units.filter(u => u.section !== 'other' && REQ_SIGNAL.test(u.text));
+  if (!reqs.length) reqs = units.filter(u => REQ_SIGNAL.test(u.text));
+  const seen = new Set();
+  return reqs.map(u => u.text).filter(t => {
+    const k = normText(t);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).slice(0, 40);
+}
+
+function analyzeMatch(description, facts) {
+  const descTokens = matchTokens(description);
+  const desc = new Map(); // stem -> { count, word }
+  descTokens.forEach(t => {
+    const cur = desc.get(t.stem) || { count: 0, word: t.word };
+    cur.count++;
+    desc.set(t.stem, cur);
+  });
+  const descNorm = ' ' + normText(description) + ' ';
+  const hasPhrase = (norm, phrase) => phrase && norm.includes(' ' + phrase + ' ');
+
+  const factData = facts.map(f => ({
+    fact: f,
+    stems: new Set(matchTokens([f.text, ...f.tags].join(' ')).map(t => t.stem)),
+    tags: f.tags.map(t => ({ label: t, norm: normText(t) })).filter(t => t.norm)
+  }));
+
+  // Shared-word lists ignore case, so "seo" and the tag "SEO" show once.
+  const uniqueWords = list => {
+    const seen = new Map(); // first spelling wins, so tag labels keep your capitalization
+    list.forEach(w => { if (!seen.has(w.toLowerCase())) seen.set(w.toLowerCase(), w); });
+    return [...seen.values()];
+  };
+
+  // Fact relevance across the whole posting
+  const scored = factData.map(fd => {
+    let score = 0;
+    const found = [];
+    fd.tags.forEach(t => { if (hasPhrase(descNorm, t.norm)) { score += 3; found.push(t.label); } });
+    fd.stems.forEach(s => { const d = desc.get(s); if (d) { score += 1 + Math.log2(d.count); found.push(d.word); } });
+    return { fd, score, words: uniqueWords(found), covers: 0 };
+  });
+
+  // Requirement coverage
+  const requirements = extractRequirements(description).map(text => {
+    const stems = new Set(matchTokens(text).map(t => t.stem));
+    const norm = ' ' + normText(text) + ' ';
+    let best = null;
+    scored.forEach(s => {
+      const overlap = [...stems].filter(x => s.fd.stems.has(x));
+      const tagHits = s.fd.tags.filter(t => hasPhrase(norm, t.norm));
+      const score = overlap.length + tagHits.length * 2;
+      if (score > 0 && (!best || score > best.score)) {
+        best = { s, score, words: uniqueWords([...tagHits.map(t => t.label), ...overlap.map(x => (desc.get(x) || {}).word || x)]) };
+      }
+    });
+    const needed = stems.size <= 2 ? 1 : 2;
+    const covered = !!best && best.score >= needed;
+    if (covered) { best.s.score += 2; best.s.covers++; }
+    return { text, stems, covered, best: covered ? best : null };
+  });
+
+  const topFacts = scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, 10);
+
+  // Posting words that no fact mentions (from requirement lines, or used 3+ times)
+  const factStems = new Set();
+  factData.forEach(fd => fd.stems.forEach(s => factStems.add(s)));
+  const reqStems = new Set();
+  requirements.forEach(r => r.stems.forEach(s => reqStems.add(s)));
+  const missingWords = [...desc.entries()]
+    .filter(([s, d]) => !factStems.has(s) && (reqStems.has(s) || d.count >= 3) && d.word.length > 2)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 15)
+    .map(([, d]) => d.word);
+
+  return { topFacts, requirements, missingWords };
+}
+
+function runMatch() {
+  const out = $('#matchResults');
+  const description = $('#d-description').value.trim();
+  if (!description) {
+    out.innerHTML = '<p class="warn">Paste the job description into the Job description box above, then press Match.</p>';
+    return;
+  }
+  if (!state.facts.length) {
+    out.innerHTML = `<div class="warn"><p>Your Facts Bank is empty. Add facts in My Profile first.</p>
+      <p><button type="button" class="btn btn-small" data-goto-profile>Go to My Profile</button></p></div>`;
+    return;
+  }
+  const r = analyzeMatch(description, state.facts);
+  const unverifiedTop = r.topFacts.filter(s => !s.fd.fact.verified).length;
+  const covered = r.requirements.filter(x => x.covered);
+  const gaps = r.requirements.filter(x => !x.covered);
+  const factLine = s => {
+    const f = s.fd.fact;
+    const text = f.text.length > 220 ? f.text.slice(0, 217) + '…' : f.text;
+    return `<span class="chip type-chip">${esc(factTypeLabel(f.type))}</span>
+      <span class="verify-state ${f.verified ? 'yes' : 'no'}">${f.verified ? 'Verified' : 'Not verified'}</span>
+      <p>${esc(text)}</p>`;
+  };
+  let html = `<p><strong>${r.requirements.length ? `${covered.length} of ${plural(r.requirements.length, 'requirement')} have a matching fact.` : 'No clear requirement lines were found in this description.'}</strong>
+    Compared with ${plural(state.facts.length, 'fact')} (${verifiedFacts().length} verified).</p>`;
+
+  html += `<h4>Most relevant facts</h4>`;
+  html += r.topFacts.length
+    ? '<ol>' + r.topFacts.map(s => `<li>${factLine(s)}<p class="match-words">Shared words: ${esc(s.words.slice(0, 10).join(', '))}${s.covers ? ` · matches ${plural(s.covers, 'requirement')}` : ''}</p></li>`).join('') + '</ol>'
+    : '<p>None of your facts share keywords with this posting.</p>';
+  if (unverifiedTop) html += `<p class="feed-note">${unverifiedTop} of these ${unverifiedTop === 1 ? 'is' : 'are'} not verified yet, so later drafting will skip ${unverifiedTop === 1 ? 'it' : 'them'} until you check "Verified by me."</p>`;
+
+  if (r.requirements.length) {
+    html += `<h4>Requirements with no matching fact (${gaps.length})</h4>`;
+    html += gaps.length ? '<ul>' + gaps.map(g => `<li>${esc(g.text)}</li>`).join('') + '</ul>' : '<p>Every requirement found has at least one matching fact.</p>';
+    if (covered.length) {
+      html += `<details><summary>Requirements with a matching fact (${covered.length})</summary><ul>` +
+        covered.map(c => `<li>${esc(c.text)}<p class="match-words">Best fact: ${esc(c.best.s.fd.fact.text.slice(0, 90))}${c.best.s.fd.fact.text.length > 90 ? '…' : ''} · shared: ${esc(c.best.words.join(', '))}</p></li>`).join('') +
+        '</ul></details>';
+    }
+  }
+  if (r.missingWords.length) {
+    html += `<h4>Posting words none of your facts mention</h4><ul class="missing-words">` +
+      r.missingWords.map(w => `<li class="tag">${esc(w)}</li>`).join('') + '</ul>';
+  }
+  html += '<p class="hint">Keyword matching finds shared words, not meaning. Read the posting yourself before you rely on these results.</p>';
+  out.innerHTML = html;
+}
+
+/* ============================================================
+   22. EVENT BINDING
+   ============================================================ */
+// Close a dialog, asking first if there are unsaved edits.
+function requestClose(dlg) {
+  let dirty;
+  if (dlg.id === 'detailDialog') dirty = state.detailSnapshot && JSON.stringify(readForm($('#detailForm'))) !== state.detailSnapshot;
+  else if (dlg.id === 'factDialog') dirty = state.factSnapshot && formValues($('#factForm')) !== state.factSnapshot;
+  else dirty = state.addSnapshot && JSON.stringify(readForm($('#addForm'))) !== state.addSnapshot;
+  if (dirty && !confirm('Discard your unsaved changes?')) return false;
+  const id = dlg.id === 'detailDialog' ? state.detailId : null;
+  dlg.close();
+  if (id) refocusJob(id);
+  return true;
+}
+
+function bindEvents() {
+  // Navigation
+  $$('[data-view]').forEach(b => b.addEventListener('click', () => showView(b.dataset.view, true)));
+  window.addEventListener('hashchange', () => showView(viewFromHash()));
+  $('#addJobBtn').addEventListener('click', () => openAdd());
+
+  // Any [data-open] button anywhere opens the detail panel
+  document.addEventListener('click', e => {
+    const open = e.target.closest('[data-open]');
+    if (open) { openDetail(open.dataset.open); return; }
+    const dup = e.target.closest('[data-open-dup]');
+    if (dup) { openDetail(dup.dataset.openDup); return; }
+    const done = e.target.closest('[data-followup-done]');
+    if (done) { markFollowupDone(done.dataset.followupDone); return; }
+    const card = e.target.closest('[data-status-filter]');
+    if (card) {
+      Object.assign(state.table, { q: '', source: '', workType: '', from: '', to: '', status: card.dataset.statusFilter });
+      showView('table', true);
+      return;
+    }
+    if (e.target.closest('#deleteSampleBtn')) {
+      const sample = state.jobs.find(j => j.isSample);
+      if (sample && confirm('Delete the sample job?')) {
+        deleteJob(sample.id).then(() => { render(); toast('Sample job deleted.'); }).catch(err => toast(err.message));
+      }
+    }
+  });
+
+  // Dialogs: close buttons, Escape key
+  $$('dialog').forEach(dlg => {
+    dlg.addEventListener('click', e => { if (e.target.closest('[data-close]')) requestClose(dlg); });
+    dlg.addEventListener('cancel', e => { e.preventDefault(); requestClose(dlg); });
+  });
+
+  // Detail panel
+  $('#detailForm').addEventListener('submit', saveDetail);
+  $('#deleteJobBtn').addEventListener('click', deleteCurrentJob);
+  $('#detailForm').addEventListener('input', debounce(e => {
+    if (['title', 'company', 'link'].includes(e.target.name)) showDetailDup();
+  }, 300));
+
+  // Add form
+  $('#addForm').addEventListener('submit', saveAdd);
+  $('#addForm').addEventListener('input', debounce(e => {
+    if (!['title', 'company', 'link'].includes(e.target.name)) return;
+    delete $('#addForm').dataset.dupOk;
+    $('#addSaveBtn').textContent = 'Save job';
+    checkAddDup(false);
+  }, 300));
+
+  // Board and table
+  bindBoardDragDrop();
+  bindTable();
+  bindFeed();
+  bindProfile();
+
+  // Job panel: Match button, and the "Go to My Profile" link it may show
+  $('#matchBtn').addEventListener('click', runMatch);
+  $('#matchResults').addEventListener('click', e => {
+    if (!e.target.closest('[data-goto-profile]')) return;
+    if (requestClose($('#detailDialog'))) showView('profile', true);
+  });
+  window.matchMedia(TOUCH_QUERY).addEventListener('change', () => { if (state.view === 'board') renderBoard(); });
+
+  // Settings, export, import
+  $('#settingsForm').addEventListener('submit', saveSettingsForm);
+  $('#exportBtn').addEventListener('click', () => exportData().catch(err => toast(err.message)));
+  $('#importBtn').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) await importData(file);
+  });
+
+  // Re-run the No Word rule when the app comes back into view and once an hour
+  const recheck = async () => { if (await applyNoWordRule()) render(); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) recheck(); });
+  setInterval(recheck, 60 * 60 * 1000);
+}
+
+/* ============================================================
+   23. STARTUP
+   ============================================================ */
+async function init() {
+  bindEvents();
+  try {
+    await loadAll();
+    if (!state.settings.sampleSeeded) await seedSample();
+    await applyNoWordRule();
+  } catch (err) {
+    toast(err.message || 'Could not load saved data.');
+  }
+  if (!state.profile) state.profile = blankProfile();
+  fillProfileForms();
+  showView(viewFromHash());
+}
+init();
+</script>
+</body>
+</html>

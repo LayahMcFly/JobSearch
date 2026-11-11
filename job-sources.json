@@ -1,0 +1,47 @@
+{
+  "_help": "Where the job finder looks. Setup guide: top of .github/workflows/fetch-jobs.yml. Keys that start with an underscore are notes and are ignored.",
+
+  "greenhouse": [],
+  "_greenhouseFormat": "Add one entry per company: { \"token\": \"BOARD_TOKEN\", \"company\": \"Name to show\" }. The token is the word after boards.greenhouse.io/ or job-boards.greenhouse.io/ in one of the company's job links.",
+
+  "lever": [],
+  "_leverFormat": "Add one entry per company: { \"name\": \"COMPANY_NAME\", \"company\": \"Name to show\" }. The name is the word after jobs.lever.co/ in one of the company's job links. Add \"region\": \"eu\" if the link starts with jobs.eu.lever.co.",
+
+  "remotive": { "enabled": true, "category": "writing" },
+
+  "rss": [
+    {
+      "name": "We Work Remotely: Sales and Marketing",
+      "label": "We Work Remotely",
+      "url": "https://weworkremotely.com/categories/remote-sales-and-marketing-jobs.rss",
+      "titleFormat": "company: title",
+      "remoteType": "Remote"
+    },
+    {
+      "name": "We Work Remotely: All Other",
+      "label": "We Work Remotely",
+      "url": "https://weworkremotely.com/categories/all-other-remote-jobs.rss",
+      "titleFormat": "company: title",
+      "remoteType": "Remote"
+    }
+  ],
+
+  "adzuna": {
+    "country": "us",
+    "searches": [
+      { "what": "content strategist", "maxDaysOld": 14 },
+      { "what": "copywriter", "maxDaysOld": 14 },
+      { "what": "content writer", "maxDaysOld": 14 },
+      { "what": "content marketing manager", "maxDaysOld": 14 }
+    ]
+  },
+  "_adzunaFormat": "Each search can also use \"where\": \"city or state\" and \"whatExclude\": \"words to leave out\". Needs the ADZUNA_APP_ID and ADZUNA_APP_KEY secrets.",
+
+  "prefilter": {
+    "titleKeywords": ["content", "copy", "writer", "writing", "editor", "editorial", "seo", "brand", "communications", "marketing", "messaging", "storyteller"],
+    "excludedWords": []
+  },
+  "_prefilterHelp": "A broad first cut so the feed file stays small. Jobs are kept only when the title contains one of titleKeywords (empty list = keep all). The app then applies your exact keywords from Settings.",
+
+  "limits": { "maxAgeDays": 30, "maxJobsPerSource": 200, "maxDescriptionChars": 12000 }
+}
