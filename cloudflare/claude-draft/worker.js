@@ -133,7 +133,20 @@ async function handle(request, env) {
   const reply = (status, payload) => json(payload, status, cors);
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  if (request.method !== 'POST') return reply(405, { ok: false, code: 'method', error: 'Use POST.' });
+  if (request.method !== 'POST') {
+    // Opening this address in a browser shows which settings the running Worker can see.
+    // Only yes/no is shown, never the values.
+    const has = name => read(env, name) !== '';
+    return reply(405, {
+      ok: false, code: 'method', error: 'Use POST.',
+      setup: {
+        CLAUDE_API_KEY: has('CLAUDE_API_KEY'),
+        APP_ACCESS_CODE: has('APP_ACCESS_CODE'),
+        ALLOWED_ORIGINS: has('ALLOWED_ORIGINS')
+      },
+      note: 'false means the running Worker cannot see that setting. Add it under the Worker > Settings > Variables and Secrets (not under Build), type Secret, then Deploy.'
+    });
+  }
   // The app hosted by this same Worker (at /api/draft) is always allowed.
   const sameSite = origin && normalizeOrigin(origin) === normalizeOrigin(new URL(request.url).origin);
   if (origin && !sameSite) {
@@ -149,7 +162,9 @@ async function handle(request, env) {
   const key = read(env, 'CLAUDE_API_KEY');
   const accessCode = read(env, 'APP_ACCESS_CODE');
   if (!key || !accessCode) {
-    return reply(500, { ok: false, code: 'not_configured', error: 'CLAUDE_API_KEY or APP_ACCESS_CODE is not set in the Worker secrets.' });
+    const missing = [!key && 'CLAUDE_API_KEY', !accessCode && 'APP_ACCESS_CODE'].filter(Boolean);
+    return reply(500, { ok: false, code: 'not_configured', missing,
+      error: `The running Worker cannot see: ${missing.join(' and ')}. Add it under the Worker > Settings > Variables and Secrets (not under Build), then Deploy.` });
   }
 
   let body;
