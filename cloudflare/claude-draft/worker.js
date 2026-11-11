@@ -5,8 +5,11 @@
   key and sends back the draft text. The key lives only in this Worker's
   encrypted secrets, never in the app or the repo.
 
-  One file, no imports, so it can be pasted into the Cloudflare dashboard
-  code editor. Setup steps: see README.md in this folder.
+  Normally this runs inside the "jobsearch" Worker, which also hosts the app:
+  the app calls  https://jobsearch.<you>.workers.dev/api/draft  and
+  Cloudflare builds both from GitHub (see wrangler.jsonc at the repo root).
+  It also works pasted on its own into a separate Worker.
+  Setup steps: see README.md in this folder.
 
   Cloudflare Workers Free plan: 100,000 requests a day, no time limit while
   the browser waits, and time spent waiting on Claude doesn't count toward
@@ -131,7 +134,9 @@ async function handle(request, env) {
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   if (request.method !== 'POST') return reply(405, { ok: false, code: 'method', error: 'Use POST.' });
-  if (origin) {
+  // The app hosted by this same Worker (at /api/draft) is always allowed.
+  const sameSite = origin && normalizeOrigin(origin) === normalizeOrigin(new URL(request.url).origin);
+  if (origin && !sameSite) {
     const allowed = allowedOrigins(env);
     if (!allowed.length) {
       return reply(403, { ok: false, code: 'origin_unset', error: 'ALLOWED_ORIGINS is not set in the Worker secrets.' });
@@ -207,6 +212,13 @@ async function handle(request, env) {
 export default {
   async fetch(request, env) {
     try {
+      // Two ways to run this file:
+      // 1. Inside the "jobsearch" Worker that also hosts the app (wrangler.jsonc at the repo root).
+      //    Only /api/* reaches this code; everything else is the app's files, served by ASSETS.
+      // 2. On its own Worker, where every request is a drafting request.
+      if (env && env.ASSETS && !new URL(request.url).pathname.startsWith('/api/')) {
+        return env.ASSETS.fetch(request);
+      }
       return await handle(request, env);
     } catch (e) {
       // Never fail silently: an unexpected error still comes back as JSON the app can read.

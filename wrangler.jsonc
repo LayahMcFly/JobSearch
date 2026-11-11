@@ -1,0 +1,20 @@
+// Cloudflare settings for the "jobsearch" Worker.
+// Cloudflare builds this Worker from the GitHub repo on every push to main.
+// It does two jobs at one address:
+//   - serves the tracker app (index.html, jobs-feed.json) as static files
+//   - runs the AI drafting code at /api/draft (cloudflare/claude-draft/worker.js)
+// Secrets (CLAUDE_API_KEY, APP_ACCESS_CODE, optional ALLOWED_ORIGINS) are set in
+// the Cloudflare dashboard and kept on every deploy.
+{
+  "name": "jobsearch",
+  "main": "cloudflare/claude-draft/worker.js",
+  "compatibility_date": "2026-11-01",
+  "keep_vars": true,
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    // Only these paths run the drafting code; everything else is the app's files
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true }
+}

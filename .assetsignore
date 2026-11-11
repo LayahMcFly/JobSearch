@@ -1,0 +1,12 @@
+# Files in this repo that must not be published as part of the website.
+# Only index.html and jobs-feed.json need to be public.
+.git
+.github
+.assetsignore
+cloudflare
+node_modules
+wrangler.jsonc
+fetch-jobs.mjs
+job-sources.json
+LICENSE
+*.md

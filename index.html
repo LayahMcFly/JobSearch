@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.9
+  APP VERSION (shown at the bottom of the page): v1.0.10
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -632,7 +632,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
         <div class="field-textarea">
           <label for="ai-url">Cloudflare Worker address</label>
           <input id="ai-url" name="aiFunctionUrl" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="ai-url-hint">
-          <p class="hint" id="ai-url-hint">It looks like https://jobsearch.YOUR-NAME.workers.dev. Copy it from the Worker's page in Cloudflare rather than typing it.</p>
+          <p class="hint" id="ai-url-hint">The address of your jobsearch Worker followed by /api/draft, for example https://jobsearch.YOUR-NAME.workers.dev/api/draft. When you use the app from that Cloudflare address, it fills this in for you.</p>
         </div>
         <div class="field-textarea">
           <label for="ai-code">Access code</label>
@@ -814,7 +814,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.9'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.10'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3891,6 +3891,14 @@ function renderAiSettings() {
     f.elements.aiFunctionUrl.value = s.aiFunctionUrl;
     f.elements.accessCode.value = state.device.accessCode;
     state.aiSnap = aiFieldValues();
+    // When this app is hosted on Cloudflare by the jobsearch Worker, the drafting code
+    // lives at this site's /api/draft. Suggest it when the box is empty or holds the
+    // bare site address. The suggestion counts as unsaved, so Save or Test stores it.
+    const own = location.origin + '/api/draft';
+    const bare = s.aiFunctionUrl.replace(/\/+$/, '');
+    if (/\.workers\.dev$/i.test(location.hostname) && (!bare || bare === location.origin)) {
+      f.elements.aiFunctionUrl.value = own;
+    }
   }
   renderAiSwitches();
 }
@@ -3929,11 +3937,13 @@ async function saveAiFields() {
     f.elements.aiFunctionUrl.focus();
     return "That is the Cloudflare dashboard address. Use the Worker's own address, which ends in workers.dev. It is shown on the Worker's overview page.";
   }
-  let sameSite = false;
-  try { sameSite = !!url && new URL(url).origin === location.origin; } catch { sameSite = false; }
-  if (sameSite) {
+  // The bare address of this app is wrong; this app's /api/draft address is right.
+  let appItself = false;
+  try { const u = url && new URL(url); appItself = !!u && u.origin === location.origin && !u.pathname.startsWith('/api/'); } catch { appItself = false; }
+  if (appItself) {
+    f.elements.aiFunctionUrl.value = location.origin + '/api/draft';
     f.elements.aiFunctionUrl.focus();
-    return "That is the address of this app itself, not of the AI drafting Worker. The drafting code needs its own Worker (for example one named claude-draft). Paste that Worker's address here.";
+    return `That is the address of this app itself. The drafting code is at ${location.origin}/api/draft, which is now filled in. Press Save AI settings or Test connection again.`;
   }
   f.elements.aiFunctionUrl.value = url;
   state.settings = normalizeSettings(Object.assign({}, state.settings, { aiModel: f.elements.aiModel.value, aiMonthlyLimit: limit, aiFunctionUrl: url }));
