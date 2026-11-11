@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.6
+  APP VERSION (shown at the bottom of the page): v1.0.7
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -814,7 +814,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.6'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.7'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3953,7 +3953,9 @@ async function callAiFunction(payload, timeoutMs, ctrl = new AbortController()) 
   try {
     const res = await fetch(state.settings.aiFunctionUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // text/plain keeps this a "simple" request, so the browser sends it without a
+      // separate permission check (CORS preflight). The body is still JSON.
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: JSON.stringify(Object.assign({ accessCode: state.device.accessCode }, payload)),
       signal: ctrl.signal
     });
@@ -3990,6 +3992,7 @@ function explainAiError(r) {
     case 'refusal': return 'Claude declined to write this draft. Use Build Prompt and Copy instead.';
     case 'network': return 'Your function could not reach the Claude API. Try again in a minute.';
     case 'empty': return 'Claude sent back an empty draft. Try again.';
+    case 'worker_error': return 'Your Worker hit an unexpected error. In Cloudflare, open the Worker > Logs to see the details, and send them to Claude to fix.';
   }
   if (r.status >= 200 && r.status < 300 && !r.data) return 'The Worker answered, but not with the drafting code. It may still have Cloudflare\'s "Hello World" sample. In Cloudflare, open the Worker, select Edit code, paste in worker.js, and select Deploy.';
   if (r.status === 404) return 'Nothing answered at the Worker address. Copy it again from the Worker\'s page in Cloudflare.';

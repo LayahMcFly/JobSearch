@@ -22,7 +22,8 @@
     DRAFT_EFFORT       optional  How much Claude thinks first: low, medium (default),
                                  high, or none to leave it unset.
 
-  REQUEST  (POST, JSON)  { accessCode, prompt, model, kind }   or   { accessCode, ping: true }
+  REQUEST  (POST, JSON body; the app sends it as text/plain so browsers skip
+           the CORS preflight)  { accessCode, prompt, model, kind }   or   { accessCode, ping: true }
   REPLY    { ok: true, text, model, stopReason, usage: { input, output } }
            { ok: false, code, error }   codes are listed in ERROR_CODES below
 
@@ -205,6 +206,13 @@ async function handle(request, env) {
 
 export default {
   async fetch(request, env) {
-    return handle(request, env);
+    try {
+      return await handle(request, env);
+    } catch (e) {
+      // Never fail silently: an unexpected error still comes back as JSON the app can read.
+      console.error('Unexpected error: ' + (e?.stack || e?.message || e));
+      const origin = request.headers.get('origin') || '';
+      return json({ ok: false, code: 'worker_error', error: 'The Worker hit an unexpected error. Check its Logs in Cloudflare.' }, 500, corsHeaders(origin));
+    }
   }
 };

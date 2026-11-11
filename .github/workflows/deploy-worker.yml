@@ -1,0 +1,52 @@
+# ============================================================================
+# DEPLOY WORKER — Job Search Tracker (AI drafting)
+#
+# Copies cloudflare/claude-draft/worker.js from this repo to your Cloudflare
+# Worker named "jobsearch". Runs whenever that file changes on main, and
+# whenever you press "Run workflow" in the Actions tab. After this is set up,
+# nobody needs to paste code into Cloudflare's editor again.
+#
+# Your Worker secrets (CLAUDE_API_KEY, APP_ACCESS_CODE, ALLOWED_ORIGINS) stay
+# in Cloudflare. Deploying new code keeps them.
+#
+# ONE-TIME SETUP (two GitHub secrets)
+# 1. CLOUDFLARE_API_TOKEN
+#    Cloudflare dashboard > your profile icon (top right) > Profile > API Tokens
+#    > Create Token > use the "Edit Cloudflare Workers" template > choose your
+#    account under Account Resources > Continue to summary > Create Token.
+#    Copy the token (it is shown once).
+# 2. CLOUDFLARE_ACCOUNT_ID
+#    Cloudflare dashboard > Workers & Pages. The Account ID is in the right-hand
+#    column of the overview page (click to copy).
+# Add both in GitHub: this repo > Settings > Secrets and variables > Actions >
+# New repository secret. Names must match exactly.
+# Then: Actions tab > "Deploy worker" > Run workflow.
+# ============================================================================
+
+name: Deploy worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/claude-draft/worker.js'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v6
+
+      - name: Deploy worker.js to the "jobsearch" Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy cloudflare/claude-draft/worker.js --name jobsearch --compatibility-date 2026-11-01 --keep-vars
