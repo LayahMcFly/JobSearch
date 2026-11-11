@@ -1,14 +1,18 @@
 /*
-  claude-draft — Supabase Edge Function for the Job Search Tracker (Phase 5)
+  claude-draft — Cloudflare Worker for the Job Search Tracker (Phase 5)
 
-  The app sends a prompt here. This function calls the Claude API with your
-  key and sends back the draft text. The key lives only in this project's
-  Edge Function secrets, never in the app or the repo.
+  The app sends a prompt here. This Worker calls the Claude API with your
+  key and sends back the draft text. The key lives only in this Worker's
+  encrypted secrets, never in the app or the repo.
 
-  One file, no imports, so it can be pasted into the Supabase dashboard editor.
-  Setup steps: see README.md in this folder.
+  One file, no imports, so it can be pasted into the Cloudflare dashboard
+  code editor. Setup steps: see README.md in this folder.
 
-  SECRETS (Edge Functions > Secrets in the Supabase dashboard)
+  Cloudflare Workers Free plan: 100,000 requests a day, no time limit while
+  the browser waits, and time spent waiting on Claude doesn't count toward
+  the 10 ms CPU limit.
+
+  SECRETS (Worker > Settings > Variables and Secrets, type "Secret")
     CLAUDE_API_KEY     required  Your Claude API key.
     APP_ACCESS_CODE    required  A long passphrase you also type into the app's
                                  Settings. Requests without it are refused.
@@ -17,9 +21,6 @@
     DRAFT_MAX_TOKENS   optional  Longest reply allowed, thinking included. Default 6000.
     DRAFT_EFFORT       optional  How much Claude thinks first: low, medium (default),
                                  high, or none to leave it unset.
-
-  JWT verification must be OFF for this function (the app has no login; the
-  access code does the checking). See README.md, step 3.
 
   REQUEST  (POST, JSON)  { accessCode, prompt, model, kind }   or   { accessCode, ping: true }
   REPLY    { ok: true, text, model, stopReason, usage: { input, output } }
@@ -40,7 +41,7 @@ const DEFAULT_MODEL = 'claude-haiku-5-5';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 const MAX_PROMPT_CHARS = 200000;
-const CLAUDE_TIMEOUT_MS = 140000; // Supabase ends a request with no response after 150 seconds
+const CLAUDE_TIMEOUT_MS = 170000; // give up on Claude after this; the app waits a little longer
 
 // Claude API status -> code the app turns into a plain-language message
 const ERROR_CODES = {
@@ -56,20 +57,19 @@ const ERROR_CODES = {
   529: 'overloaded'
 };
 
-const env = name => (Deno.env.get(name) || '').trim();
-
 /* ============================================================
    2. HELPERS
    ============================================================ */
-function allowedOrigins() {
-  return env('ALLOWED_ORIGINS').split(',').map(s => s.trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean);
+const read = (env, name) => String((env && env[name]) || '').trim();
+
+function allowedOrigins(env) {
+  return read(env, 'ALLOWED_ORIGINS').split(',').map(s => s.trim().replace(/\/+$/, '').toLowerCase()).filter(Boolean);
 }
-function corsHeaders(origin) {
-  const ok = origin && allowedOrigins().includes(origin.toLowerCase());
+function corsHeaders(env, origin) {
+  const ok = origin && allowedOrigins(env).includes(origin.toLowerCase());
   return ok
     ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Max-Age': '86400', Vary: 'Origin' }
+        'Access-Control-Allow-Headers': 'content-type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
     : { Vary: 'Origin' };
 }
 // Compare secrets without leaking how many characters matched.
@@ -114,25 +114,25 @@ async function callClaude({ key, model, prompt, maxTokens, effort }) {
 /* ============================================================
    4. REQUEST HANDLER
    ============================================================ */
-async function handle(req) {
-  const origin = req.headers.get('origin') || '';
-  const cors = corsHeaders(origin);
+async function handle(request, env) {
+  const origin = request.headers.get('origin') || '';
+  const cors = corsHeaders(env, origin);
   const reply = (status, payload) => json(payload, status, cors);
 
-  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  if (req.method !== 'POST') return reply(405, { ok: false, code: 'method', error: 'Use POST.' });
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'POST') return reply(405, { ok: false, code: 'method', error: 'Use POST.' });
   if (origin && !cors['Access-Control-Allow-Origin']) {
     return reply(403, { ok: false, code: 'origin', error: `Requests from ${origin} are not allowed. Add it to ALLOWED_ORIGINS.` });
   }
 
-  const key = env('CLAUDE_API_KEY');
-  const accessCode = env('APP_ACCESS_CODE');
+  const key = read(env, 'CLAUDE_API_KEY');
+  const accessCode = read(env, 'APP_ACCESS_CODE');
   if (!key || !accessCode) {
-    return reply(500, { ok: false, code: 'not_configured', error: 'CLAUDE_API_KEY or APP_ACCESS_CODE is not set in Edge Function secrets.' });
+    return reply(500, { ok: false, code: 'not_configured', error: 'CLAUDE_API_KEY or APP_ACCESS_CODE is not set in the Worker secrets.' });
   }
 
   let body;
-  try { body = await req.json(); }
+  try { body = await request.json(); }
   catch { return reply(400, { ok: false, code: 'bad_json', error: 'The request was not valid JSON.' }); }
   body = body && typeof body === 'object' ? body : {};
 
@@ -146,8 +146,8 @@ async function handle(req) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) return reply(400, { ok: false, code: 'empty_prompt', error: 'The prompt was empty.' });
   if (prompt.length > MAX_PROMPT_CHARS) return reply(413, { ok: false, code: 'too_large', error: 'The prompt is too long.' });
-  const maxTokens = Math.min(16000, Math.max(1000, parseInt(env('DRAFT_MAX_TOKENS'), 10) || 6000));
-  const effort = (env('DRAFT_EFFORT') || 'medium').toLowerCase();
+  const maxTokens = Math.min(16000, Math.max(1000, parseInt(read(env, 'DRAFT_MAX_TOKENS'), 10) || 6000));
+  const effort = (read(env, 'DRAFT_EFFORT') || 'medium').toLowerCase();
 
   let r, data;
   try {
@@ -162,7 +162,7 @@ async function handle(req) {
       return reply(504, { ok: false, code: 'claude_timeout', error: `Claude did not finish within ${CLAUDE_TIMEOUT_MS / 1000} seconds.` });
     }
     console.error('Claude request failed: ' + (e?.message || e));
-    return reply(502, { ok: false, code: 'network', error: 'The function could not reach the Claude API.' });
+    return reply(502, { ok: false, code: 'network', error: 'The Worker could not reach the Claude API.' });
   }
 
   if (!r.ok) {
@@ -188,4 +188,8 @@ async function handle(req) {
   return reply(200, { ok: true, text, model: data.model || model, stopReason: data.stop_reason, usage });
 }
 
-Deno.serve(handle);
+export default {
+  async fetch(request, env) {
+    return handle(request, env);
+  }
+};

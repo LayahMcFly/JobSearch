@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.2
+  APP VERSION (shown at the bottom of the page): v1.0.3
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -30,8 +30,8 @@
   chat, stores the drafts you paste back as versions, exports Word and PDF,
   and requires a review checklist before a job moves to Applied.
   Phase 5 adds optional AI drafting (Settings > AI drafting, Off by default).
-  When on, Generate Draft sends the same prompt to the owner's Supabase
-  Edge Function (supabase/functions/claude-draft), which holds the Claude API key
+  When on, Generate Draft sends the same prompt to the owner's Cloudflare
+  Worker (cloudflare/claude-draft/worker.js), which holds the Claude API key
   and calls the Claude API. This file never contains an API key. With AI
   drafting Off, the app makes no calls to the function.
 
@@ -607,7 +607,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 
     <form id="aiForm" class="block" aria-labelledby="h-ai">
       <h3 id="h-ai">AI drafting</h3>
-      <p class="hint">When this is On, the Draft screen gets Generate Draft buttons. They send the same prompt as Build Prompt to your own Supabase Edge Function, which calls the Claude API and returns a draft for you to review. Claude API usage is billed by Anthropic separately from a Claude Pro subscription. Build Prompt and Copy keep working either way. Switches save as soon as you change them.</p>
+      <p class="hint">When this is On, the Draft screen gets Generate Draft buttons. They send the same prompt as Build Prompt to your own Cloudflare Worker, which calls the Claude API and returns a draft for you to review. Claude API usage is billed by Anthropic separately from a Claude Pro subscription. Build Prompt and Copy keep working either way. Switches save as soon as you change them.</p>
       <label class="check switch-row" for="ai-main"><input type="checkbox" role="switch" id="ai-main" name="aiDrafting"> AI drafting <span class="switch-state" id="ai-main-state">Off</span></label>
       <div id="aiSubs" class="ai-subs" role="group" aria-labelledby="ai-subs-label">
         <p id="ai-subs-label" class="hint" style="margin:0">Use AI for these drafts (works only while AI drafting is On):</p>
@@ -627,9 +627,9 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
           <p class="hint" id="ai-limit-hint">When you reach it, AI drafting turns Off and the app tells you why.</p>
         </div>
         <div class="field-textarea">
-          <label for="ai-url">Supabase function address</label>
+          <label for="ai-url">Cloudflare Worker address</label>
           <input id="ai-url" name="aiFunctionUrl" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="ai-url-hint">
-          <p class="hint" id="ai-url-hint">It looks like https://YOUR-PROJECT.supabase.co/functions/v1/claude-draft and is shown on the function's page in Supabase.</p>
+          <p class="hint" id="ai-url-hint">It looks like https://claude-draft.YOUR-SUBDOMAIN.workers.dev and is shown on the Worker's page in Cloudflare.</p>
         </div>
         <div class="field-textarea">
           <label for="ai-code">Access code</label>
@@ -811,7 +811,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.2'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.3'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -831,14 +831,14 @@ const COLLECTIONS = {
   device: 'device'                // this device only, never exported: { id: 'ai', accessCode }
 };
 
-// Phase 5: AI drafting. The Claude API key lives in the Supabase Edge Function, never here.
+// Phase 5: AI drafting. The Claude API key lives in the Cloudflare Worker, never here.
 const AI_MODELS = [
   { id: 'claude-haiku-5-5', label: 'Haiku 5.5', option: 'Haiku 5.5 (lower cost, the default)' },
   { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5', option: 'Sonnet 5.5 (for harder jobs, costs more)' }
 ];
 const modelLabel = id => (AI_MODELS.find(m => m.id === id) || AI_MODELS[0]).label;
 const AI_KIND_SETTING = { resume: 'aiResume', answers: 'aiAnswers', email: 'aiEmail' };
-const AI_TIMEOUT_MS = 160000; // Supabase ends requests at 150 seconds; the function gives up on Claude at 140
+const AI_TIMEOUT_MS = 180000; // the Worker gives up on Claude at 170 seconds
 
 // Phase 4: drafts
 const DRAFT_KINDS = [
@@ -957,8 +957,8 @@ function toast(msg) {
 /* ============================================================
    3. STORAGE MODULE
    The only code that reads or writes saved data.
-   To move to Supabase later, replace the four method bodies with
-   Supabase table calls. Every method already returns a Promise,
+   To move to a cloud database later, replace the four method bodies with
+   calls to that database. Every method already returns a Promise,
    so the rest of the app will not need to change.
      get(collection, id)      -> record or null
      save(collection, record) -> saved record (record.id required)
@@ -3822,7 +3822,7 @@ async function exportDraftPdf() {
    24. AI DRAFTING
    Off by default. While Off, no request is ever sent to the function.
    While On, Generate Draft (on tabs whose own switch is on) sends the
-   Build Prompt text to the owner's Supabase Edge Function, which holds the
+   Build Prompt text to the owner's Cloudflare Worker, which holds the
    Claude API key and calls the Claude API. The reply lands in the draft
    box for review; nothing is saved until you press a Save button.
    Monthly usage is counted per device in COLLECTIONS.aiUsage. Reaching
@@ -3962,14 +3962,14 @@ async function callAiFunction(payload, timeoutMs, ctrl = new AbortController()) 
 function explainAiError(r) {
   if (r.userCancel) return 'Generation canceled. Nothing was added to the draft box.';
   if (r.aborted) return `No reply after ${AI_TIMEOUT_MS / 1000} seconds. Try again, or switch to Haiku 5.5, which is faster.`;
-  if (r.netError) return "The app could not reach your Supabase function. Check the function address in Settings and your internet connection. If both are right, check that ALLOWED_ORIGINS includes this site's address and that JWT verification is turned off for the function.";
+  if (r.netError) return "The app could not reach your Cloudflare Worker. Check the Worker address in Settings and your internet connection. If both are right, check that ALLOWED_ORIGINS in the Worker secrets includes this site's address.";
   const data = r.data || {};
   const detail = data.error ? ` Claude's message: "${data.error}"` : '';
   switch (data.code) {
-    case 'access_code': return 'The access code in Settings does not match APP_ACCESS_CODE in your Supabase secrets.';
-    case 'origin': return "This site's address is not in ALLOWED_ORIGINS in your Supabase secrets.";
-    case 'not_configured': return 'Your Supabase function is missing CLAUDE_API_KEY or APP_ACCESS_CODE. Add both under Edge Functions > Secrets.';
-    case 'claude_key': return 'Claude rejected the API key in your function. Create a new key in the Claude Console and update CLAUDE_API_KEY in your Supabase secrets.';
+    case 'access_code': return 'The access code in Settings does not match APP_ACCESS_CODE in your Worker secrets.';
+    case 'origin': return "This site's address is not in ALLOWED_ORIGINS in your Worker secrets.";
+    case 'not_configured': return 'Your Cloudflare Worker is missing CLAUDE_API_KEY or APP_ACCESS_CODE. Add both under Settings > Variables and Secrets, then select Deploy.';
+    case 'claude_key': return 'Claude rejected the API key in your function. Create a new key in the Claude Console and update CLAUDE_API_KEY in your Worker secrets.';
     case 'billing': return 'Claude reported a billing problem. Check Billing in the Claude Console.';
     case 'claude_request': return `Claude did not accept the request.${detail} If it mentions a spend limit or credit balance, raise the limit or add credits in the Claude Console.`;
     case 'rate_limit': return `Claude is limiting requests right now.${detail} Wait a minute and try again. If it keeps failing, your account may have reached its monthly cap; check Billing in the Claude Console.`;
@@ -3981,9 +3981,9 @@ function explainAiError(r) {
     case 'network': return 'Your function could not reach the Claude API. Try again in a minute.';
     case 'empty': return 'Claude sent back an empty draft. Try again.';
   }
-  if (r.status === 401) return 'Supabase blocked the request before it reached the function. Turn off JWT verification on the claude-draft function page in Supabase.';
-  if (r.status === 404) return 'Nothing answered at the function address. Check that it ends in /functions/v1/claude-draft and that the function is deployed.';
-  if (r.status >= 500) return `Your Supabase function had an error (${r.status}). Open the function's Logs tab in Supabase to read the details.`;
+  if (r.status === 404) return 'Nothing answered at the Worker address. Copy it again from the Worker\'s page in Cloudflare.';
+  if (r.status === 429) return 'Cloudflare\'s free daily request limit was reached. It resets at midnight UTC.';
+  if (r.status >= 500) return `Your Cloudflare Worker had an error (${r.status}). Open the Worker's Logs tab in Cloudflare to read the details.`;
   return `Something went wrong (${r.status || 'no response'}).${detail}`;
 }
 
@@ -3994,7 +3994,7 @@ async function testAiConnection() {
   if (!state.settings.aiFunctionUrl || !state.device.accessCode) { out.textContent = 'Add the function address and access code, then save.'; return; }
   out.textContent = 'Testing…';
   const r = await callAiFunction({ ping: true }, 20000);
-  out.textContent = r.ok ? 'Connected. The function accepted your access code. This test does not call Claude.' : explainAiError(r);
+  out.textContent = r.ok ? 'Connected. The Worker accepted your access code. This test does not call Claude.' : explainAiError(r);
 }
 
 // Reaching the monthly limit turns AI drafting Off and says why.
@@ -4031,7 +4031,7 @@ async function generateDraft() {
   const status = $('#genStatus');
   const fail = msg => { status.textContent = msg; status.classList.add('gen-error'); };
   status.classList.remove('gen-error');
-  if (!s.aiFunctionUrl) return fail('Add your Supabase function address in Settings, under AI drafting.');
+  if (!s.aiFunctionUrl) return fail('Add your Cloudflare Worker address in Settings, under AI drafting.');
   if (!state.device.accessCode) return fail('Add your access code in Settings, under AI drafting. It is saved per device.');
   if (monthUsage().count >= s.aiMonthlyLimit) return hitAiLimit();
 
