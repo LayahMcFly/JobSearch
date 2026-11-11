@@ -8,7 +8,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.3
+  APP VERSION (shown at the bottom of the page): v1.0.4
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -388,6 +388,9 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 .inline-field label{margin:0}
 .inline-field select{width:auto}
 .gen-error{color:var(--danger);font-weight:600}
+.test-result{margin:.8rem 0 0;padding:.65rem .9rem;border-radius:8px;border:1px solid var(--border);border-left-width:6px;background:var(--surface-2);font-weight:600}
+.test-result.ok{background:#e6f2e1;border-color:#2d6b22}
+.test-result.err{background:#f8e4e4;border-color:var(--danger)}
 </style>
 </head>
 <body>
@@ -640,8 +643,8 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
       <div class="row">
         <button type="submit" class="btn btn-primary">Save AI settings</button>
         <button type="button" class="btn" id="aiTestBtn">Test connection</button>
-        <span id="aiTestResult" class="hint" style="margin:0" aria-live="polite"></span>
       </div>
+      <p id="aiTestResult" class="test-result" role="status" aria-live="polite" hidden></p>
       <h4 class="sub-head">Usage this month</h4>
       <p id="aiUsageLine" style="margin:0"></p>
       <p class="hint">This counter covers drafts generated on this device. To cap what you can be billed, set a monthly spend limit in the Claude Console: click your organization name, then Organization settings, Billing, Spend limits. When that limit is reached, the API stops answering until the 1st of the next month.</p>
@@ -811,7 +814,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.3'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.0.4'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3877,7 +3880,6 @@ function renderAiSwitches() {
   st.classList.toggle('on', s.aiDrafting);
   ['aiResume', 'aiAnswers', 'aiEmail'].forEach(k => { f.elements[k].checked = s[k]; f.elements[k].disabled = !s.aiDrafting; });
   $('#aiSubs').classList.toggle('is-off', !s.aiDrafting);
-  $('#aiTestBtn').disabled = !s.aiDrafting;
   $('#aiUsageLine').textContent = usageLine();
 }
 function renderAiSettings() {
@@ -3909,22 +3911,24 @@ async function setAiSwitch(name, value) {
   renderAiSwitches();
 }
 
-async function saveAiForm(e) {
-  e.preventDefault();
+// Checks and saves the model, limit, Worker address and access code.
+// Returns '' when saved, or a message saying what to fix.
+async function saveAiFields() {
   const f = $('#aiForm');
   const limit = parseInt(f.elements.aiMonthlyLimit.value, 10);
   if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
     f.elements.aiMonthlyLimit.focus();
-    toast('The monthly AI draft limit must be a whole number from 1 to 500.');
-    return;
+    return 'The monthly AI draft limit must be a whole number from 1 to 500.';
   }
-  let url = cleanLink(f.elements.aiFunctionUrl.value);
+  let url = cleanLink(f.elements.aiFunctionUrl.value).replace(/\/+$/, '');
   if (url && !/^https:\/\//i.test(url)) {
     f.elements.aiFunctionUrl.focus();
-    toast('The function address must start with https://');
-    return;
+    return 'The Worker address must start with https://';
   }
-  url = url.replace(/\/+$/, '');
+  if (/dash\.cloudflare\.com/i.test(url)) {
+    f.elements.aiFunctionUrl.focus();
+    return "That is the Cloudflare dashboard address. Use the Worker's own address, which ends in workers.dev. It is shown on the Worker's overview page.";
+  }
   f.elements.aiFunctionUrl.value = url;
   state.settings = normalizeSettings(Object.assign({}, state.settings, { aiModel: f.elements.aiModel.value, aiMonthlyLimit: limit, aiFunctionUrl: url }));
   state.device = { id: 'ai', accessCode: f.elements.accessCode.value.trim() };
@@ -3933,8 +3937,13 @@ async function saveAiForm(e) {
     await Storage.save(COLLECTIONS.device, state.device); // stays on this device; not in backups
     state.aiSnap = aiFieldValues();
     renderAiSwitches();
-    toast('AI settings saved.');
-  } catch (err) { toast(err.message); }
+    return '';
+  } catch (err) { return err.message; }
+}
+async function saveAiForm(e) {
+  e.preventDefault();
+  const problem = await saveAiFields();
+  toast(problem || 'AI settings saved.');
 }
 
 // --- Talking to the function ---
@@ -3981,20 +3990,37 @@ function explainAiError(r) {
     case 'network': return 'Your function could not reach the Claude API. Try again in a minute.';
     case 'empty': return 'Claude sent back an empty draft. Try again.';
   }
+  if (r.status >= 200 && r.status < 300 && !r.data) return 'The Worker answered, but not with the drafting code. It may still have Cloudflare\'s "Hello World" sample. In Cloudflare, open the Worker, select Edit code, paste in worker.js, and select Deploy.';
   if (r.status === 404) return 'Nothing answered at the Worker address. Copy it again from the Worker\'s page in Cloudflare.';
   if (r.status === 429) return 'Cloudflare\'s free daily request limit was reached. It resets at midnight UTC.';
   if (r.status >= 500) return `Your Cloudflare Worker had an error (${r.status}). Open the Worker's Logs tab in Cloudflare to read the details.`;
   return `Something went wrong (${r.status || 'no response'}).${detail}`;
 }
 
+// Always answers in the result box below the buttons, so a click never looks like nothing happened.
 async function testAiConnection() {
-  const out = $('#aiTestResult');
-  if (!state.settings.aiDrafting) { out.textContent = 'Turn AI drafting On first.'; return; }
-  if (aiFieldValues() !== state.aiSnap) { out.textContent = 'Save your AI settings first.'; return; }
-  if (!state.settings.aiFunctionUrl || !state.device.accessCode) { out.textContent = 'Add the function address and access code, then save.'; return; }
-  out.textContent = 'Testing…';
+  const out = $('#aiTestResult'), btn = $('#aiTestBtn');
+  const show = (msg, kind = '') => {
+    out.hidden = false;
+    out.textContent = msg;
+    out.className = 'test-result' + (kind ? ' ' + kind : '');
+  };
+  // AI drafting Off: explain, and make no call
+  if (!state.settings.aiDrafting) return show('AI drafting is Off, so the app will not contact your Worker. Turn the AI drafting switch On, then press Test connection again.', 'err');
+  // Save whatever is in the boxes first (for example, a code filled in by a password manager)
+  if (aiFieldValues() !== state.aiSnap) {
+    const problem = await saveAiFields();
+    if (problem) return show(problem, 'err');
+  }
+  if (!state.settings.aiFunctionUrl) return show('Add your Cloudflare Worker address, then press Test connection.', 'err');
+  if (!state.device.accessCode) return show('Add your access code, then press Test connection.', 'err');
+  show('Testing the connection. This takes a few seconds…');
+  btn.disabled = true;
   const r = await callAiFunction({ ping: true }, 20000);
-  out.textContent = r.ok ? 'Connected. The Worker accepted your access code. This test does not call Claude.' : explainAiError(r);
+  btn.disabled = false;
+  if (!r.ok) console.warn('AI connection test failed', { status: r.status, code: r.data && r.data.code, netError: r.netError && String(r.netError) });
+  if (r.ok) show('Connected. The Worker accepted your access code. This test does not call Claude, so it costs nothing.', 'ok');
+  else show(r.aborted ? 'No reply after 20 seconds. Check the Worker address in Settings.' : explainAiError(r), 'err');
 }
 
 // Reaching the monthly limit turns AI drafting Off and says why.
