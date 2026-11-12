@@ -9,7 +9,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.1.6
+  APP VERSION (shown at the bottom of the page): v1.1.7
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -45,6 +45,8 @@
   v1.1.4 shows the tabs three at a time on phones, with arrow buttons (C2, section 9).
   v1.1.5 fixes dropdowns that stayed highlighted (and filled in) after choosing on phones.
   v1.1.6 gives the Settings > Colors card an animated pattern in the theme colors (C15).
+  v1.1.7 adds old-fashioned mouse cursors in the theme color: a classic arrow and a
+  pointing hand over anything you can click (C16, setCursors in section 26).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -63,6 +65,7 @@
     C13. Scroll bar
     C14. Dark mode fixed colors
     C15. Glow, tap feedback, motion
+    C16. Mouse cursors
   JAVASCRIPT
     1.  Constants
     2.  Utilities (dates, escaping, ids)
@@ -582,6 +585,19 @@ html[data-mode="dark"] #h-colors{background-image:linear-gradient(90deg,var(--ac
   .colors-block::after{animation:colors-slide 3.5s linear infinite}
   #h-colors{animation:colors-title 6s linear infinite}
 }
+
+/* ============================================================
+   C16. MOUSE CURSORS
+   Old-fashioned cursors drawn in the theme color (section 26 builds them):
+   a classic arrow, and a pointing hand with a cuff over anything clickable.
+   Text boxes keep the normal typing cursor. Phones and tablets have no
+   mouse cursor, so this only shows on computers.
+   ============================================================ */
+html{cursor:var(--cursor-arrow,auto)}
+html :is(a,button,select,summary,label[for],.card,.status-card,[role="button"],
+  input[type="checkbox"],input[type="radio"],input[type="color"],input[type="file"]){cursor:var(--cursor-hand,pointer)}
+html :is(input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]),textarea){cursor:text}
+html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cursor:var(--cursor-arrow,default)}
 </style>
 </head>
 <body>
@@ -1030,7 +1046,7 @@ html[data-mode="dark"] #h-colors{background-image:linear-gradient(90deg,var(--ac
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.6'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.7'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -4650,6 +4666,28 @@ function applyTheme(tokens) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', tokens ? tokens.bg : ORIGINAL_BG);
   setFavicon(tokens ? tokens.accent : ORIGINAL_ACCENT);
+  setCursors(tokens ? tokens.accent : ORIGINAL_ACCENT);
+}
+// Old-fashioned cursors in the theme color. Each shape is drawn twice: a thick
+// dark outline underneath, then the fill on top, so it shows on light and dark.
+function setCursors(color) {
+  const ink = '#1b1520';
+  const svgUrl = body => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>${body}</svg>`)}")`;
+  // Classic arrow: tip at (3,2)
+  const arrowPath = 'M3 2 L3 24 L8.5 19 L12.5 27.5 L16.5 25.8 L12.6 17.6 L20 17.6 Z';
+  const arrow = `<path d='${arrowPath}' fill='${ink}' stroke='${ink}' stroke-width='3' stroke-linejoin='round'/>` +
+    `<path d='${arrowPath}' fill='${color}' stroke='#ffffff' stroke-width='1.1' stroke-linejoin='round'/>`;
+  // Pointing hand with a cuff: fingertip at (13,2)
+  const hand = ['<rect x="10.5" y="2" width="5" height="16" rx="2.5"/>', '<rect x="15" y="10.5" width="4.6" height="9" rx="2.3"/>',
+    '<rect x="19" y="11.5" width="4.4" height="8.5" rx="2.2"/>', '<rect x="22.8" y="13" width="4" height="7.5" rx="2"/>',
+    '<rect x="5.5" y="13.5" width="6" height="9" rx="3" transform="rotate(-25 8.5 18)"/>', '<rect x="8" y="16" width="18.8" height="10" rx="4"/>'].join('');
+  const handSvg = `<g fill='${ink}' stroke='${ink}' stroke-width='3' stroke-linejoin='round'>${hand.replace(/"/g, "'")}<rect x='9' y='25.5' width='16' height='4.5' rx='1'/></g>` +
+    `<g fill='#ffffff'>${hand.replace(/"/g, "'")}</g>` +
+    `<path d='M15.2 13 v3 M19.3 14 v2.5 M23 15 v2' stroke='${ink}' stroke-width='.8' stroke-linecap='round'/>` +
+    `<rect x='9' y='25.5' width='16' height='4.5' rx='1' fill='${color}'/>`;
+  const root = document.documentElement.style;
+  root.setProperty('--cursor-arrow', `${svgUrl(arrow)} 3 2, auto`);
+  root.setProperty('--cursor-hand', `${svgUrl(handSvg)} 13 2, pointer`);
 }
 // Briefcase icon drawn in the current accent color
 function setFavicon(color) {
