@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f7f2ea">
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%238a3f1f'/%3E%3Crect x='23' y='13' width='18' height='11' rx='3' fill='none' stroke='%23fff' stroke-width='4'/%3E%3Crect x='11' y='22' width='42' height='29' rx='6' fill='%23fff'/%3E%3Crect x='11' y='33' width='42' height='3' fill='%238a3f1f'/%3E%3Crect x='28' y='30' width='8' height='9' rx='2' fill='%238a3f1f'/%3E%3C/svg%3E">
 <title>Job Search Tracker</title>
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.0.10
+  APP VERSION (shown at the bottom of the page): v1.1.0
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -34,6 +35,8 @@
   Worker (cloudflare/claude-draft/worker.js), which holds the Claude API key
   and calls the Claude API. This file never contains an API key. With AI
   drafting Off, the app makes no calls to the function.
+  v1.1.0 adds a favicon, a styled scroll bar, and Settings > Colors: original
+  colors, a purple theme, or shades built from any color you pick (section 26).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -49,6 +52,7 @@
     C10. My Profile, Facts Bank, Match
     C11. Draft screen, footer
     C12. AI drafting
+    C13. Scroll bar
   JAVASCRIPT
     1.  Constants
     2.  Utilities (dates, escaping, ids)
@@ -75,7 +79,8 @@
     23. Draft exports: Word (.docx), PDF, plain text
     24. AI drafting (settings, monthly usage, Generate Draft)
     25. Event binding
-    26. Startup
+    26. Colors (theme presets, color picker, favicon)
+    27. Startup
 -->
 <style>
 /* ============================================================
@@ -92,6 +97,9 @@
   --accent:#8a3f1f;      /* terracotta, white text passes AA */
   --accent-hover:#6f3116;
   --accent-soft:#f4e3d7;
+  --accent-line:#e0c3ae;  /* borders on accent-soft boxes */
+  --tint:#fbf7f1;         /* very light wash: row hover, quiet boxes */
+  --scroll-track:#efe7da;
   --focus:#1d5b86;
   --danger:#9b2c2c;
   --warn-bg:#fff4d6;
@@ -182,7 +190,7 @@ textarea{resize:vertical;line-height:1.45}
 /* ============================================================
    C4. DASHBOARD
    ============================================================ */
-.notice{background:var(--accent-soft);border:1px solid #e0c3ae;border-radius:var(--radius);
+.notice{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:var(--radius);
   padding:.8rem 1rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:space-between}
 .notice p{margin:0}
 .status-cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:.75rem}
@@ -239,7 +247,7 @@ table{border-collapse:collapse;width:100%;min-width:760px}
 th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--border);vertical-align:top}
 thead th{background:var(--surface-2);position:sticky;top:0}
 th button{background:none;border:none;font:inherit;font-weight:700;color:var(--text);cursor:pointer;padding:.35rem 0;min-height:40px;display:inline-flex;gap:.3rem;align-items:center}
-tbody tr:hover{background:#fbf6ee}
+tbody tr:hover{background:var(--tint)}
 .sort-ind{font-size:.8rem;color:var(--muted)}
 @media (max-width:760px){
   table{min-width:0}
@@ -301,7 +309,7 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:.8rem}
 .feed-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;
   box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.3rem}
-.feed-card.is-hidden{border-style:dashed;background:#fbf7f1}
+.feed-card.is-hidden{border-style:dashed;background:var(--tint)}
 .feed-card h3{margin:0;font-size:1.1rem}
 .feed-card p{margin:0}
 .feed-company{font-weight:600}
@@ -366,12 +374,12 @@ dialog.panel-wide{width:min(1000px,100vw)}
 .draft-step h3{margin-top:.6rem}
 .version-bar{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-end}
 .version-bar > div{min-width:240px;flex:1}
-.checklist{background:var(--accent-soft);border:1px solid #e0c3ae;border-radius:var(--radius);padding:.6rem 1rem .8rem;margin:1rem 0 0}
+.checklist{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:var(--radius);padding:.6rem 1rem .8rem;margin:1rem 0 0}
 .checklist legend{font-weight:700;padding:0 .3rem}
 .checklist .check{font-weight:500}
 .checklist.complete{background:#e6f2e1;border-color:#9cc48f}
 .draft-warnings{margin:.6rem 0 0;padding-left:1.2rem;color:#7a5410;font-weight:600;font-size:.95rem}
-textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;background:#fbf8f3}
+textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;background:var(--tint)}
 .app-footer{text-align:center;color:var(--muted);font-size:.85rem;padding:1.5rem 1rem 2rem}
 
 /* ============================================================
@@ -382,7 +390,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 .switch-state.on{background:#dcefd5;border-color:#2d6b22}
 .ai-subs{margin:.3rem 0 0 1.9rem;display:grid;gap:0}
 .ai-subs.is-off{opacity:.65}
-.ai-gen{background:#f6f0e6;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .9rem;margin-top:.8rem}
+.ai-gen{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .9rem;margin-top:.8rem}
 .ai-gen .row-flex{margin:0}
 .inline-field{display:flex;gap:.45rem;align-items:center}
 .inline-field label{margin:0}
@@ -391,6 +399,30 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 .test-result{white-space:pre-line;margin:.8rem 0 0;padding:.65rem .9rem;border-radius:8px;border:1px solid var(--border);border-left-width:6px;background:var(--surface-2);font-weight:600}
 .test-result.ok{background:#e6f2e1;border-color:#2d6b22}
 .test-result.err{background:#f8e4e4;border-color:var(--danger)}
+
+/* Settings > Colors */
+.theme-row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.8rem}
+.theme-btn[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:var(--bg)}
+.theme-btn .dot{display:inline-block;width:.95rem;height:.95rem;border-radius:50%;margin-right:.45rem;vertical-align:-.12rem;border:1px solid rgba(0,0,0,.2)}
+.color-pick{display:flex;align-items:center;gap:.6rem;margin-top:1rem}
+.color-pick label{margin:0}
+.color-pick input[type="color"]{width:64px;min-height:44px;padding:3px;border-radius:10px;cursor:pointer}
+.swatches{display:flex;gap:0;margin-top:.9rem;border-radius:10px;overflow:hidden;border:1px solid var(--border);max-width:420px}
+.swatches span{flex:1;height:34px}
+
+/* ============================================================
+   C13. SCROLL BAR
+   Rounded thumb in the accent color on a soft track. Desktop browsers show it;
+   phone browsers use their own thin overlay bar.
+   ============================================================ */
+html{scrollbar-color:var(--accent) var(--scroll-track);accent-color:var(--accent)} /* accent-color also tints checkboxes and radio buttons */
+@supports not (scrollbar-color:auto){
+  ::-webkit-scrollbar{width:14px;height:14px}
+  ::-webkit-scrollbar-track{background:var(--scroll-track)}
+  ::-webkit-scrollbar-thumb{background:linear-gradient(var(--accent-line),var(--accent));border-radius:999px;border:3px solid var(--scroll-track)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--accent-hover)}
+  ::-webkit-scrollbar-corner{background:var(--scroll-track)}
+}
 </style>
 </head>
 <body>
@@ -650,6 +682,22 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
       <p class="hint">This counter covers drafts generated on this device. To cap what you can be billed, set a monthly spend limit in the Claude Console: click your organization name, then Organization settings, Billing, Spend limits. When that limit is reached, the API stops answering until the 1st of the next month.</p>
     </form>
 
+    <section class="block" aria-labelledby="h-colors">
+      <h3 id="h-colors">Colors</h3>
+      <p class="hint">Changes the app's background, buttons, links and scroll bar. Status colors stay the same so each status keeps its meaning. Saves as soon as you choose, and goes into backup files.</p>
+      <div class="theme-row" role="group" aria-label="Color theme">
+        <button type="button" class="btn theme-btn" data-theme="original" aria-pressed="false"><span class="dot" style="background:#8a3f1f"></span>Original</button>
+        <button type="button" class="btn theme-btn" data-theme="purple" aria-pressed="false"><span class="dot" style="background:#6b3fa0"></span>Purple</button>
+      </div>
+      <div class="color-pick">
+        <input type="color" id="themeColor" value="#7b4fb8" aria-describedby="themeColor-hint">
+        <label for="themeColor">Pick your own color</label>
+      </div>
+      <p class="hint" id="themeColor-hint">The app builds light and dark shades from the color you pick. Very light colors are darkened so button text stays readable.</p>
+      <div class="swatches" id="themeSwatches" aria-hidden="true"></div>
+      <p class="hint" id="themeNow" aria-live="polite"></p>
+    </section>
+
     <section class="block" aria-labelledby="h-backup">
       <h3 id="h-backup">Backup and move between devices</h3>
       <p>Your jobs are saved in this browser on this device only. Export a backup file to keep a copy, then import it on your phone or another computer.</p>
@@ -814,7 +862,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.0.10'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.0'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1074,7 +1122,9 @@ const DEFAULT_SETTINGS = {
   id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, sampleSeeded: false,
   // Phase 5: AI drafting (main switch Off by default; the three per-draft switches only matter while it is On)
   aiDrafting: false, aiResume: true, aiAnswers: true, aiEmail: true,
-  aiModel: 'claude-haiku-5-5', aiMonthlyLimit: 30, aiFunctionUrl: ''
+  aiModel: 'claude-haiku-5-5', aiMonthlyLimit: 30, aiFunctionUrl: '',
+  // v1.1.0: colors (see section 26)
+  theme: 'original', themeColor: '#7b4fb8'
 };
 
 function normalizeSettings(raw) {
@@ -1092,6 +1142,8 @@ function normalizeSettings(raw) {
   const lim = parseInt(s.aiMonthlyLimit, 10);
   s.aiMonthlyLimit = Number.isFinite(lim) ? Math.min(500, Math.max(1, lim)) : 30;
   s.aiFunctionUrl = String(s.aiFunctionUrl || '').trim();
+  if (!['original', 'purple', 'custom'].includes(s.theme)) s.theme = 'original';
+  s.themeColor = /^#[0-9a-f]{6}$/i.test(String(s.themeColor || '')) ? String(s.themeColor).toLowerCase() : DEFAULT_SETTINGS.themeColor;
   return s;
 }
 function cleanList(v) {
@@ -1816,6 +1868,7 @@ function renderSettings() {
   const verified = state.facts.filter(f => f.verified).length;
   $('#jobCountLine').textContent = `This browser holds ${plural(state.jobs.length, 'job')} and ${plural(state.facts.length, 'fact')} (${verified} verified).`;
   renderAiSettings();
+  renderThemeSettings();
 }
 
 async function saveSettingsForm(e) {
@@ -1943,6 +1996,7 @@ async function importData(file) {
       await saveSettings();
     }
     await loadAll();
+    applyTheme(currentTheme()); // Replace mode can bring in the file's colors
     fillProfileForms();
     await applyNoWordRule();
     render();
@@ -4254,6 +4308,7 @@ function bindEvents() {
   bindProfile();
   bindDrafts();
   bindAi();
+  bindTheme();
 
   // Job panel: Match button, and the "Go to My Profile" link it may show
   $('#matchBtn').addEventListener('click', runMatch);
@@ -4280,12 +4335,133 @@ function bindEvents() {
 }
 
 /* ============================================================
-   26. STARTUP
+   26. COLORS (theme presets, color picker, favicon)
+   The look comes from the CSS tokens in C1. A theme sets those tokens
+   on <html>; "Original" removes them so C1 applies again.
+   The choice is stored in settings (theme, themeColor) through the
+   storage module, so it is part of Export and Import.
+   ============================================================ */
+const THEME_TOKENS = ['bg', 'surface', 'surface-2', 'text', 'muted', 'border', 'input-border', 'accent',
+  'accent-hover', 'accent-soft', 'accent-line', 'tint', 'scroll-track', 'focus'];
+const ORIGINAL_ACCENT = '#8a3f1f';
+const ORIGINAL_BG = '#f7f2ea';
+// Hand-picked purple: lavender paper, plum buttons, violet details
+const PURPLE_THEME = {
+  'bg': '#f6f1fb', 'surface': '#fdfbff', 'surface-2': '#ece3f6', 'text': '#261d33', 'muted': '#594c6b',
+  'border': '#dacdea', 'input-border': '#8a7aa0', 'accent': '#6b3fa0', 'accent-hover': '#552f82',
+  'accent-soft': '#efe6fa', 'accent-line': '#d3bff0', 'tint': '#faf6fe', 'scroll-track': '#ece3f6', 'focus': '#2a5d9e'
+};
+
+// --- color math ---
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > .5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h, s: s * 100, l: l * 100 };
+}
+function hslToHex(h, s, l) {
+  s = Math.max(0, Math.min(100, s)) / 100; l = Math.max(0, Math.min(100, l)) / 100;
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+function luminance(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
+    .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+}
+const contrastWithWhite = hex => 1.05 / (luminance(hex) + .05);
+
+// Builds every token from one picked color. The picked hue runs through all
+// shades; grays stay gray. The button color is darkened until white text on it
+// reaches 4.5:1 (WCAG AA).
+function themeFromColor(hex) {
+  const { h, s } = hexToHsl(hex);
+  let { l } = hexToHsl(hex);
+  const k = Math.min(1, s / 45);            // how much color the light shades carry
+  const sat = Math.min(s, 70);
+  l = Math.min(l, 45);
+  let accent = hslToHex(h, sat, l);
+  while (contrastWithWhite(accent) < 4.6 && l > 12) { l -= 1; accent = hslToHex(h, sat, l); }
+  return {
+    'bg': hslToHex(h, 45 * k, 96), 'surface': hslToHex(h, 60 * k, 99.2), 'surface-2': hslToHex(h, 38 * k, 91.5),
+    'text': hslToHex(h, 28 * k, 13), 'muted': hslToHex(h, 14 * k, 35), 'border': hslToHex(h, 32 * k, 84),
+    'input-border': hslToHex(h, 14 * k, 51), 'accent': accent, 'accent-hover': hslToHex(h, sat, Math.max(8, l - 8)),
+    'accent-soft': hslToHex(h, 62 * k, 94), 'accent-line': hslToHex(h, 50 * k, 81), 'tint': hslToHex(h, 50 * k, 97.8),
+    'scroll-track': hslToHex(h, 38 * k, 91.5), 'focus': '#1d5b86'
+  };
+}
+function currentTheme() {
+  const s = state.settings || DEFAULT_SETTINGS;
+  if (s.theme === 'purple') return PURPLE_THEME;
+  if (s.theme === 'custom') return themeFromColor(s.themeColor);
+  return null; // original: the C1 values
+}
+
+// --- apply to the page ---
+function applyTheme(tokens) {
+  const root = document.documentElement.style;
+  THEME_TOKENS.forEach(t => tokens ? root.setProperty('--' + t, tokens[t]) : root.removeProperty('--' + t));
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', tokens ? tokens.bg : ORIGINAL_BG);
+  setFavicon(tokens ? tokens.accent : ORIGINAL_ACCENT);
+}
+// Briefcase icon drawn in the current accent color
+function setFavicon(color) {
+  const c = encodeURIComponent(color);
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='${c}'/>` +
+    `<rect x='23' y='13' width='18' height='11' rx='3' fill='none' stroke='%23fff' stroke-width='4'/>` +
+    `<rect x='11' y='22' width='42' height='29' rx='6' fill='%23fff'/><rect x='11' y='33' width='42' height='3' fill='${c}'/>` +
+    `<rect x='28' y='30' width='8' height='9' rx='2' fill='${c}'/></svg>`;
+  const link = $('#favicon');
+  if (link) link.href = 'data:image/svg+xml,' + svg.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/"/g, "'");
+}
+
+// --- Settings > Colors ---
+function renderThemeSettings() {
+  const s = state.settings;
+  document.querySelectorAll('.theme-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.theme === s.theme)));
+  const picker = $('#themeColor');
+  if (picker && document.activeElement !== picker) picker.value = s.themeColor;
+  const tokens = currentTheme() || {
+    'bg': ORIGINAL_BG, 'surface-2': '#f0e8db', 'accent-soft': '#f4e3d7', 'accent-line': '#e0c3ae',
+    'accent': ORIGINAL_ACCENT, 'accent-hover': '#6f3116', 'text': '#2a241f'
+  };
+  $('#themeSwatches').innerHTML = ['bg', 'surface-2', 'accent-soft', 'accent-line', 'accent', 'accent-hover', 'text']
+    .map(t => `<span style="background:${tokens[t]}"></span>`).join('');
+  $('#themeNow').textContent = 'Now using: ' + (s.theme === 'purple' ? 'Purple.' : s.theme === 'custom' ? `shades of ${s.themeColor}.` : 'Original colors.');
+}
+async function setTheme(theme, color) {
+  const patch = { theme };
+  if (color) patch.themeColor = color;
+  state.settings = normalizeSettings(Object.assign({}, state.settings, patch));
+  applyTheme(currentTheme());
+  renderThemeSettings();
+  try { await saveSettings(); } catch (err) { toast(err.message); }
+}
+function bindTheme() {
+  document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.theme)));
+  const picker = $('#themeColor');
+  // Preview while dragging, save when the picker closes
+  picker.addEventListener('input', () => applyTheme(themeFromColor(picker.value)));
+  picker.addEventListener('change', () => setTheme('custom', picker.value));
+}
+
+/* ============================================================
+   27. STARTUP
    ============================================================ */
 async function init() {
   bindEvents();
   try {
     await loadAll();
+    applyTheme(currentTheme());
     if (!state.settings.sampleSeeded) await seedSample();
     await applyNoWordRule();
   } catch (err) {
