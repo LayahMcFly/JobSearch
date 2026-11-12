@@ -9,7 +9,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.1.4
+  APP VERSION (shown at the bottom of the page): v1.1.5
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -43,6 +43,7 @@
   dropdowns (C3), gives status cards and board columns a glow (C15), and removes
   the blue tap flash on phones.
   v1.1.4 shows the tabs three at a time on phones, with arrow buttons (C2, section 9).
+  v1.1.5 fixes dropdowns that stayed highlighted (and filled in) after choosing on phones.
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -227,7 +228,7 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="
 input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):hover,select:hover,textarea:hover{
   border-color:color-mix(in srgb,var(--accent) 55%,var(--input-border))}
 input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):focus,select:focus,textarea:focus{
-  outline:none;border-color:var(--accent);background:var(--field);
+  outline:none;border-color:var(--accent);background-image:linear-gradient(var(--field),var(--field));
   box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent),0 2px 10px color-mix(in srgb,var(--accent) 18%,transparent)}
 input[readonly],textarea[readonly]{background:var(--tint)}
 ::placeholder{color:var(--muted);opacity:.85;font-style:italic}
@@ -997,7 +998,7 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.4'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.5'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -4417,6 +4418,12 @@ function bindEvents() {
   $$('[data-view]').forEach(b => b.addEventListener('click', () => showView(b.dataset.view, true)));
   // The title in the header goes back to the Dashboard
   $('#homeLink').addEventListener('click', e => { e.preventDefault(); showView('dashboard', true); });
+  // Phones: a dropdown keeps focus after a choice, so it would stay highlighted.
+  // Let go of it once something is chosen. Keyboards and mice keep focus as usual.
+  const touchOnly = window.matchMedia && window.matchMedia('(hover:none)');
+  document.addEventListener('change', e => {
+    if (e.target && e.target.tagName === 'SELECT' && touchOnly && touchOnly.matches) e.target.blur();
+  });
   window.addEventListener('hashchange', () => showView(viewFromHash()));
   $('#addJobBtn').addEventListener('click', () => openAdd());
 
