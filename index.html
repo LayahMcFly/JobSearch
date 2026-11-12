@@ -9,7 +9,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.1.3
+  APP VERSION (shown at the bottom of the page): v1.1.4
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -42,6 +42,7 @@
   v1.1.3 makes the header title go to the Dashboard, styles input boxes and
   dropdowns (C3), gives status cards and board columns a glow (C15), and removes
   the blue tap flash on phones.
+  v1.1.4 shows the tabs three at a time on phones, with arrow buttons (C2, section 9).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -151,6 +152,21 @@ main:focus{outline:none}
 .tabs button{background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%)}
 @media (hover:hover){ .tabs button:hover{background:linear-gradient(180deg,var(--tint) 0%,var(--accent-soft) 100%)} }
 .tabs button[aria-current="page"]{background:var(--text);border-color:var(--text);color:var(--bg)}
+/* Tab pager: on phones the six tabs show three at a time, and the arrow
+   buttons slide to the other three. Wider screens show all six, no arrows. */
+.tab-pager{display:flex;align-items:center;gap:.35rem}
+.tab-pager .tabs{flex:1;min-width:0;scrollbar-width:none;scroll-behavior:smooth}
+.tab-pager .tabs::-webkit-scrollbar{display:none}
+.tab-arrow{display:none;flex:none;width:36px;height:44px;border-radius:999px;border:1px solid var(--border);
+  background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--accent-text);
+  font:inherit;font-size:1.6rem;line-height:1;font-weight:700;cursor:pointer;padding:0 0 .15rem}
+.tab-arrow:disabled{opacity:.35;cursor:default}
+@media (max-width:760px){
+  .tab-arrow{display:inline-flex;align-items:center;justify-content:center}
+  .tab-pager .tabs{scroll-snap-type:x mandatory}
+  .tab-pager .tabs li{flex:0 0 calc((100% - .7rem) / 3);scroll-snap-align:start}
+  .tab-pager .tabs button{width:100%;padding:.4rem .3rem;font-size:.9rem}
+}
 @media (min-width:900px){
   .app-header{grid-template-columns:auto 1fr auto}
   .app-header nav{grid-column:auto;grid-row:1;grid-column-start:2}
@@ -543,8 +559,9 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
      ============================================================ -->
 <header class="app-header">
   <h1><a href="#dashboard" class="home-link" id="homeLink" aria-label="Job Search Tracker, go to Dashboard">Job Search Tracker</a></h1>
-  <nav aria-label="Main">
-    <ul class="tabs">
+  <nav aria-label="Main" class="tab-pager">
+    <button type="button" class="tab-arrow" id="tabsPrev" aria-label="Show the first three tabs">&#8249;</button>
+    <ul class="tabs" id="tabsList">
       <li><button type="button" data-view="dashboard">Dashboard</button></li>
       <li><button type="button" data-view="feed">Job Feed</button></li>
       <li><button type="button" data-view="board">Board</button></li>
@@ -552,6 +569,7 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
       <li><button type="button" data-view="profile">My Profile</button></li>
       <li><button type="button" data-view="settings">Settings</button></li>
     </ul>
+    <button type="button" class="tab-arrow" id="tabsNext" aria-label="Show the next three tabs">&#8250;</button>
   </nav>
   <div class="add-wrap"><button type="button" id="addJobBtn" class="btn btn-primary">+ Add job</button></div>
 </header>
@@ -979,7 +997,7 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.3'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.4'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1526,6 +1544,30 @@ function updateSourceOptions() {
 /* ============================================================
    9. VIEW SWITCHING AND MAIN RENDER
    ============================================================ */
+// --- Tab pager (phones): three tabs at a time ---
+function tabPageWidth() { const list = $('#tabsList'); return list ? list.clientWidth + 5.6 : 0; } // width plus one gap
+function updateTabArrows() {
+  const list = $('#tabsList'); if (!list) return;
+  const max = list.scrollWidth - list.clientWidth;
+  $('#tabsPrev').disabled = list.scrollLeft <= 2;
+  $('#tabsNext').disabled = list.scrollLeft >= max - 2;
+}
+function showTabPageFor(btn) {
+  const list = $('#tabsList');
+  if (!list || list.scrollWidth <= list.clientWidth) return;
+  const li = btn.closest('li'), idx = [...list.children].indexOf(li);
+  list.scrollTo({ left: idx < 3 ? 0 : list.scrollWidth });
+  setTimeout(updateTabArrows, 350);
+}
+function bindTabPager() {
+  const list = $('#tabsList');
+  $('#tabsPrev').addEventListener('click', () => list.scrollBy({ left: -tabPageWidth() }));
+  $('#tabsNext').addEventListener('click', () => list.scrollBy({ left: tabPageWidth() }));
+  list.addEventListener('scroll', () => { clearTimeout(list._t); list._t = setTimeout(updateTabArrows, 60); }, { passive: true });
+  window.addEventListener('resize', updateTabArrows);
+  updateTabArrows();
+}
+
 function viewFromHash() {
   const v = location.hash.replace('#', '');
   return VIEWS.includes(v) ? v : 'dashboard';
@@ -1542,6 +1584,7 @@ function showView(name, focusHeading = false) {
   VIEWS.forEach(v => { $('#view-' + v).hidden = v !== name; });
   $$('[data-view]').forEach(b => {
     if (b.dataset.view === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    if (b.dataset.view === name && b.closest('#tabsList')) showTabPageFor(b);
   });
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
   render();
@@ -4429,6 +4472,7 @@ function bindEvents() {
   bindDrafts();
   bindAi();
   bindTheme();
+  bindTabPager();
 
   // Job panel: Match button, and the "Go to My Profile" link it may show
   $('#matchBtn').addEventListener('click', runMatch);
