@@ -9,7 +9,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.1.1
+  APP VERSION (shown at the bottom of the page): v1.1.2
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -38,6 +38,7 @@
   v1.1.0 adds a favicon, a styled scroll bar, and Settings > Colors: original
   colors, a purple theme, or shades built from any color you pick (section 26).
   v1.1.1 adds gradient buttons and dark mode (Light, Dark, or Match my device).
+  v1.1.2 fixes the color picker on phones (see bindTheme in section 26).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -417,6 +418,7 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 .theme-btn[aria-pressed="true"],.mode-btn[aria-pressed="true"]{background:var(--text);border-color:var(--text);color:var(--bg)}
 .theme-btn .dot{display:inline-block;width:.95rem;height:.95rem;border-radius:50%;margin-right:.45rem;vertical-align:-.12rem;border:1px solid rgba(0,0,0,.2)}
 .color-pick{display:flex;align-items:center;gap:.6rem;margin-top:1rem}
+.color-pick{flex-wrap:wrap}
 .color-pick label{margin:0}
 .color-pick input[type="color"]{width:64px;min-height:44px;padding:3px;border-radius:10px;cursor:pointer}
 .swatches{display:flex;gap:0;margin-top:.9rem;border-radius:10px;overflow:hidden;border:1px solid var(--border);max-width:420px}
@@ -736,6 +738,7 @@ html[data-mode="dark"] .theme-btn .dot{border-color:rgba(255,255,255,.35)}
       <div class="color-pick">
         <input type="color" id="themeColor" value="#7b4fb8" aria-describedby="themeColor-hint">
         <label for="themeColor">Pick your own color</label>
+        <button type="button" class="btn btn-small" id="themeUseBtn">Use this color</button>
       </div>
       <p class="hint" id="themeColor-hint">The app builds light and dark shades from the color you pick. Very light colors are darkened so button text stays readable.</p>
       <div class="swatches" id="themeSwatches" aria-hidden="true"></div>
@@ -906,7 +909,7 @@ html[data-mode="dark"] .theme-btn .dot{border-color:rgba(255,255,255,.35)}
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.1'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.2'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -4532,12 +4535,37 @@ async function saveThemePatch(patch) {
   try { await saveSettings(); } catch (err) { toast(err.message); }
 }
 function bindTheme() {
-  document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.theme)));
   const picker = $('#themeColor');
-  // Preview while dragging, save when the picker closes
-  picker.addEventListener('input', () => applyTheme(themeTokens(themeFromColor(picker.value))));
-  picker.addEventListener('change', () => setTheme('custom', picker.value));
-  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => saveThemePatch({ mode: b.dataset.mode })));
+  // Phone color pickers open as a pop-up over the page. On Android, the tap that
+  // closes the pop-up can land on the Original or Purple button underneath and
+  // undo the color just picked. So right after the picker, the next tap on a
+  // theme or brightness button is ignored once.
+  let guardUntil = 0;
+  const guardShort = () => { guardUntil = Date.now() + 800; };
+  picker.addEventListener('click', () => { guardUntil = Date.now() + 20000; }); // pop-up is open
+  ['blur', 'change'].forEach(ev => picker.addEventListener(ev, guardShort));
+  window.addEventListener('focus', () => { if (guardUntil) guardShort(); });
+  const guarded = fn => () => {
+    if (Date.now() < guardUntil) { guardUntil = 0; return; }
+    guardUntil = 0;
+    fn();
+  };
+  document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', guarded(() => setTheme(b.dataset.theme))));
+  document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', guarded(() => saveThemePatch({ mode: b.dataset.mode }))));
+
+  // Preview while choosing. Save on "change", and also shortly after the last
+  // "input", since some phone pickers send only one of the two.
+  let saveTimer = null;
+  picker.addEventListener('input', () => {
+    guardShort();
+    applyTheme(themeTokens(themeFromColor(picker.value)));
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => setTheme('custom', picker.value), 500);
+  });
+  picker.addEventListener('change', () => { clearTimeout(saveTimer); setTheme('custom', picker.value); });
+  // Picking the color already in the box sends no event at all, so this button
+  // applies whatever color the box shows.
+  $('#themeUseBtn').addEventListener('click', () => { clearTimeout(saveTimer); setTheme('custom', picker.value); });
   // "Match my device": follow the system setting when it changes
   if (darkQuery) {
     const follow = () => { if (state.settings && state.settings.mode === 'device') { applyTheme(themeTokens()); renderThemeSettings(); } };
