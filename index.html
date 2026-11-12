@@ -6,10 +6,24 @@
 <meta name="theme-color" content="#f7f2ea">
 <link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%238a3f1f'/%3E%3Crect x='23' y='13' width='18' height='11' rx='3' fill='none' stroke='%23fff' stroke-width='4'/%3E%3Crect x='11' y='22' width='42' height='29' rx='6' fill='%23fff'/%3E%3Crect x='11' y='33' width='42' height='3' fill='%238a3f1f'/%3E%3Crect x='28' y='30' width='8' height='9' rx='2' fill='%238a3f1f'/%3E%3C/svg%3E">
 <title>Job Search Tracker</title>
+<!-- Link previews (Discord, iMessage, Slack, social sites). These sites need full
+     addresses, so they point at the Cloudflare copy, which hosts og-image.png. -->
+<meta name="description" content="Track job applications and draft them from facts you have verified.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Job Search Tracker">
+<meta property="og:title" content="Job Search Tracker">
+<meta property="og:description" content="Track job applications and draft them from facts you have verified.">
+<meta property="og:url" content="https://jobsearch.princesslayah404.workers.dev/">
+<meta property="og:image" content="https://jobsearch.princesslayah404.workers.dev/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Job Search Tracker dashboard in a purple theme, with status cards for each stage of an application.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://jobsearch.princesslayah404.workers.dev/og-image.png">
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.1.8
+  APP VERSION (shown at the bottom of the page): v1.1.9
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -48,6 +62,8 @@
   v1.1.7 adds old-fashioned mouse cursors in the theme color: a classic arrow and a
   pointing hand over anything you can click (C16, setCursors in section 26).
   v1.1.8 stops the stripes on the Colors card from moving; only the color blooms drift.
+  v1.1.9 animates the favicon (the briefcase opens while you're on the tab and closes
+  when you leave) and adds link preview tags so Discord and others show og-image.png.
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -1045,7 +1061,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.8'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.9'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -4527,6 +4543,7 @@ function bindEvents() {
   bindAi();
   bindTheme();
   bindTabPager();
+  bindFavicon();
 
   // Job panel: Match button, and the "Go to My Profile" link it may show
   $('#matchBtn').addEventListener('click', runMatch);
@@ -4688,15 +4705,45 @@ function setCursors(color) {
   root.setProperty('--cursor-arrow', `${svgUrl(arrow)} 3 2, auto`);
   root.setProperty('--cursor-hand', `${svgUrl(handSvg)} 13 2, pointer`);
 }
-// Briefcase icon drawn in the current accent color
-function setFavicon(color) {
-  const c = encodeURIComponent(color);
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='${c}'/>` +
-    `<rect x='23' y='13' width='18' height='11' rx='3' fill='none' stroke='%23fff' stroke-width='4'/>` +
-    `<rect x='11' y='22' width='42' height='29' rx='6' fill='%23fff'/><rect x='11' y='33' width='42' height='3' fill='${c}'/>` +
-    `<rect x='28' y='30' width='8' height='9' rx='2' fill='${c}'/></svg>`;
+// Briefcase icon drawn in the current accent color.
+// The lid swings open while you are on this tab and shuts when you leave.
+// lidAngle 0 is closed; 30 is fully open (the lid tips back on its right hinge,
+// showing a page inside).
+let faviconColor = ORIGINAL_ACCENT, faviconAngle = 0, faviconTimer = null;
+function faviconSvg(color, lidAngle) {
+  const inside = hslToHex(hexToHsl(color).h, hexToHsl(color).s, Math.max(10, hexToHsl(color).l - 14));
+  return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='${color}'/>` +
+    `<rect x='13' y='26' width='38' height='9' fill='${inside}'/>` +                     // inside of the case
+    `<rect x='21' y='24' width='16' height='12' rx='1.5' fill='#ffffff' transform='rotate(-8 29 30)'/>` + // a page inside
+    `<path d='M24 27.5h9M24 30.5h7' stroke='${inside}' stroke-width='1.4' transform='rotate(-8 29 30)'/>` +
+    `<rect x='11' y='33' width='42' height='18' rx='6' fill='#ffffff'/><rect x='11' y='33' width='42' height='6' fill='#ffffff'/>` + // body
+    `<rect x='11' y='33' width='42' height='3' fill='${color}'/><rect x='28' y='31' width='8' height='9' rx='2' fill='${color}'/>` + // band, clasp
+    `<g transform='rotate(${lidAngle} 53 33)'>` +                                          // lid with handle
+      `<rect x='23' y='13' width='18' height='11' rx='3' fill='none' stroke='#ffffff' stroke-width='4'/>` +
+      `<rect x='11' y='22' width='42' height='11.5' rx='5' fill='#ffffff'/><rect x='11' y='28' width='42' height='5.5' fill='#ffffff'/>` +
+    `</g></svg>`;
+}
+function drawFavicon() {
   const link = $('#favicon');
-  if (link) link.href = 'data:image/svg+xml,' + svg.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/"/g, "'");
+  if (link) link.href = 'data:image/svg+xml,' + encodeURIComponent(faviconSvg(faviconColor, faviconAngle));
+}
+function setFavicon(color) { faviconColor = color; drawFavicon(); }
+function animateFavicon(target) {
+  clearInterval(faviconTimer);
+  const step = target < faviconAngle ? -10 : 10;
+  faviconTimer = setInterval(() => {
+    faviconAngle = step < 0 ? Math.max(target, faviconAngle + step) : Math.min(target, faviconAngle + step);
+    drawFavicon();
+    if (faviconAngle === target) clearInterval(faviconTimer);
+  }, 70);
+}
+function bindFavicon() {
+  const open = () => animateFavicon(30);
+  const close = () => { clearInterval(faviconTimer); faviconAngle = 0; drawFavicon(); }; // instant: timers pause on hidden tabs
+  document.addEventListener('visibilitychange', () => document.hidden ? close() : open());
+  window.addEventListener('blur', () => animateFavicon(0));
+  window.addEventListener('focus', open);
+  if (!document.hidden) setTimeout(open, 400);
 }
 
 // --- Settings > Colors ---
