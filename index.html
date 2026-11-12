@@ -9,7 +9,7 @@
 <!--
   Tracker v5, Phase 5 complete.
 
-  APP VERSION (shown at the bottom of the page): v1.1.5
+  APP VERSION (shown at the bottom of the page): v1.1.6
   Numbering rule, set by the owner. Every update to this file:
     - Raise the last number by one: v1.0.0 -> v1.0.1 -> ... -> v1.0.10
     - After x.y.10, raise the middle number and reset the last: v1.0.10 -> v1.1.0
@@ -44,6 +44,7 @@
   the blue tap flash on phones.
   v1.1.4 shows the tabs three at a time on phones, with arrow buttons (C2, section 9).
   v1.1.5 fixes dropdowns that stayed highlighted (and filled in) after choosing on phones.
+  v1.1.6 gives the Settings > Colors card an animated pattern in the theme colors (C15).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -550,6 +551,37 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
   @media (hover:hover){ .status-card:hover{transform:translateY(-2px)} }
   .btn,.tabs button,.card,.theme-btn,.mode-btn{transition:transform .12s,background .15s,box-shadow .15s}
 }
+
+/* Settings > Colors card: a moving pattern drawn in the theme colors, so the
+   card previews the theme and stands out from the other settings.
+   Two layers sit behind the content: soft color blooms that slowly swirl,
+   and a dot grid over fine diagonal stripes that slowly slides. */
+.colors-block{position:relative;isolation:isolate;overflow:hidden;
+  border:1.5px solid var(--accent-line);
+  box-shadow:0 4px 22px color-mix(in srgb,var(--accent) 22%,transparent)}
+.colors-block::before,.colors-block::after{content:"";position:absolute;z-index:-1;pointer-events:none}
+.colors-block::before{inset:-60%;
+  background:
+    radial-gradient(circle at 30% 35%,color-mix(in srgb,var(--accent) 24%,transparent) 0,transparent 22%),
+    radial-gradient(circle at 70% 60%,color-mix(in srgb,var(--accent-glow) 22%,transparent) 0,transparent 24%),
+    radial-gradient(circle at 45% 75%,color-mix(in srgb,var(--accent-line) 45%,transparent) 0,transparent 20%)}
+.colors-block::after{inset:0;
+  background:
+    radial-gradient(color-mix(in srgb,var(--accent) 20%,transparent) 1.4px,transparent 1.9px) 0 0/20px 20px,
+    repeating-linear-gradient(45deg,color-mix(in srgb,var(--accent) 6%,transparent) 0 8px,transparent 8px 18px)}
+#h-colors{display:inline-block;font-size:1.3rem;
+  background:linear-gradient(90deg,var(--accent-text),var(--accent-glow),var(--accent-text));background-size:200% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+html[data-mode="dark"] #h-colors{background-image:linear-gradient(90deg,var(--accent-text),var(--text),var(--accent-text))}
+.colors-block .hint{color:var(--text);opacity:.82}
+@media (prefers-reduced-motion:no-preference){
+  @keyframes colors-swirl{to{transform:rotate(360deg)}}
+  @keyframes colors-slide{to{background-position:20px 20px,36px 0}}
+  @keyframes colors-title{to{background-position:-200% 0}}
+  .colors-block::before{animation:colors-swirl 24s linear infinite}
+  .colors-block::after{animation:colors-slide 3.5s linear infinite}
+  #h-colors{animation:colors-title 6s linear infinite}
+}
 </style>
 </head>
 <body>
@@ -811,7 +843,7 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
       <p class="hint">This counter covers drafts generated on this device. To cap what you can be billed, set a monthly spend limit in the Claude Console: click your organization name, then Organization settings, Billing, Spend limits. When that limit is reached, the API stops answering until the 1st of the next month.</p>
     </form>
 
-    <section class="block" aria-labelledby="h-colors">
+    <section class="block colors-block" aria-labelledby="h-colors">
       <h3 id="h-colors">Colors</h3>
       <p class="hint">Changes the app's background, buttons, links and scroll bar. Every color works in light and dark. Status colors stay the same so each status keeps its meaning. Saves as soon as you choose, and goes into backup files.</p>
       <div class="theme-row" role="group" aria-label="Color theme">
@@ -998,7 +1030,7 @@ html[data-mode="dark"] .status-card::after{background:linear-gradient(105deg,tra
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.5'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.6'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
