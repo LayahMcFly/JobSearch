@@ -64,6 +64,11 @@
   v1.1.8 stops the stripes on the Colors card from moving; only the color blooms drift.
   v1.1.9 animates the favicon (the briefcase opens while you're on the tab and closes
   when you leave) and adds link preview tags so Discord and others show og-image.png.
+  v1.1.10 turns links in job text into short clickable words (urlLabel and
+  tokenizeText in section 2), keeps long text inside Job Feed cards, adds a
+  location filter (Settings > Job location, buildLocationFilter in section 17)
+  with a "hidden by location" count and reveal button, and shows an Apply
+  button when a feed job has a separate applyLink.
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -401,6 +406,17 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-company{font-weight:600}
 .feed-meta{color:var(--muted);font-size:.92rem}
 .feed-snippet{font-size:.95rem;margin-top:.25rem!important}
+/* v1.1.10: long text and links stay inside the card, links are short words */
+.feed-card{min-width:0}
+.feed-card h3,.feed-card p{overflow-wrap:anywhere}
+.inline-link{font-weight:600;text-decoration:underline;overflow-wrap:anywhere}
+.linked-text{margin-top:.5rem;background:var(--tint);border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .8rem}
+.linked-text[hidden]{display:none}
+.linked-text-label{margin:0 0 .3rem;font-size:.88rem;font-weight:600;color:var(--muted)}
+.linked-text-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.95rem;max-height:16rem;overflow:auto}
+.row-link{display:block;font-size:.88rem;font-weight:600;overflow-wrap:anywhere}
+.feed-loc{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.3rem 0 .6rem}
+.feed-loc p{margin:0}
 .feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
 .feed-note{font-size:.9rem;font-weight:600}
 .feed-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto;padding-top:.6rem}
@@ -677,6 +693,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
     </form>
     <p id="feedCount" aria-live="polite"></p>
+    <div id="feedLocation" class="feed-loc"></div>
     <ul id="feedList" class="feed-list" aria-label="Job openings"></ul>
     <div id="feedMore" style="margin-top:1rem"></div>
   </section>
@@ -822,6 +839,21 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
           <label for="set-excludedWords">Excluded words</label>
           <textarea id="set-excludedWords" name="excludedWords" rows="5" aria-describedby="set-excludedWords-hint"></textarea>
           <p class="hint" id="set-excludedWords-hint">An opening is hidden when its title or description contains any of these as a whole word. Plurals count, so "intern" also hides "interns" but not "international".</p>
+        </div>
+      </div>
+
+      <h3>Job location</h3>
+      <p class="hint">The Job Feed uses these to hide openings in places you cannot work from. Enter one per line.</p>
+      <div class="stack" style="margin-top:.8rem">
+        <div>
+          <label for="set-locationAccept">Locations I accept</label>
+          <textarea id="set-locationAccept" name="locationAccept" rows="4" aria-describedby="set-locationAccept-hint"></textarea>
+          <p class="hint" id="set-locationAccept-hint">If an opening's location also matches one of these, it stays visible even when it matches a hidden location. For example, "Canada or United States" stays. United States also counts as US, USA, and America. Anywhere also counts as worldwide and global.</p>
+        </div>
+        <div>
+          <label for="set-locationHide">Locations to hide</label>
+          <textarea id="set-locationHide" name="locationHide" rows="4" aria-describedby="set-locationHide-hint"></textarea>
+          <p class="hint" id="set-locationHide-hint">An opening is hidden when its location text contains any of these as a whole word, such as "Canada Only". The Job Feed shows how many were hidden and lets you reveal them.</p>
         </div>
       </div>
 
@@ -1061,7 +1093,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.9'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.10'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1195,6 +1227,81 @@ function cleanLink(s) {
 }
 function safeHref(s) { return /^https?:\/\//i.test(s || '') ? s : ''; }
 
+// v1.1.10: links inside job text. Text is escaped first, and only http(s) addresses become links.
+// The visible words are short ("Apply on ADP", "workforcenow.adp.com"), never the raw address.
+const URL_RE = /https?:\/\/[^\s<>"'`]+/gi;
+const APPLY_SITES = [
+  [/(^|\.)adp\.com$/, 'Apply on ADP'], [/(^|\.)greenhouse\.io$/, 'Apply on Greenhouse'], [/(^|\.)lever\.co$/, 'Apply on Lever'],
+  [/(^|\.)myworkdayjobs\.com$|(^|\.)workday\.com$/, 'Apply on Workday'], [/(^|\.)ashbyhq\.com$/, 'Apply on Ashby'],
+  [/(^|\.)smartrecruiters\.com$/, 'Apply on SmartRecruiters'], [/(^|\.)bamboohr\.com$/, 'Apply on BambooHR'],
+  [/(^|\.)icims\.com$/, 'Apply on iCIMS'], [/(^|\.)jobvite\.com$/, 'Apply on Jobvite'], [/(^|\.)paylocity\.com$/, 'Apply on Paylocity'],
+  [/(^|\.)paycomonline\.net$|(^|\.)paycom\.com$/, 'Apply on Paycom'], [/(^|\.)ultipro\.com$|(^|\.)ukg\.com$/, 'Apply on UKG'],
+  [/(^|\.)taleo\.net$/, 'Apply on Taleo'], [/(^|\.)breezy\.hr$/, 'Apply on Breezy'], [/(^|\.)workable\.com$/, 'Apply on Workable'],
+  [/(^|\.)recruitee\.com$/, 'Apply on Recruitee'], [/(^|\.)rippling\.com$/, 'Apply on Rippling'],
+  [/(^|\.)applytojob\.com$|(^|\.)jazzhr\.com$/, 'Apply on JazzHR'],
+  [/(^|\.)linkedin\.com$/, 'View on LinkedIn'], [/(^|\.)indeed\.com$/, 'View on Indeed'], [/(^|\.)weworkremotely\.com$/, 'View on We Work Remotely']
+];
+function urlLabel(url) {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; }
+  if (!host) return '';
+  const hit = APPLY_SITES.find(([re]) => re.test(host));
+  return hit ? hit[1] : host;
+}
+// Splits text into pieces: { t: 'plain text' } or { href, label }.
+function tokenizeText(text) {
+  const s = String(text ?? ''), toks = [];
+  let last = 0;
+  for (const m of s.matchAll(URL_RE)) {
+    let url = m[0];
+    const tail = url.match(/[.,;:!?)\]}]+$/);
+    if (tail) url = url.slice(0, -tail[0].length);
+    const label = safeHref(url) ? urlLabel(url) : '';
+    if (!label) continue;
+    if (m.index > last) toks.push({ t: s.slice(last, m.index) });
+    toks.push({ href: url, label });
+    last = m.index + url.length;
+  }
+  if (last < s.length) toks.push({ t: s.slice(last) });
+  return toks;
+}
+function linkHtml(tok) {
+  return `<a class="inline-link" href="${esc(tok.href)}" target="_blank" rel="noopener noreferrer">${esc(tok.label)}<span class="sr-only"> (opens in a new tab)</span></a>`;
+}
+// Full text, line breaks kept by CSS (white-space: pre-wrap).
+function linkifyHtml(text) { return tokenizeText(text).map(k => k.href ? linkHtml(k) : esc(k.t)).join(''); }
+// Short one-paragraph preview: links count as their short label, cut at a word boundary.
+function previewHtml(text, max = 220) {
+  const toks = tokenizeText(String(text ?? '').replace(/\s+/g, ' ').trim());
+  let used = 0, out = '', cut = false;
+  for (const k of toks) {
+    if (used >= max) { cut = true; break; }
+    if (k.href) { out += linkHtml(k); used += k.label.length; continue; }
+    const room = max - used;
+    if (k.t.length <= room) { out += esc(k.t); used += k.t.length; continue; }
+    let piece = k.t.slice(0, room);
+    const sp = piece.lastIndexOf(' ');
+    if (sp > 0 && k.t[room] !== ' ') piece = piece.slice(0, sp);
+    out += esc(piece.trimEnd());
+    cut = true;
+    break;
+  }
+  return out + (cut ? '…' : '');
+}
+// Clickable copy of a text box, shown under it only when the text holds links.
+function linkedViewHtml(text) {
+  const toks = tokenizeText(text);
+  if (!toks.some(k => k.href)) return '';
+  return `<p class="linked-text-label">Same text with clickable links</p><div class="linked-text-body">${toks.map(k => k.href ? linkHtml(k) : esc(k.t)).join('')}</div>`;
+}
+function refreshLinkedView(el) {
+  const box = el && el.id ? document.getElementById(el.id + '-links') : null;
+  if (!box) return;
+  const html = linkedViewHtml(el.value);
+  box.innerHTML = html;
+  box.hidden = !html;
+}
+
 let toastTimer;
 function toast(msg) {
   const el = $('#toast');
@@ -1319,6 +1426,8 @@ function createJob(values) {
 const DEFAULT_FEED_URL = 'jobs-feed.json';
 const DEFAULT_SETTINGS = {
   id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, sampleSeeded: false,
+  // v1.1.10: location filter for the Job Feed. Hide list wins unless the location also matches the accept list.
+  locationAccept: ['United States', 'Anywhere', 'Worldwide'], locationHide: ['Canada'],
   // Phase 5: AI drafting (main switch Off by default; the three per-draft switches only matter while it is On)
   aiDrafting: false, aiResume: true, aiAnswers: true, aiEmail: true,
   aiModel: 'claude-haiku-5-5', aiMonthlyLimit: 30, aiFunctionUrl: '',
@@ -1333,6 +1442,8 @@ function normalizeSettings(raw) {
   s.noWordDays = Number.isFinite(n) ? Math.min(180, Math.max(1, n)) : 14;
   s.targetTitles = cleanList(s.targetTitles);
   s.excludedWords = cleanList(s.excludedWords);
+  s.locationAccept = cleanList(s.locationAccept);
+  s.locationHide = cleanList(s.locationHide);
   s.feedUrl = String(s.feedUrl || '').trim() || DEFAULT_FEED_URL;
   s.sampleSeeded = !!s.sampleSeeded;
   s.aiDrafting = s.aiDrafting === true;
@@ -1446,7 +1557,7 @@ const state = {
   dismissed: [],   // records from COLLECTIONS.dismissed
   pasted: [],      // records from COLLECTIONS.pasted
   feed: { data: null, loading: false, loaded: false, error: '' },
-  feedUi: { q: '', source: '', showHidden: false, limit: 50 },
+  feedUi: { q: '', source: '', showHidden: false, showLocation: false, limit: 50 },
   feedIndex: new Map(),
   // My Profile and Facts Bank (Phase 3)
   profile: null,           // filled by loadAll()
@@ -1555,6 +1666,10 @@ function fieldHtml(f, value, prefix) {
       `<option value="${esc(o)}"${o === value ? ' selected' : ''}>${esc((f.optionLabels && f.optionLabels[o]) || o)}</option>`).join('') + '</select>';
   } else if (f.type === 'textarea') {
     control = `<textarea id="${id}" name="${f.key}" rows="${f.rows || 4}"${describedBy}>${esc(value)}</textarea>`;
+    if (f.key === 'description' || f.key === 'notes') { // v1.1.10: clickable copy under the box when the text holds links
+      const linked = linkedViewHtml(value);
+      control += `<div class="linked-text" id="${id}-links"${linked ? '' : ' hidden'}>${linked}</div>`;
+    }
   } else {
     const type = f.type === 'url' ? 'text' : f.type;
     const extra = (f.type === 'url' ? ' inputmode="url" spellcheck="false" autocapitalize="off"' : '') +
@@ -1863,6 +1978,12 @@ function fillSelect(sel, options, current) {
   sel.innerHTML = options.map(([v, l]) => `<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(l)}</option>`).join('');
 }
 
+// Short clickable link to the posting under the job title (v1.1.10)
+function tableLinkHtml(j) {
+  const href = safeHref(j.link), label = href ? urlLabel(href) : '';
+  return label ? `<a class="row-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}<span class="sr-only"> for ${esc(j.title)} (opens in a new tab)</span></a>` : '';
+}
+
 function renderTable() {
   const t = state.table;
   // Filter controls
@@ -1889,7 +2010,7 @@ function renderTable() {
   // Rows
   const rows = filteredJobs();
   $('#jobsTable tbody').innerHTML = rows.map(j => `<tr>
-      <td data-label="Job title"><button type="button" class="link-btn" data-open="${esc(j.id)}">${esc(j.title)}</button>${j.isSample ? ' <span class="badge">SAMPLE</span>' : ''}</td>
+      <td data-label="Job title"><button type="button" class="link-btn" data-open="${esc(j.id)}">${esc(j.title)}</button>${j.isSample ? ' <span class="badge">SAMPLE</span>' : ''}${tableLinkHtml(j)}</td>
       <td data-label="Company">${esc(j.company)}</td>
       <td data-label="Status"><span class="chip" data-status="${statusSlug(j.status)}">${esc(j.status)}</span></td>
       <td data-label="Source">${esc(j.source)}</td>
@@ -2088,6 +2209,8 @@ function renderSettings() {
     f.elements.noWordDays.value = state.settings.noWordDays;
     f.elements.targetTitles.value = state.settings.targetTitles.join('\n');
     f.elements.excludedWords.value = state.settings.excludedWords.join('\n');
+    f.elements.locationAccept.value = state.settings.locationAccept.join('\n');
+    f.elements.locationHide.value = state.settings.locationHide.join('\n');
     f.elements.feedUrl.value = state.settings.feedUrl;
   }
   const verified = state.facts.filter(f => f.verified).length;
@@ -2110,6 +2233,8 @@ async function saveSettingsForm(e) {
     noWordDays: days,
     targetTitles: f.elements.targetTitles.value,
     excludedWords: f.elements.excludedWords.value,
+    locationAccept: f.elements.locationAccept.value,
+    locationHide: f.elements.locationHide.value,
     feedUrl: f.elements.feedUrl.value
   }));
   if (state.settings.feedUrl !== oldFeedUrl) Object.assign(state.feed, { data: null, loaded: false, error: '' });
@@ -2214,7 +2339,9 @@ async function importData(file) {
       const incoming = normalizeSettings(data.settings);
       const merged = mode === 'replace' ? incoming : Object.assign({}, state.settings, {
         targetTitles: cleanList([...state.settings.targetTitles, ...incoming.targetTitles]),
-        excludedWords: cleanList([...state.settings.excludedWords, ...incoming.excludedWords])
+        excludedWords: cleanList([...state.settings.excludedWords, ...incoming.excludedWords]),
+        locationAccept: cleanList([...state.settings.locationAccept, ...incoming.locationAccept]),
+        locationHide: cleanList([...state.settings.locationHide, ...incoming.locationHide])
       });
       merged.sampleSeeded = true;
       state.settings = normalizeSettings(merged);
@@ -2294,6 +2421,38 @@ function buildKeywordFilter() {
     return '';
   };
 }
+// Location filter (v1.1.10). Matches whole words in the opening's location text only.
+const LOCATION_ALIASES = {
+  'united states': ['us', 'usa', 'u.s.', 'u.s.a.', 'america'],
+  'anywhere': ['worldwide', 'global', 'anywhere in the world'],
+  'worldwide': ['anywhere', 'global', 'anywhere in the world'],
+  'canada': ['canadian']
+};
+function locationRe(term) {
+  return new RegExp('(^|[^a-z0-9])' + escapeRe(term.toLowerCase()) + '(?![a-z0-9])', 'i');
+}
+function locationTerms(list) {
+  const out = [];
+  list.forEach(t => {
+    const key = t.trim().toLowerCase();
+    if (!key) return;
+    out.push({ term: t, re: locationRe(key) });
+    (LOCATION_ALIASES[key] || []).forEach(a => out.push({ term: t, re: locationRe(a) }));
+  });
+  return out;
+}
+function buildLocationFilter() {
+  const hide = locationTerms(state.settings.locationHide || []);
+  const accept = locationTerms(state.settings.locationAccept || []);
+  return item => {
+    const loc = String(item.location || '');
+    if (!loc || !hide.length) return '';
+    const hit = hide.find(x => x.re.test(loc));
+    if (!hit) return '';
+    if (accept.some(x => x.re.test(loc))) return '';
+    return `Location: ${loc}`;
+  };
+}
 function buildTrackerCheck() {
   const links = new Set(), keys = new Set();
   state.jobs.forEach(j => {
@@ -2324,11 +2483,12 @@ function feedItems() {
   return [...pasted, ...fetched];
 }
 function classifyFeed() {
-  const keywordReason = buildKeywordFilter(), inTracker = buildTrackerCheck(), dismissedBy = buildDismissedCheck();
+  const keywordReason = buildKeywordFilter(), inTracker = buildTrackerCheck(), dismissedBy = buildDismissedCheck(), locationReason = buildLocationFilter();
   return feedItems().map(item => {
     item.dismissedId = dismissedBy(item);
     if (item.dismissedId) { item.hiddenType = 'dismissed'; item.hidden = 'Dismissed'; }
     else if (inTracker(item)) { item.hiddenType = 'tracker'; item.hidden = 'Already in your tracker'; }
+    else if ((item.hidden = locationReason(item))) { item.hiddenType = 'location'; }
     else { item.hidden = keywordReason(item); item.hiddenType = item.hidden ? 'keywords' : ''; }
     return item;
   });
@@ -2373,8 +2533,9 @@ function feedCardHtml(i) {
   const isNew = i.origin === 'feed' && i.firstSeenAt && (Date.now() - new Date(i.firstSeenAt)) / 86400000 < FEED_NEW_DAYS;
   const meta = [esc(i.source || ''), when].filter(Boolean).join(' · ') + (isNew ? ' <span class="badge badge-new">New</span>' : '');
   const text = String(i.description || '').replace(/\s+/g, ' ').trim();
-  const snippet = text ? esc(text.slice(0, 260)) + (text.length > 260 ? '…' : '')
+  const snippet = text ? previewHtml(text, 220)
     : (i.origin === 'pasted' ? 'Alert emails have no job description. Open the link to read the full posting.' : '');
+  const applyHref = safeHref(i.applyLink);
   let actions = '';
   if (i.hiddenType === 'tracker') {
     actions = '<span class="feed-note">Already in your tracker.</span>';
@@ -2385,6 +2546,7 @@ function feedCardHtml(i) {
       <button type="button" class="btn btn-small" data-feed-dismiss="${esc(i.id)}">Dismiss<span class="sr-only"> ${who}</span></button>`;
   }
   if (href) actions += `<a class="btn btn-small" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open link<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
+  if (applyHref && normLink(applyHref) !== normLink(href)) actions += `<a class="btn btn-small" href="${esc(applyHref)}" target="_blank" rel="noopener noreferrer">Apply<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
   return `<li class="feed-card${i.hidden ? ' is-hidden' : ''}">
     <h3>${esc(i.title)}</h3>
     <p class="feed-company">${esc(company)}</p>
@@ -2415,12 +2577,18 @@ function renderFeed() {
   const matches = all.filter(i => (!ui.source || i.source === ui.source) &&
     (!q || q.split(/\s+/).every(w => [i.title, i.company, i.location, i.description].join(' ').toLowerCase().includes(w))));
   const visible = matches.filter(i => !i.hidden);
-  const counts = { keywords: 0, tracker: 0, dismissed: 0 };
+  const counts = { keywords: 0, tracker: 0, dismissed: 0, location: 0 };
   matches.forEach(i => { if (i.hiddenType) counts[i.hiddenType]++; });
-  const shown = ui.showHidden ? matches : visible;
+  const shown = ui.showHidden ? matches : matches.filter(i => !i.hidden || (ui.showLocation && i.hiddenType === 'location'));
+
+  // Small count with its own reveal button, so location-hidden jobs can be checked without showing every hidden job
+  $('#feedLocation').innerHTML = counts.location
+    ? `<p class="hint">${counts.location} hidden by location</p><button type="button" class="btn btn-small" id="toggleLocationBtn" aria-pressed="${ui.showLocation ? 'true' : 'false'}">${ui.showLocation ? 'Hide them again' : 'Show them'}</button>`
+    : '';
 
   const hiddenParts = [
     counts.keywords && `${counts.keywords} by your keywords`,
+    counts.location && `${counts.location} by location`,
     counts.tracker && `${counts.tracker} already in your tracker`,
     counts.dismissed && `${counts.dismissed} dismissed`
   ].filter(Boolean);
@@ -2532,6 +2700,12 @@ function bindFeed() {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.id === 'reloadFeedBtn') loadFeed();
+    else if (b.id === 'toggleLocationBtn') {
+      state.feedUi.showLocation = !state.feedUi.showLocation;
+      renderFeed();
+      const again = $('#toggleLocationBtn');
+      if (again) again.focus();
+    }
     else if (b.id === 'feedMoreBtn') {
       const first = state.feedUi.limit;
       state.feedUi.limit += FEED_PAGE_SIZE;
@@ -4523,11 +4697,13 @@ function bindEvents() {
   $('#deleteJobBtn').addEventListener('click', deleteCurrentJob);
   $('#detailForm').addEventListener('input', debounce(e => {
     if (['title', 'company', 'link'].includes(e.target.name)) showDetailDup();
+    if (['description', 'notes'].includes(e.target.name)) refreshLinkedView(e.target);
   }, 300));
 
   // Add form
   $('#addForm').addEventListener('submit', saveAdd);
   $('#addForm').addEventListener('input', debounce(e => {
+    if (['description', 'notes'].includes(e.target.name)) refreshLinkedView(e.target);
     if (!['title', 'company', 'link'].includes(e.target.name)) return;
     delete $('#addForm').dataset.dupOk;
     $('#addSaveBtn').textContent = 'Save job';
