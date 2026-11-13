@@ -76,6 +76,10 @@
   v1.1.13 adds Remotive's Marketing category next to Writing, limits Remotive to 4 requests a day
   (its guide asks for no more), and keeps a skipped or failed source's earlier jobs in the feed.
   v1.1.14 adds Jobicy as a free source (no key or payment) and turns Adzuna off.
+  v1.2.0 adds Search live in the Job Feed. It asks a free Cloudflare Worker (worker/live-search.js)
+  to read the job boards at that moment, so results are current and a posting that is taken down
+  disappears on the next search. Settings has a new "Live search address" field. The middle number
+  went up because the last number passed 10 (rule above).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -425,6 +429,9 @@ legend{font-weight:600;padding:0 .3rem}
 .title-cell{min-width:0}
 .feed-loc{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.3rem 0 .6rem}
 .feed-loc p{margin:0}
+.feed-live{margin:.4rem 0}
+.feed-live p{margin:.2rem 0}
+.live-btns{display:flex;align-items:end}
 .feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
 .feed-note{font-size:.9rem;font-weight:600}
 .feed-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto;padding-top:.6rem}
@@ -699,7 +706,9 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <div class="search"><label for="ff-q">Search the feed</label><input id="ff-q" name="q" type="search" autocomplete="off"></div>
       <div><label for="ff-source">Source</label><select id="ff-source" name="source"></select></div>
       <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
+      <div class="live-btns"><button type="submit" class="btn btn-primary btn-small" id="liveSearchBtn">Search live</button></div>
     </form>
+    <div id="feedLive" class="feed-live" aria-live="polite"></div>
     <p id="feedCount" aria-live="polite"></p>
     <div id="feedLocation" class="feed-loc"></div>
     <ul id="feedList" class="feed-list" aria-label="Job openings"></ul>
@@ -869,6 +878,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <label for="set-feedUrl">Feed file location</label>
       <input id="set-feedUrl" name="feedUrl" type="text" spellcheck="false" autocapitalize="off" aria-describedby="set-feedUrl-hint">
       <p class="hint" id="set-feedUrl-hint">Keep this as jobs-feed.json when the app and the feed are in the same GitHub repository.</p>
+      <h3>Live search</h3>
+      <label for="set-liveUrl">Live search address</label>
+      <input id="set-liveUrl" name="liveUrl" type="url" spellcheck="false" autocapitalize="off" placeholder="https://job-search-live.your-name.workers.dev" aria-describedby="set-liveUrl-hint">
+      <p class="hint" id="set-liveUrl-hint">The web address of your Cloudflare Worker. Leave it blank to search only the saved feed. Setup steps are in worker/README.md.</p>
       <div class="row"><button type="submit" class="btn btn-primary">Save settings</button></div>
     </form>
 
@@ -1101,7 +1114,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.14'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.2.0'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1433,7 +1446,7 @@ function createJob(values) {
 
 const DEFAULT_FEED_URL = 'jobs-feed.json';
 const DEFAULT_SETTINGS = {
-  id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, sampleSeeded: false,
+  id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, liveUrl: '', sampleSeeded: false,
   // v1.1.10: location filter for the Job Feed. Hide list wins unless the location also matches the accept list.
   locationAccept: ['United States', 'Anywhere', 'Worldwide'], locationHide: ['Canada'],
   // Phase 5: AI drafting (main switch Off by default; the three per-draft switches only matter while it is On)
@@ -1453,6 +1466,7 @@ function normalizeSettings(raw) {
   s.locationAccept = cleanList(s.locationAccept);
   s.locationHide = cleanList(s.locationHide);
   s.feedUrl = String(s.feedUrl || '').trim() || DEFAULT_FEED_URL;
+  s.liveUrl = String(s.liveUrl || '').trim().replace(/\/+$/, '');
   s.sampleSeeded = !!s.sampleSeeded;
   s.aiDrafting = s.aiDrafting === true;
   ['aiResume', 'aiAnswers', 'aiEmail'].forEach(k => { s[k] = s[k] !== false; });
@@ -1566,6 +1580,7 @@ const state = {
   pasted: [],      // records from COLLECTIONS.pasted
   feed: { data: null, loading: false, loaded: false, error: '' },
   feedUi: { q: '', source: '', showHidden: false, showLocation: false, limit: 50 },
+  live: { active: false, loading: false, q: '', jobs: [], sources: [], fetchedAt: '', error: '' }, // Search live results (v1.2.0)
   feedIndex: new Map(),
   // My Profile and Facts Bank (Phase 3)
   profile: null,           // filled by loadAll()
@@ -2220,6 +2235,7 @@ function renderSettings() {
     f.elements.locationAccept.value = state.settings.locationAccept.join('\n');
     f.elements.locationHide.value = state.settings.locationHide.join('\n');
     f.elements.feedUrl.value = state.settings.feedUrl;
+    f.elements.liveUrl.value = state.settings.liveUrl;
   }
   const verified = state.facts.filter(f => f.verified).length;
   $('#jobCountLine').textContent = `This browser holds ${plural(state.jobs.length, 'job')} and ${plural(state.facts.length, 'fact')} (${verified} verified).`;
@@ -2243,7 +2259,8 @@ async function saveSettingsForm(e) {
     excludedWords: f.elements.excludedWords.value,
     locationAccept: f.elements.locationAccept.value,
     locationHide: f.elements.locationHide.value,
-    feedUrl: f.elements.feedUrl.value
+    feedUrl: f.elements.feedUrl.value,
+    liveUrl: f.elements.liveUrl.value
   }));
   if (state.settings.feedUrl !== oldFeedUrl) Object.assign(state.feed, { data: null, loaded: false, error: '' });
   try {
@@ -2482,6 +2499,11 @@ function buildDismissedCheck() {
 
 // All openings: pasted ones first (newest paste first), then the feed by date posted.
 function feedItems() {
+  if (state.live.active) {
+    // Live results replace the saved feed. They are read from the job boards at search time.
+    return state.live.jobs.filter(j => j && j.title)
+      .map(j => Object.assign({}, j, { origin: 'feed', id: String(j.id || ('feed:' + (normLink(j.link) || titleKey(j)))) }));
+  }
   const pasted = state.pasted.map(p => Object.assign({}, p, { origin: 'pasted' }))
     .sort((a, b) => (b.pastedAt || '').localeCompare(a.pastedAt || ''));
   const fetched = ((state.feed.data && state.feed.data.jobs) || [])
@@ -2500,6 +2522,57 @@ function classifyFeed() {
     else { item.hidden = keywordReason(item); item.hiddenType = item.hidden ? 'keywords' : ''; }
     return item;
   });
+}
+
+// --- Live search (v1.2.0) -----------------------------------
+const LIVE_TIMEOUT_MS = 25000;
+async function searchLive() {
+  const ff = $('#feedFilters');
+  const q = ff.elements.q.value.trim();
+  const base = state.settings.liveUrl;
+  const L = state.live;
+  if (!base) { L.error = 'Live search needs the address of your Cloudflare Worker. Add it in Settings under Live search. Until then the box filters the saved feed.'; L.active = false; renderFeed(); return; }
+  if (!/^https:\/\//i.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(base)) { L.error = 'The live search address must start with https://'; L.active = false; renderFeed(); return; }
+  L.loading = true; L.error = ''; renderLiveStatus();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), LIVE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal, cache: 'no-store' });
+    if (!res.ok) throw new Error(`The live search answered with error ${res.status}.`);
+    const data = await res.json();
+    if (!data || !data.ok || !Array.isArray(data.jobs)) throw new Error((data && data.error) || 'The live search sent an unexpected answer.');
+    Object.assign(L, { active: true, q, jobs: data.jobs, sources: Array.isArray(data.sources) ? data.sources : [], fetchedAt: data.fetchedAt || new Date().toISOString(), error: '' });
+    state.feedUi.limit = FEED_PAGE_SIZE;
+  } catch (e) {
+    L.error = (e.name === 'AbortError' ? 'The live search took too long.' : (e.name === 'TypeError' ? 'The live search could not be reached. Check the address in Settings.' : e.message)) + ' Showing the saved feed instead.';
+    L.active = false;
+  } finally { clearTimeout(timer); }
+  L.loading = false;
+  renderFeed();
+}
+function clearLive() {
+  Object.assign(state.live, { active: false, jobs: [], sources: [], error: '' });
+  renderFeed();
+}
+function renderLiveStatus() {
+  const L = state.live, el = $('#feedLive');
+  if (!el) return;
+  const btn = $('#liveSearchBtn');
+  if (btn) { btn.disabled = L.loading; btn.textContent = L.loading ? 'Searching…' : 'Search live'; }
+  let html = '';
+  if (L.loading) html += '<p>Searching the job boards now…</p>';
+  if (L.error) html += `<div class="warn"><p>${esc(L.error)}</p></div>`;
+  if (L.active) {
+    html += `<p><strong>Live results${L.q ? ` for \u201c${esc(L.q)}\u201d` : ''}.</strong> Read ${esc(formatDateTime(L.fetchedAt))}. Postings a board has taken down are gone. Press Search live to read the boards again.</p>
+      <div class="row"><button type="button" class="btn btn-small" id="clearLiveBtn">Back to the saved feed</button></div>`;
+    if (L.sources.length) {
+      html += '<details><summary>Live source log</summary><ul class="source-log">' + L.sources.map(s => {
+        const cls = s.status === 'ok' ? 'ok' : 'fail';
+        return `<li><span class="${cls}">${s.status === 'ok' ? 'Worked' : 'Failed'}</span> ${esc(s.name)} · ${esc(s.status === 'ok' ? plural(s.count || 0, 'match').replace('matchs', 'matches') : (s.message || ''))}</li>`;
+      }).join('') + '</ul></details>';
+    }
+  }
+  el.innerHTML = html;
 }
 
 // --- Rendering ----------------------------------------------
@@ -2570,6 +2643,7 @@ function feedCardHtml(i) {
 
 function renderFeed() {
   renderFeedStatus();
+  renderLiveStatus();
   const ui = state.feedUi;
   const all = classifyFeed();
   state.feedIndex = new Map(all.map(i => [i.id, i]));
@@ -2581,7 +2655,7 @@ function renderFeed() {
   if (document.activeElement !== ff.elements.q) ff.elements.q.value = ui.q;
   ff.elements.showHidden.checked = ui.showHidden;
 
-  const q = ui.q.trim().toLowerCase();
+  const q = state.live.active ? '' : ui.q.trim().toLowerCase(); // live results are already matched to the search
   const matches = all.filter(i => (!ui.source || i.source === ui.source) &&
     (!q || q.split(/\s+/).every(w => [i.title, i.company, i.location, i.description].join(' ').toLowerCase().includes(w))));
   const visible = matches.filter(i => !i.hidden);
@@ -2603,7 +2677,7 @@ function renderFeed() {
   $('#feedCount').textContent = `${plural(visible.length, 'opening')} to review.` + (hiddenParts.length ? ` Hidden: ${hiddenParts.join(', ')}.` : '');
 
   let empty = '';
-  if (!all.length) empty = state.feed.loading ? '' : 'No openings yet. Run the GitHub workflow or paste a LinkedIn alert above.';
+  if (!all.length) empty = state.live.active ? `No live openings match \u201c${state.live.q}\u201d. Try fewer or different words.` : (state.feed.loading ? '' : 'No openings yet. Run the GitHub workflow or paste a LinkedIn alert above.');
   else if (!shown.length) empty = matches.length ? 'Every opening here is hidden. Turn on Show hidden jobs to see why.' : 'No openings match your search.';
   $('#feedList').innerHTML = empty ? `<li class="empty">${esc(empty)}</li>` : shown.slice(0, ui.limit).map(feedCardHtml).join('');
   const left = shown.length - ui.limit;
@@ -2691,7 +2765,8 @@ async function restoreFeedItem(dismissedId, btn) {
 
 function bindFeed() {
   const ff = $('#feedFilters');
-  ff.addEventListener('submit', e => e.preventDefault());
+  ff.addEventListener('submit', e => { e.preventDefault(); searchLive(); });
+  $('#view-feed').addEventListener('click', e => { if (e.target.closest('#clearLiveBtn')) clearLive(); });
   ff.elements.q.addEventListener('input', debounce(() => {
     state.feedUi.q = ff.elements.q.value;
     state.feedUi.limit = FEED_PAGE_SIZE;
