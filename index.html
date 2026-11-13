@@ -69,6 +69,8 @@
   location filter (Settings > Job location, buildLocationFilter in section 17)
   with a "hidden by location" count and reveal button, and shows an Apply
   button when a feed job has a separate applyLink.
+  v1.1.11 keeps the short posting link under the job title in the phone layout of the
+  Table (the title and link share one cell, so the link no longer drops under the label).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -415,6 +417,7 @@ legend{font-weight:600;padding:0 .3rem}
 .linked-text-label{margin:0 0 .3rem;font-size:.88rem;font-weight:600;color:var(--muted)}
 .linked-text-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.95rem;max-height:16rem;overflow:auto}
 .row-link{display:block;font-size:.88rem;font-weight:600;overflow-wrap:anywhere}
+.title-cell{min-width:0}
 .feed-loc{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.3rem 0 .6rem}
 .feed-loc p{margin:0}
 .feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
@@ -1093,7 +1096,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.10'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.11'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2010,7 +2013,7 @@ function renderTable() {
   // Rows
   const rows = filteredJobs();
   $('#jobsTable tbody').innerHTML = rows.map(j => `<tr>
-      <td data-label="Job title"><button type="button" class="link-btn" data-open="${esc(j.id)}">${esc(j.title)}</button>${j.isSample ? ' <span class="badge">SAMPLE</span>' : ''}${tableLinkHtml(j)}</td>
+      <td data-label="Job title"><div class="title-cell"><button type="button" class="link-btn" data-open="${esc(j.id)}">${esc(j.title)}</button>${j.isSample ? ' <span class="badge">SAMPLE</span>' : ''}${tableLinkHtml(j)}</div></td>
       <td data-label="Company">${esc(j.company)}</td>
       <td data-label="Status"><span class="chip" data-status="${statusSlug(j.status)}">${esc(j.status)}</span></td>
       <td data-label="Source">${esc(j.source)}</td>
