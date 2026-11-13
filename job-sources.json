@@ -7,7 +7,8 @@
   "lever": [],
   "_leverFormat": "Add one entry per company: { \"name\": \"COMPANY_NAME\", \"company\": \"Name to show\" }. The name is the word after jobs.lever.co/ in one of the company's job links. Add \"region\": \"eu\" if the link starts with jobs.eu.lever.co.",
 
-  "remotive": { "enabled": true, "category": "writing" },
+  "remotive": { "enabled": true, "categories": ["writing", "marketing"], "runHoursUtc": [9, 21] },
+  "_remotiveHelp": "Remotive asks for 4 requests a day at most and lists jobs 24 hours late. Each category is one request, so 2 categories x 2 run hours = 4 a day. Change runHoursUtc only if you also change the number of categories.",
 
   "rss": [
     {

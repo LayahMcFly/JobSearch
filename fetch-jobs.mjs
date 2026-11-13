@@ -30,7 +30,7 @@ const CONFIG_FILE = process.env.JOB_SOURCES_FILE || 'job-sources.json';
 const OUTPUT_FILE = process.env.JOBS_FEED_FILE || 'jobs-feed.json';
 const REQUEST_TIMEOUT_MS = 25000;
 const PAUSE_BETWEEN_SOURCES_MS = 500;
-const USER_AGENT = 'JobSearchTracker/2.0 (personal job feed, one run per day)';
+const USER_AGENT = 'JobSearchTracker/2.0 (personal job feed, a few runs per day)';
 const FEED_FORMAT = 1;
 const DEFAULT_LIMITS = { maxAgeDays: 30, maxJobsPerSource: 200, maxDescriptionChars: 12000 };
 
@@ -338,8 +338,21 @@ function buildSources(config) {
     if (!o || !o.name) continue;
     list.push({ type: 'lever', label: 'Lever', name: `Lever: ${o.company || o.name}`, run: () => readLever(o) });
   }
+  // Remotive asks for no more than 4 requests a day and lists jobs 24 hours late, so it only runs
+  // on the UTC hours in runHoursUtc (and on a manual "Run workflow"). Other runs keep its earlier jobs.
   if (config.remotive && config.remotive.enabled) {
-    list.push({ type: 'remotive', label: 'Remotive', name: `Remotive: ${config.remotive.category || 'all categories'}`, run: () => readRemotive(config.remotive) });
+    const rv = config.remotive;
+    const cats = Array.isArray(rv.categories) && rv.categories.length ? rv.categories : [rv.category || ''];
+    const hours = Array.isArray(rv.runHoursUtc) ? rv.runHoursUtc.map(Number) : null;
+    const manual = process.env.GITHUB_EVENT_NAME === 'workflow_dispatch';
+    const offHour = hours && !manual && !hours.includes(new Date().getUTCHours());
+    for (const category of cats) {
+      list.push({
+        type: 'remotive', label: 'Remotive', name: `Remotive: ${category || 'all categories'}`,
+        skip: offHour ? `Remotive only runs at ${hours.map(h => String(h).padStart(2, '0') + ':00').join(' and ')} UTC (its guide asks for 4 requests a day at most). Earlier jobs are kept.` : '',
+        run: () => readRemotive({ category, search: rv.search })
+      });
+    }
   }
   for (const f of config.rss || []) {
     if (!f || !f.url) continue;
@@ -445,6 +458,12 @@ async function main() {
       console.log(`FAIL  ${src.name}: ${message}`);
     }
     await sleep(PAUSE_BETWEEN_SOURCES_MS);
+  }
+
+  // A source that was skipped or failed this run keeps the jobs it had last time, so they don't vanish.
+  const holdOver = new Set(log.filter(l => l.status === 'failed' || (l.status === 'skipped' && l.type === 'remotive')).map(l => l.name));
+  for (const j of previous?.jobs || []) {
+    if (holdOver.has(j.sourceName) && (!cutoff || !j.datePosted || j.datePosted >= cutoff)) all.push(j);
   }
 
   // Remove duplicates across sources: same id, same link, or same company + title.
