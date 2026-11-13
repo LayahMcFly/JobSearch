@@ -75,6 +75,7 @@
   .github/workflows/fetch-jobs.yml; no change to how the app itself works).
   v1.1.13 adds Remotive's Marketing category next to Writing, limits Remotive to 4 requests a day
   (its guide asks for no more), and keeps a skipped or failed source's earlier jobs in the feed.
+  v1.1.14 adds Jobicy as a free source (no key or payment) and turns Adzuna off.
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -1100,7 +1101,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.13'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.14'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches

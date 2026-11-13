@@ -10,6 +10,9 @@
   "remotive": { "enabled": true, "categories": ["writing", "marketing"], "runHoursUtc": [9, 21] },
   "_remotiveHelp": "Remotive asks for 4 requests a day at most and lists jobs 24 hours late. Each category is one request, so 2 categories x 2 run hours = 4 a day. Change runHoursUtc only if you also change the number of categories.",
 
+  "jobicy": { "enabled": true, "count": 100, "searches": [ { "industry": "marketing" }, { "tag": "content" }, { "tag": "copywriter" }, { "tag": "seo" } ] },
+  "_jobicyHelp": "Jobicy is free with no key or payment. Each search is one request per run. Keep it to a few searches: its guide asks for no more than one polling run an hour. industry = a category slug (marketing), tag = a keyword (3 to 50 letters), geo = optional region such as usa.",
+
   "rss": [
     {
       "name": "We Work Remotely: Sales and Marketing",
@@ -27,16 +30,8 @@
     }
   ],
 
-  "adzuna": {
-    "country": "us",
-    "searches": [
-      { "what": "content strategist", "maxDaysOld": 14 },
-      { "what": "copywriter", "maxDaysOld": 14 },
-      { "what": "content writer", "maxDaysOld": 14 },
-      { "what": "content marketing manager", "maxDaysOld": 14 }
-    ]
-  },
-  "_adzunaFormat": "Each search can also use \"where\": \"city or state\" and \"whatExclude\": \"words to leave out\". Needs the ADZUNA_APP_ID and ADZUNA_APP_KEY secrets.",
+  "adzuna": { "country": "us", "searches": [] },
+  "_adzunaFormat": "Turned off: Adzuna needs keys and may need payment. Each search can also use \"where\": \"city or state\" and \"whatExclude\": \"words to leave out\". Needs the ADZUNA_APP_ID and ADZUNA_APP_KEY secrets.",
 
   "prefilter": {
     "titleKeywords": ["content", "copy", "writer", "writing", "editor", "editorial", "seo", "brand", "communications", "marketing", "messaging", "storyteller"],

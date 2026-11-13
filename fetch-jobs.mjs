@@ -241,6 +241,36 @@ async function readRemotive({ category, search }) {
   }));
 }
 
+// Jobicy: free public API, no key. Its guide asks for no more than one polling run an hour,
+// and requires keeping Jobicy as the source with the original job link (both are done here).
+function jobicyPay(j) {
+  const min = Number(j.salaryMin) || 0, max = Number(j.salaryMax) || 0;
+  if (!min && !max) return '';
+  const fmt = n => n.toLocaleString('en-US');
+  const range = min && max && min !== max ? `${fmt(min)} to ${fmt(max)}` : fmt(max || min);
+  return `${j.salaryCurrency ? j.salaryCurrency + ' ' : ''}${range}${j.salaryPeriod ? ' ' + j.salaryPeriod : ''}`;
+}
+async function readJobicy({ industry, tag, geo, count }) {
+  const params = new URLSearchParams();
+  if (industry) params.set('industry', industry);
+  if (tag) params.set('tag', tag);
+  if (geo) params.set('geo', geo);
+  params.set('count', String(count || 100));
+  const data = await getJson(`https://jobicy.com/api/v2/remote-jobs?${params}`);
+  if (!Array.isArray(data.jobs)) throw new Error('Unexpected response: no jobs list');
+  return data.jobs.map(j => ({
+    externalId: String(j.id),
+    title: j.jobTitle,
+    company: j.companyName,
+    link: j.url,
+    location: j.jobGeo || '',
+    remoteType: 'Remote',
+    payRange: jobicyPay(j),
+    datePosted: isoDate(j.pubDate),
+    description: htmlToText(j.jobDescription || j.jobExcerpt || '')
+  }));
+}
+
 // RSS 2.0 or Atom feeds. Small regex reader, enough for job board feeds.
 function xmlTag(block, name) {
   const m = block.match(new RegExp(`<${escapeRe(name)}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapeRe(name)}>`, 'i'));
@@ -352,6 +382,13 @@ function buildSources(config) {
         skip: offHour ? `Remotive only runs at ${hours.map(h => String(h).padStart(2, '0') + ':00').join(' and ')} UTC (its guide asks for 4 requests a day at most). Earlier jobs are kept.` : '',
         run: () => readRemotive({ category, search: rv.search })
       });
+    }
+  }
+  if (config.jobicy && config.jobicy.enabled) {
+    for (const q of config.jobicy.searches || []) {
+      if (!q || !(q.industry || q.tag)) continue;
+      const what = q.tag ? `"${q.tag}"` : q.industry;
+      list.push({ type: 'jobicy', label: 'Jobicy', name: `Jobicy: ${what}`, run: () => readJobicy({ ...q, geo: q.geo || config.jobicy.geo, count: q.count || config.jobicy.count }) });
     }
   }
   for (const f of config.rss || []) {
