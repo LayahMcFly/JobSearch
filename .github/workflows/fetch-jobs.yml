@@ -54,7 +54,7 @@ name: Fetch jobs
 
 on:
   schedule:
-    - cron: '17 10 * * *'   # every day at 10:17 UTC (5:17 AM Eastern in winter, 6:17 AM in summer)
+    - cron: '17 */3 * * *'  # every 3 hours, at 17 minutes past (UTC 00:17, 03:17, 06:17 ... 21:17)
   workflow_dispatch:         # adds the "Run workflow" button
 
 permissions:

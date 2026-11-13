@@ -71,6 +71,8 @@
   button when a feed job has a separate applyLink.
   v1.1.11 keeps the short posting link under the job title in the phone layout of the
   Table (the title and link share one cell, so the link no longer drops under the label).
+  v1.1.12 runs the job fetch every 3 hours instead of once a day (schedule in
+  .github/workflows/fetch-jobs.yml; no change to how the app itself works).
 
   CODE MAP (search for the section number to jump there)
   CSS
@@ -1096,7 +1098,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.1.11'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.1.12'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
