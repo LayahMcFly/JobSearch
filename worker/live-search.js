@@ -58,7 +58,7 @@ const titleCase = s => String(s).replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.
 function isoDate(v) {
   if (v === undefined || v === null || v === '') return '';
   const d = new Date(typeof v === 'number' ? v : String(v));
-  return isNaN(d) ? '' : d.toISOString().slice(0, 10);
+  return d.getTime() > 0 ? d.toISOString().slice(0, 10) : '';
 }
 function inferRemote(...parts) {
   const t = parts.join(' ').toLowerCase();
