@@ -1,7 +1,7 @@
 {
  "app": "job-search-tracker",
  "feedFormat": 1,
- "generatedAt": "2026-11-14T18:10:51.982Z",
+ "generatedAt": "2026-11-14T22:29:41.240Z",
  "sources": [
   {
    "name": "Remotive: writing",
@@ -21,17 +21,17 @@
    "name": "Jobicy: marketing",
    "type": "jobicy",
    "status": "ok",
-   "count": 11,
+   "count": 10,
    "fetched": 100,
-   "ms": 405
+   "ms": 472
   },
   {
    "name": "Jobicy: \"content\"",
    "type": "jobicy",
    "status": "ok",
-   "count": 28,
+   "count": 27,
    "fetched": 100,
-   "ms": 912
+   "ms": 886
   },
   {
    "name": "Jobicy: \"copywriter\"",
@@ -39,7 +39,7 @@
    "status": "ok",
    "count": 3,
    "fetched": 3,
-   "ms": 1032
+   "ms": 889
   },
   {
    "name": "Jobicy: \"seo\"",
@@ -47,7 +47,7 @@
    "status": "ok",
    "count": 21,
    "fetched": 57,
-   "ms": 900
+   "ms": 1038
   },
   {
    "name": "RSS: We Work Remotely: Sales and Marketing",
@@ -55,7 +55,7 @@
    "status": "ok",
    "count": 45,
    "fetched": 153,
-   "ms": 569
+   "ms": 696
   },
   {
    "name": "RSS: We Work Remotely: All Other",
@@ -63,7 +63,7 @@
    "status": "ok",
    "count": 2,
    "fetched": 88,
-   "ms": 302
+   "ms": 384
   }
  ],
  "jobs": [
@@ -283,7 +283,7 @@
    "company": "Kayzen",
    "link": "https://jobicy.com/jobs/161762-senior-product-marketing-manager-m-f-d",
    "source": "Jobicy",
-   "sourceName": "Jobicy: marketing",
+   "sourceName": "Jobicy: \"content\"",
    "location": "EMEA",
    "remoteType": "Remote",
    "payRange": "",
@@ -748,7 +748,7 @@
    "company": "Cresta",
    "link": "https://jobicy.com/jobs/161287-growth-marketer-seo-aeo-and-experimentation",
    "source": "Jobicy",
-   "sourceName": "Jobicy: \"content\"",
+   "sourceName": "Jobicy: \"seo\"",
    "location": "USA",
    "remoteType": "Remote",
    "payRange": "USD 100,000 to 165,000 yearly",
