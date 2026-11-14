@@ -1,0 +1,10 @@
+// Cloudflare settings for the "job-search-live" Worker (live job search).
+// In Cloudflare: Workers & Pages > job-search-live > Settings > Builds >
+// Build configuration > Root directory = worker
+// Then every build deploys live-search.js, not the AI drafting Worker at the repo root.
+{
+  "name": "job-search-live",
+  "main": "live-search.js",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true }
+}

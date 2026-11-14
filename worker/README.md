@@ -19,3 +19,7 @@ To check the Worker alone, open `your-address/health` in a browser. It should sh
 - A search reads at most 25 company boards, so a long Greenhouse and Lever list is cut off after 25.
 - Greenhouse results show title, company and location only. The description opens on the job link.
 - The Worker answers only requests that come from `layahmcfly.github.io`. To use another site, change `ALLOWED_ORIGINS` at the top of the file.
+
+## If the Worker is connected to GitHub
+
+A Worker connected to this repo is rebuilt from the repo on every push and replaces anything pasted into the editor. For `job-search-live`, set **Settings > Builds > Build configuration > Root directory** to `worker`. The build then uses `worker/wrangler.jsonc` and deploys `live-search.js`. The `jobsearch` Worker keeps building from the repo root and is not affected.
