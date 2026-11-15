@@ -1,7 +1,7 @@
 {
  "app": "job-search-tracker",
  "feedFormat": 1,
- "generatedAt": "2026-11-15T16:25:15.179Z",
+ "generatedAt": "2026-11-15T22:53:18.964Z",
  "sources": [
   {
    "name": "Remotive: writing",
@@ -23,7 +23,7 @@
    "status": "ok",
    "count": 11,
    "fetched": 100,
-   "ms": 1694
+   "ms": 814
   },
   {
    "name": "Jobicy: \"content\"",
@@ -31,7 +31,7 @@
    "status": "ok",
    "count": 22,
    "fetched": 100,
-   "ms": 1139
+   "ms": 961
   },
   {
    "name": "Jobicy: \"copywriter\"",
@@ -39,31 +39,31 @@
    "status": "ok",
    "count": 4,
    "fetched": 4,
-   "ms": 804
+   "ms": 843
   },
   {
    "name": "Jobicy: \"seo\"",
    "type": "jobicy",
    "status": "ok",
    "count": 18,
-   "fetched": 56,
-   "ms": 827
+   "fetched": 57,
+   "ms": 980
   },
   {
    "name": "RSS: We Work Remotely: Sales and Marketing",
    "type": "rss",
    "status": "ok",
-   "count": 44,
-   "fetched": 150,
-   "ms": 564
+   "count": 46,
+   "fetched": 153,
+   "ms": 557
   },
   {
    "name": "RSS: We Work Remotely: All Other",
    "type": "rss",
    "status": "ok",
    "count": 2,
-   "fetched": 86,
-   "ms": 246
+   "fetched": 90,
+   "ms": 434
   }
  ],
  "jobs": [
@@ -276,6 +276,36 @@
    "description": "About Reedsy\n\nWe’re here to give authors the tools and resources they need to create beautiful books. Our marketplace gathers the industry's best publishing professionals — the likes of Neil Gaiman's editor, Nora Roberts' book marketer, and GRRM’s cover designer.\n\nWe’ve grown to a community of 5,000,000 authors, and transformed the way people write and publish their book. Want to hop on board and help us get to our next destination? Cool, keep reading!\n\nResponsibilities\n\nYour role is to develop new concepts and craft world-beating copy that convert traffic into eager and knowledgeable users of our products. You will:\n\n•\nDevelop a consistent tone of voice for Reedsy across multiple channels;\n\n•\nOwn and evolve our brand guidelines;\n\n•\nHelp onboard writers to ensure consistency across every channel;\n\n•\nWrite copy for our landing pages, lead magnets, email campaigns, newsletters and social media posts;\n\n•\nCome up with new creative ideas to convert our traffic;\n\n•\nReview copy performance (open rates, click-through, conversions) and use those learnings to sharpen future work;\n\n•\nWork closely with a team of content creators (writers, illustrators, animators, and YouTubers) on ad and modal copy, graphic assets, storyboards and video scripts; and\n\n•\nBring a high standard to your own copy and honest, useful feedback to everyone else's.\n\nRequirements\n\n•\nBoth a very analytical and highly creative individual;\n\n•\nExperience creating conversion copy for large-scale campaigns at a fast-growth startup;\n\n•\nA varied portfolio of copy, from short form to long form;\n\n•\nAbility to write with range, from playful campaign headlines to technical writing concepts;\n\n•\nProven experience shaping brand guidelines and tone of voice;\n\n•\nFamiliarity with the publishing industry and writing craft concepts;\n\n•\nExperience with email marketing, conversion optimization and A/B testing;\n\n•\nFamiliarity with Google Analytics and other analytics tools; and\n\n•\nNative-level English speaker.\n\nBonus Points\n\n•\nFluent in multiple languages. Reedsy welcomes applicants of all cultures and backgrounds;\n\n•\nA good dose of ambition, a willingness to learn, and a great sense of fun;\n\n•\nYour writing has been published in some shape or form.\n\nBenefits\n\n•\nWork from home;\n\n•\nPaid paternal and maternal leave;\n\n•\nAnnual team retreat\n\nSalary range:\n\n$60K – $90K",
    "descriptionIsSnippet": false,
    "firstSeenAt": "2026-11-15T16:25:15.179Z"
+  },
+  {
+   "id": "rss:we-work-remotely-sales-and-marketing:https://weworkremotely.com/remote-jobs/bay-hospice-care-inc-hospice-home-health-marketing-specialist",
+   "title": "Hospice & Home Health Marketing Specialist",
+   "company": "BAY HOSPICE CARE INC",
+   "link": "https://weworkremotely.com/remote-jobs/bay-hospice-care-inc-hospice-home-health-marketing-specialist",
+   "source": "We Work Remotely",
+   "sourceName": "RSS: We Work Remotely: Sales and Marketing",
+   "location": "USA Only",
+   "remoteType": "Remote",
+   "payRange": "",
+   "datePosted": "2026-11-15",
+   "description": "Headquarters: United States\n\nURL: https://www.bayhospicecare.com\n\nBenefits:\n\n• Bonus based on performance\n\n• Health insurance\n\n• Training & development\n\nBay Home Health & Hospice Care, Inc. is seeking a motivated Marketing Specialist to build relationships with hospitals, physicians, skilled nursing facilities, assisted living communities, and case managers. The ideal candidate has healthcare marketing experience, excellent communication skills, and a passion for growing patient referrals.\n\nService Area:\nAlameda • Contra Costa • Marin • Napa • Sacramento • San Benito • San Francisco • San Joaquin • San Mateo • Santa Clara • Santa Cruz • Solano • Sonoma • Stanislaus\n\nResponsibilities:\n\n• Develop and maintain referral sources\n\n• Promote Home Health and Hospice services\n\n• Conduct facility visits and presentations\n\n• Build strong relationships with healthcare professionals\n\n• Meet referral and marketing goals\n\nQualifications:\n\n• Home Health or Hospice marketing experience preferred\n\n• Strong networking and communication skills\n\n• Reliable transportation\n\n• Self-motivated and goal-oriented\n\nWe Offer:\n\n• Base pay\n\n• Commission opportunities\n\n• Growth and advancement opportunities\n\nJoin our growing team and help make a difference in the lives of patients and families throughout Northern California!\n\nThis is a remote position.\n\nTo apply: https://weworkremotely.com/remote-jobs/bay-hospice-care-inc-hospice-home-health-marketing-specialist",
+   "descriptionIsSnippet": false,
+   "firstSeenAt": "2026-11-15T22:53:18.964Z"
+  },
+  {
+   "id": "rss:we-work-remotely-sales-and-marketing:https://weworkremotely.com/remote-jobs/true-talent-solutions-partners-senior-product-marketing-manager",
+   "title": "Senior Product Marketing Manager",
+   "company": "True Talent Solutions Partners",
+   "link": "https://weworkremotely.com/remote-jobs/true-talent-solutions-partners-senior-product-marketing-manager",
+   "source": "We Work Remotely",
+   "sourceName": "RSS: We Work Remotely: Sales and Marketing",
+   "location": "Canada Only",
+   "remoteType": "Remote",
+   "payRange": "$130,000 to $160,000",
+   "datePosted": "2026-11-15",
+   "description": "Headquarters: United States\n\nURL: https://truetalentsolutionspartners.com\n\nAbout the Role\nWe are looking for a Senior Product Marketing Manager to build and lead product marketing for a B2B SaaS company serving the construction sector. You will partner closely with Product, Sales, Customer Success, and regional marketing teams to sharpen positioning and support adoption across multiple markets.\nWhat You'll Do\n\n• Own positioning and messaging across customer segments, buyer personas, and geographic markets.\n\n• Build the product marketing function, including auditing existing work, creating a playbook, and putting it into practice.\n\n• Lead go-to-market strategy and execution for product, partner, and feature launches.\n\n• Develop sales enablement materials such as battlecards, competitive guides, one-pagers, ROI calculators, and demo scripts, and coach teams on active deals.\n\n• Collaborate with cross-functional leaders to improve how construction companies discover and adopt the product.\n\n• Design AI-enabled workflows for competitive monitoring, customer research synthesis, content drafting, and enablement creation.\n\n• Lead positioning and messaging for a website rebuild.\n\n• Turn customer interviews, win/loss data, and market signals into actionable insights and customer evidence.\n\n• Build customer advocacy for references, case studies, and events, and advise regional marketing managers on messaging.\n\nWhat We're Looking For\n\n• Five to eight years of B2B SaaS product marketing experience, including experience marketing to established, process-heavy industries.\n\n• Experience building a product marketing function from the ground up and contributing within established product marketing teams.\n\n• Background owning product marketing for SaaS businesses serving organizations with $10 million or more in annual recurring revenue and fast-paced sales cycles.\n\n• Experience managing product marketing across multiple regions and leading cross-functional go-to-market launches.\n\n• Ability to work independently and effectively in an evolving function with limited structure.\n\n• Construction technology or property technology experience is helpful, as is experience marketing to technical or field-based buyers.\n\nCompensation & Benefits\nBase salary: $130,000 to $160,000 annually. Visa sponsorship is not available. Equity and other benefits were not specified.\nLocation\nFully remote in Canada.\n\nTo apply: https://weworkremotely.com/remote-jobs/true-talent-solutions-partners-senior-product-marketing-manager",
+   "descriptionIsSnippet": false,
+   "firstSeenAt": "2026-11-15T22:53:18.964Z"
   },
   {
    "id": "jobicy:162225",
