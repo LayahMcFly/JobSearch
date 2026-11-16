@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.2.6 hides the Source menu when live search is on (the board checkboxes replace it).
   v1.2.5 lets you pick which job boards a live search reads, loads results 20 at a time (Load more button or
   scroll), and keeps the search bar and result count in view while you scroll.
   v1.2.4 highlights the words you searched for in titles, companies and previews, and finds jobs where the words are in different places (Game in the title, Design in the description).
@@ -733,7 +734,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
         <label class="check"><input type="checkbox" name="lsrc" value="remotive"> Remotive (saved jobs)</label>
         <label class="check"><input type="checkbox" name="lsrc" value="boards"> Company boards (Greenhouse, Lever)</label>
       </fieldset>
-      <div><label for="ff-source">Show only one source</label><select id="ff-source" name="source"></select></div>
+      <div id="ffSourceWrap"><label for="ff-source">Source</label><select id="ff-source" name="source"></select></div>
       <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
     </form>
     <div id="feedLive" class="feed-live" aria-live="polite"></div>
@@ -1142,7 +1143,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.2.5'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.2.6'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2577,6 +2578,10 @@ function renderLiveSources() {
   const box = $('#liveSources');
   if (!box) return;
   box.hidden = !state.settings.liveUrl;
+  // With live search on, the checkboxes choose the boards, so the Source menu is not shown
+  const wrap = $('#ffSourceWrap');
+  if (wrap) wrap.hidden = !!state.settings.liveUrl;
+  if (state.settings.liveUrl) state.feedUi.source = '';
   $$('input[name="lsrc"]', box).forEach(c => { c.checked = state.live.groups.includes(c.value); });
 }
 function syncHeaderHeight() {
