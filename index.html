@@ -80,6 +80,9 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.6 adds a mini library under the Target job titles and Excluded words boxes in Settings: after you edit a list you are asked
+  whether to save it, each saved list shows its date and time, starts as Untitled and can be renamed, and Use this list loads it back.
+  (The saved-searches idea from v1.4.5 was removed; it was not what was asked for.)
   v1.4.4 adds a show/hide (eye) button and a Copy button to the AI access code field in Settings.
   v1.4.3 shows the live board buttons as logo tiles in a grid on phones, where the name buttons would stack like a list.
   v1.4.2 adds two more free live boards: The Muse and Hacker News "Who is hiring".
@@ -478,6 +481,21 @@ legend{font-weight:600;padding:0 .3rem}
   background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--text);font-weight:600;line-height:1.2}
 @media (hover:hover){ .src-chip:hover span{background:linear-gradient(180deg,var(--tint) 0%,var(--accent-soft) 100%)} }
 .src-chip input:checked + span{background:var(--text);border-color:var(--text);color:var(--bg)}
+.kw-lib{margin-top:.6rem}
+.save-ask{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .6rem;padding:.6rem .8rem;margin-bottom:.6rem;border:1px solid var(--accent-line,var(--border));border-radius:14px;background:var(--accent-soft)}
+.save-ask[hidden]{display:none}
+.save-ask p{margin:0;flex:1 1 14rem;overflow-wrap:anywhere}
+.lib-details{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:.2rem .8rem}
+.lib-details>summary{min-height:44px;display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:600}
+.lib-count{display:inline-block;min-width:1.5rem;padding:0 .45rem;border-radius:999px;background:var(--tint);border:1px solid var(--border);text-align:center;font-size:.85rem}
+.lib-list{list-style:none;margin:.3rem 0 .6rem;padding:0;display:grid;gap:.5rem}
+.lib-item{border:1px solid var(--border);border-radius:12px;padding:.6rem .7rem;background:var(--field)}
+.lib-name{font-weight:700;margin:0;overflow-wrap:anywhere}
+.lib-name.is-untitled{font-style:italic;font-weight:600}
+.lib-meta{margin:.15rem 0 0;font-size:.9rem;overflow-wrap:anywhere}
+.lib-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+.lib-edit{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.lib-edit input{flex:1 1 10rem;min-width:0}
 .code-row{display:flex;gap:.5rem;align-items:stretch}
 .code-row input{flex:1 1 auto;min-width:0}
 .code-btn{flex:0 0 auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
@@ -962,11 +980,13 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
           <label for="set-targetTitles">Target job titles</label>
           <textarea id="set-targetTitles" name="targetTitles" rows="6" aria-describedby="set-targetTitles-hint"></textarea>
           <p class="hint" id="set-targetTitles-hint">An opening shows when its title contains any of these. Leave empty to see every opening. Pasted LinkedIn alerts skip this check, since you already chose those alerts.</p>
+          <div class="kw-lib" data-kwlib="targetTitles"></div>
         </div>
         <div>
           <label for="set-excludedWords">Excluded words</label>
           <textarea id="set-excludedWords" name="excludedWords" rows="5" aria-describedby="set-excludedWords-hint"></textarea>
           <p class="hint" id="set-excludedWords-hint">An opening is hidden when its title or description contains any of these as a whole word. Plurals count, so "intern" also hides "interns" but not "international".</p>
+          <div class="kw-lib" data-kwlib="excludedWords"></div>
         </div>
       </div>
 
@@ -1243,7 +1263,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.4'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.6'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2434,6 +2454,92 @@ async function saveAdd(e) {
 /* ============================================================
    15. SETTINGS VIEW
    ============================================================ */
+// --- Saved keyword lists (v1.4.6) ----------------------------
+// A mini library under each keyword box in Settings. Kept in this browser only. After you stop editing a box, a bar asks whether to
+// save the list; each saved list shows its date and time, starts as Untitled and can be renamed.
+const KW_LIB_KEY = 'jobsearch.keywordLibs';
+const kwLib = { data: {}, editing: '', declined: new Set() };
+function loadKwLib() { try { const o = JSON.parse(localStorage.getItem(KW_LIB_KEY) || '{}'); kwLib.data = o && typeof o === 'object' ? o : {}; } catch { kwLib.data = {}; } }
+function saveKwLib() { try { localStorage.setItem(KW_LIB_KEY, JSON.stringify(kwLib.data)); } catch { /* storage blocked */ } }
+const kwItems = f => (Array.isArray(kwLib.data[f]) ? kwLib.data[f] : (kwLib.data[f] = []));
+const kwNorm = text => String(text || '').split('\n').map(x => x.trim()).filter(Boolean).join('\n');
+const kwWhen = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); };
+function renderKwLib(f) {
+  const box = $(`[data-kwlib="${f}"]`), items = kwItems(f);
+  const rows = items.map(x => {
+    const words = x.text.split('\n'), id = esc(x.id);
+    if (kwLib.editing === x.id) {
+      return `<li class="lib-item"><div class="lib-edit" data-kw-form="${id}">
+        <label class="sr-only" for="kwName-${id}">Name for this list</label>
+        <input id="kwName-${id}" type="text" maxlength="60" value="${esc(x.name || '')}" placeholder="Untitled" autocomplete="off">
+        <button type="button" class="btn btn-small btn-primary" data-kw-savename="${id}">Save name</button>
+        <button type="button" class="btn btn-small" data-kw-cancel="1">Cancel</button></div></li>`;
+    }
+    return `<li class="lib-item">
+      <p class="lib-name${x.name ? '' : ' is-untitled'}">${esc(x.name || 'Untitled')}</p>
+      <p class="lib-meta">${words.length} ${words.length === 1 ? 'entry' : 'entries'}: ${esc(words.slice(0, 5).join(', '))}${words.length > 5 ? '…' : ''}</p>
+      <p class="lib-meta">Saved ${esc(kwWhen(x.savedAt))}</p>
+      <div class="lib-actions">
+        <button type="button" class="btn btn-small btn-primary" data-kw-use="${id}">Use this list</button>
+        <button type="button" class="btn btn-small" data-kw-rename="${id}">Rename</button>
+        <button type="button" class="btn btn-small" data-kw-delete="${id}">Delete</button></div></li>`;
+  }).join('');
+  const ask = box.querySelector('.save-ask'), open = box.querySelector('details') ? box.querySelector('details').open : false;
+  box.innerHTML = `<div class="save-ask" role="status" aria-live="polite" hidden>${ask ? ask.innerHTML : ''}</div>
+    <details class="lib-details"${open ? ' open' : ''}><summary>Saved lists <span class="lib-count">${items.length}</span></summary>
+    ${items.length ? '' : '<p class="hint">Nothing saved yet. Change the list above and you will be asked if you want to keep it here.</p>'}
+    <ul class="lib-list">${rows}</ul></details>`;
+  if (ask && !ask.hidden) box.querySelector('.save-ask').hidden = false;
+  if (kwLib.editing) { const inp = box.querySelector('.lib-edit input'); if (inp) { inp.focus(); inp.select(); } }
+}
+function showKwAsk(f) {
+  const box = $(`[data-kwlib="${f}"]`), text = kwNorm($(`#set-${f}`).value), ask = box.querySelector('.save-ask');
+  if (!text || kwItems(f).some(x => x.text === text) || kwLib.declined.has(f + '\n' + text)) { ask.hidden = true; return; }
+  ask.innerHTML = `<p>You changed this list. Save it to your library?</p>
+    <button type="button" class="btn btn-small btn-primary" data-kw-ask="save">Save</button>
+    <button type="button" class="btn btn-small" data-kw-ask="no">Not now</button>`;
+  ask.hidden = false;
+}
+function saveKwName(f, id) {
+  const x = kwItems(f).find(i => i.id === id), inp = $(`[data-kwlib="${f}"] .lib-edit input`);
+  if (x && inp) x.name = inp.value.trim().slice(0, 60);
+  kwLib.editing = ''; saveKwLib(); renderKwLib(f);
+  const again = $(`[data-kwlib="${f}"] [data-kw-rename="${id}"]`); if (again) again.focus();
+}
+function bindKwLibs() {
+  loadKwLib();
+  const fields = ['targetTitles', 'excludedWords'];
+  fields.forEach(renderKwLib);
+  const timers = {};
+  fields.forEach(f => {
+    $(`#set-${f}`).addEventListener('input', () => {
+      const ask = $(`[data-kwlib="${f}"] .save-ask`); ask.hidden = true;
+      clearTimeout(timers[f]); timers[f] = setTimeout(() => showKwAsk(f), 1500);
+    });
+    const box = $(`[data-kwlib="${f}"]`);
+    box.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const items = kwItems(f), id = b.dataset.kwUse || b.dataset.kwRename || b.dataset.kwDelete;
+      if (b.dataset.kwAsk === 'save') {
+        items.unshift({ id: uid(), name: '', text: kwNorm($(`#set-${f}`).value), savedAt: new Date().toISOString() });
+        saveKwLib(); renderKwLib(f); toast('Saved to your library.');
+      } else if (b.dataset.kwAsk === 'no') {
+        kwLib.declined.add(f + '\n' + kwNorm($(`#set-${f}`).value)); box.querySelector('.save-ask').hidden = true;
+      } else if (b.dataset.kwUse) {
+        const x = items.find(i => i.id === id);
+        if (x) { const ta = $(`#set-${f}`); ta.value = x.text; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('List loaded. Press Save settings to keep it.'); }
+      } else if (b.dataset.kwSavename) { saveKwName(f, b.dataset.kwSavename); }
+      else if (b.dataset.kwRename) { kwLib.editing = id; renderKwLib(f); }
+      else if (b.dataset.kwCancel) { kwLib.editing = ''; renderKwLib(f); }
+      else if (b.dataset.kwDelete) { kwLib.data[f] = items.filter(i => i.id !== id); saveKwLib(); renderKwLib(f); toast('Removed from your library.'); }
+    });
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && kwLib.editing) { kwLib.editing = ''; renderKwLib(f); }
+      else if (e.key === 'Enter' && e.target.closest('[data-kw-form]')) { e.preventDefault(); saveKwName(f, e.target.closest('[data-kw-form]').dataset.kwForm); }
+    });
+  });
+}
 function renderSettings() {
   const f = $('#settingsForm');
   // Don't overwrite what the user is typing
@@ -5231,6 +5337,7 @@ function bindEvents() {
 
   // Settings, export, import
   $('#settingsForm').addEventListener('submit', saveSettingsForm);
+  bindKwLibs();
   $('#exportBtn').addEventListener('click', () => exportData().catch(err => toast(err.message)));
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async e => {
