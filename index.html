@@ -80,6 +80,9 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.3.1 marks a job as Read once you open it (the card dims and shows a Read badge), and the reading panel now shows
+  descriptions with a Markdown look: lone dashes between paragraphs become divider lines, lines starting with - * or a
+  bullet become lists, **bold** and *italic* are styled, and short lines ending in a colon become headings.
   v1.3.0 adds sort (newest first by default) and filters (posted within, remote only, shows pay) to the Job Feed, and a
   reading panel: press a job's title, Read button or description to read the full posting before adding it to the tracker.
   v1.2.7 shows the live job boards as toggle buttons (check mark when on) that match the tab buttons.
@@ -424,13 +427,21 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;
   box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.3rem}
 .feed-card.is-hidden{border-style:dashed;background:var(--tint)}
+.feed-card.is-read{opacity:.62}
+.feed-card.is-read:hover,.feed-card.is-read:focus-within{opacity:1}
+.badge-read{margin-left:.5rem;vertical-align:middle;background:var(--tint);color:var(--text);border:1px solid var(--border,currentColor)}
+.feed-dlg-desc p{margin:.55rem 0}
+.feed-dlg-desc ul{margin:.55rem 0;padding-left:1.3rem}
+.feed-dlg-desc li{margin:.25rem 0}
+.feed-dlg-desc hr{border:0;border-top:1px solid var(--border,currentColor);opacity:.5;margin:1rem 0}
+.feed-dlg-desc h4{margin:1rem 0 .3rem;font-size:1em}
 .feed-card h3{margin:0;font-size:1.1rem}
 .feed-title-btn{all:unset;cursor:pointer;color:var(--accent-text);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
 .feed-title-btn:focus-visible{outline:3px solid var(--accent-text);outline-offset:2px;border-radius:4px}
 .feed-snippet[data-feed-open]{cursor:pointer}
 .feed-dlg-meta{margin:.2rem 0;color:var(--muted,inherit)}
 .feed-dlg-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.9rem 0}
-.feed-dlg-desc{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;margin-top:.5rem}
+.feed-dlg-desc{overflow-wrap:anywhere;line-height:1.55;margin-top:.5rem}
 #feedDialog mark,.feed-card mark{background:rgba(255,196,0,.45);color:inherit;border-radius:3px;padding:0 .12em}
 .feed-card p{margin:0}
 .feed-company{font-weight:600}
@@ -1192,7 +1203,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.3.0'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.3.1'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1379,6 +1390,75 @@ function highlightHtml(html, words) {
   if (!words || !words.length) return html;
   const re = new RegExp('(' + words.map(w => escapeRe(esc(w))).join('|') + ')', 'gi');
   return String(html).split(/(<[^>]*>)/).map(part => part.startsWith('<') ? part : part.replace(re, '<mark>$1</mark>')).join('');
+}
+// Read marks for Job Feed cards (ids kept in this browser only).
+const READ_KEY = 'jobsearch.readFeed';
+const readIds = (() => { try { const a = JSON.parse(localStorage.getItem(READ_KEY) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); } })();
+function markRead(id) {
+  if (readIds.has(id)) return;
+  readIds.add(id);
+  try { localStorage.setItem(READ_KEY, JSON.stringify([...readIds].slice(-3000))); } catch { /* storage blocked */ }
+}
+function refreshReadMarks() {
+  $$('#feedList .feed-card').forEach(li => {
+    const b = li.querySelector('[data-feed-open]');
+    if (!b || !readIds.has(b.dataset.feedOpen)) return;
+    li.classList.add('is-read');
+    const h = li.querySelector('h3');
+    if (h && !h.querySelector('.badge-read')) h.insertAdjacentHTML('beforeend', '<span class="badge badge-read">Read</span>');
+  });
+}
+// Text cleanup shared by the card preview: lone dashes, rule lines and asterisk runs are removed.
+function plainDesc(text) {
+  return String(text || '').replace(/^[ \t]*(?:[-*_=•]{1,}[ \t]*)+$/gm, ' ').replace(/\*{2,}|_{3,}/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Markdown-style description for the reading panel. Returns escaped HTML.
+function descriptionHtml(text) {
+  const inline = line => tokenizeText(line).map(k => {
+    if (k.href) return linkHtml(k);
+    return esc(k.t)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
+      .replace(/\*{2,}/g, '');
+  }).join('');
+  const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => l.replace(/\s+$/, ''));
+  const out = [];
+  let para = [], list = null, orphan = false;
+  const endPara = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } };
+  const endList = () => { if (list) { out.push('<ul>' + list.map(t => '<li>' + inline(t) + '</li>').join('') + '</ul>'); list = null; orphan = false; } };
+  const flush = () => { endPara(); endList(); };
+  const RULE = /^(?:[-*_=]\s*){3,}$/, MARK = /^[-*•]$/;
+  for (let n = 0; n < lines.length; n++) {
+    let line = lines[n].trim();
+    if (!line) { endPara(); continue; }
+    if (RULE.test(line)) { flush(); out.push('<hr>'); continue; }
+    if (MARK.test(line)) {
+      let j = n + 1; while (j < lines.length && !lines[j].trim()) j++;
+      const next = j < lines.length ? lines[j].trim() : '';
+      const nextIsText = next && !RULE.test(next) && !MARK.test(next) && !/:$/.test(next) && next.length <= 300;
+      let another = false;
+      for (let k = j + 1; k < Math.min(lines.length, j + 7); k++) if (MARK.test(lines[k].trim())) { another = true; break; }
+      if (nextIsText && ((list && orphan) || another)) { endPara(); (list = list || []).push(next.replace(/^[-*•]\s+/, '')); orphan = true; n = j; continue; }
+      flush(); out.push('<hr>'); continue;
+    }
+    // A rule stuck to the end of a sentence, such as "inbox.***"
+    let rule = false;
+    const tail = line.match(/^(.*?\S)\s*(?:\*{3,}|_{3,}|-{3,})$/);
+    if (tail) { line = tail[1]; rule = true; }
+    const li = line.match(/^(?:[-*•]|\d{1,2}[.)])\s+(.+)$/);
+    if (li) { endPara(); (list = list || []).push(li[1]); }
+    else {
+      endList();
+      const h = line.match(/^#{1,6}\s+(.+)$/);
+      const bold = line.match(/^\*\*(.+?)\*\*:?$/);
+      if (h || bold) { endPara(); out.push('<h4>' + inline(h ? h[1] : bold[1]) + '</h4>'); }
+      else if (line.length <= 70 && /:$/.test(line) && !/[.!?]:$/.test(line) && !/https?:/.test(line)) { endPara(); out.push('<h4>' + inline(line.replace(/:$/, '')) + '</h4>'); }
+      else para.push(line);
+    }
+    if (rule) { flush(); out.push('<hr>'); }
+  }
+  flush();
+  return out.join('');
 }
 function previewHtml(text, max = 220) {
   const toks = tokenizeText(String(text ?? '').replace(/\s+/g, ' ').trim());
@@ -2782,7 +2862,7 @@ function feedCardHtml(i) {
     : (i.datePosted ? `Posted ${esc(formatDate(String(i.datePosted).slice(0, 10)))}` : '');
   const isNew = i.origin === 'feed' && i.firstSeenAt && (Date.now() - new Date(i.firstSeenAt)) / 86400000 < FEED_NEW_DAYS;
   const meta = [esc(i.source || ''), when].filter(Boolean).join(' · ') + (isNew ? ' <span class="badge badge-new">New</span>' : '');
-  const text = String(i.description || '').replace(/\s+/g, ' ').trim();
+  const text = plainDesc(i.description);
   const words = searchWords();
   let shownText = text;
   if (words.length && text.length > 220) {
@@ -2805,8 +2885,9 @@ function feedCardHtml(i) {
   }
   if (href) actions += `<a class="btn btn-small" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open link<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
   if (applyHref && normLink(applyHref) !== normLink(href)) actions += `<a class="btn btn-small" href="${esc(applyHref)}" target="_blank" rel="noopener noreferrer">Apply<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
-  return `<li class="feed-card${i.hidden ? ' is-hidden' : ''}">
-    <h3><button type="button" class="feed-title-btn" data-feed-open="${esc(i.id)}">${highlightHtml(esc(i.title), words)}</button></h3>
+  const isRead = readIds.has(i.id);
+  return `<li class="feed-card${i.hidden ? ' is-hidden' : ''}${isRead ? ' is-read' : ''}">
+    <h3><button type="button" class="feed-title-btn" data-feed-open="${esc(i.id)}">${highlightHtml(esc(i.title), words)}</button>${isRead ? '<span class="badge badge-read">Read</span>' : ''}</h3>
     <p class="feed-company">${highlightHtml(esc(company), words)}</p>
     ${where ? `<p class="feed-meta">${where}</p>` : ''}
     ${meta ? `<p class="feed-meta">${meta}</p>` : ''}
@@ -2916,7 +2997,7 @@ function openFeedJob(id) {
   if (applyHref && normLink(applyHref) !== normLink(href)) actions += `<a class="btn" href="${esc(applyHref)}" target="_blank" rel="noopener noreferrer">Apply</a>`;
   const text = String(i.description || '').trim();
   const desc = text
-    ? highlightHtml(tokenizeText(text).map(k => k.href ? linkHtml(k) : esc(k.t)).join(''), words)
+    ? highlightHtml(descriptionHtml(text), words)
     : '<p class="hint">This source does not share the job description. Open the posting to read it.</p>';
   $('#feedDlgTitle').innerHTML = highlightHtml(esc(i.title), words);
   $('#feedDlgBody').innerHTML = `<p><strong>${highlightHtml(esc(i.company || 'Company not listed'), words)}</strong></p>
@@ -2925,6 +3006,7 @@ function openFeedJob(id) {
     <div class="feed-dlg-actions">${actions}</div>
     ${i.descriptionIsSnippet && text ? '<p class="hint">This source shares only a short part of the description. Open the posting for the rest.</p>' : ''}
     <div class="feed-dlg-desc">${desc}</div>`;
+  markRead(id);
   const dlg = $('#feedDialog');
   if (!dlg.open) dlg.showModal();
   $('#feedDlgBody').scrollTop = 0;
@@ -3000,6 +3082,7 @@ async function restoreFeedItem(dismissedId, btn) {
 function bindFeed() {
   const ff = $('#feedFilters');
   ff.addEventListener('submit', e => { e.preventDefault(); searchLive(); });
+  $('#feedDialog').addEventListener('close', refreshReadMarks);
   $('#view-feed').addEventListener('click', e => {
     if (e.target.closest('#browseSavedBtn')) browseSaved(true);
     else if (e.target.closest('#backLiveBtn')) browseSaved(false);

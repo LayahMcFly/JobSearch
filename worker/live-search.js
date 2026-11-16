@@ -55,7 +55,7 @@ function toText(html = '') {
     .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr)\b[^>]*>/gi, '\n')
     .replace(/<li\b[^>]*>/gi, '- ')
     .replace(/<[^>]+>/g, ''))
-    .replace(/[ \t ]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_DESC);
+    .replace(/[ \t ]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/(^|\n)- *\n+/g, '$1- ').trim().slice(0, MAX_DESC);
 }
 const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim();
 const titleCase = s => String(s).replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
