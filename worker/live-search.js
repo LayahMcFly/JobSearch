@@ -74,7 +74,7 @@ const PAY_RE = /(?:US)?\$\s?\d[\d,]*(?:\.\d+)?\s?[kK]?(?:\s*(?:\/|per)\s*(?:hour
 const findPay = t => (String(t).match(PAY_RE) || [''])[0].trim();
 
 function words(q) { return clean(q).toLowerCase().split(' ').filter(w => w.length > 1 || /\d/.test(w)); }
-// Every search word must appear in the job's title, company, location or tags.
+// Every search word must appear somewhere in the job (title, company, location, tags, description). The words can be in different places.
 function hits(ws, ...fields) {
   if (!ws.length) return true;
   const hay = fields.join(' ').toLowerCase();
@@ -126,8 +126,8 @@ async function readJobicy(ws, ctx) {
   const data = await getCached(`https://jobicy.com/api/v2/remote-jobs?count=50${ws.length ? '&tag=' + tag : ''}`, 'json', ctx);
   if (!Array.isArray(data.jobs)) throw new Error('Unexpected response');
   return data.jobs
-    .map(j => ({ j, top: hits(ws, j.jobTitle, j.companyName, j.jobGeo, (j.jobIndustry || []).join(' '), (j.jobType || []).join(' ')) }))
-    .filter(x => x.top || hits(ws, x.j.jobDescription || x.j.jobExcerpt || ''))
+    .map(j => { const head = [j.jobTitle, j.companyName, j.jobGeo, (j.jobIndustry || []).join(' '), (j.jobType || []).join(' ')]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.jobDescription || j.jobExcerpt || '') }; })
+    .filter(x => x.any)
     .map(({ j, top }) => job(src, {
       rank: top ? 0 : 1,
       externalId: String(j.id), title: j.jobTitle, company: j.companyName, link: j.url, location: j.jobGeo,
@@ -152,7 +152,7 @@ async function readWwr(feed, ws, ctx) {
     const region = decode(xmlTag(it, 'region'));
     const top = hits(ws, title, company, region);
     const raw = decode(xmlTag(it, 'description'));
-    if (!top && !hits(ws, raw)) continue; // cheap checks before any text conversion
+    if (!top && !hits(ws, title, company, region, raw)) continue; // cheap checks before any text conversion
     const link = decode(xmlTag(it, 'link'));
     out.push(job(src, {
       rank: top ? 0 : 1,
@@ -181,8 +181,8 @@ async function readLever(b, ws, ctx) {
   const host = b.region === 'eu' ? 'api.eu.lever.co' : 'api.lever.co';
   const data = await getCached(`https://${host}/v0/postings/${encodeURIComponent(b.name)}?mode=json`, 'json', ctx);
   if (!Array.isArray(data)) throw new Error('Unexpected response');
-  return data.map(p => ({ p, top: hits(ws, p.text, b.company || b.name, p.categories?.location, p.categories?.team) }))
-    .filter(x => x.top || hits(ws, x.p.descriptionPlain || ''))
+  return data.map(p => { const head = [p.text, b.company || b.name, p.categories?.location, p.categories?.team]; return { p, top: hits(ws, ...head), any: hits(ws, ...head, p.descriptionPlain || '') }; })
+    .filter(x => x.any)
     .map(({ p, top }) => {
       const wt = String(p.workplaceType || '').toLowerCase();
       return job(src, {

@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.2.4 highlights the words you searched for in titles, companies and previews, and finds jobs where the words are in different places (Game in the title, Design in the description).
   v1.2.3 searches the description text too (title matches listed first) and reads more We Work Remotely categories.
   v1.2.2 accepts a live search address that ends in /health or /search (the ending is dropped on save).
   v1.2.1 shows "Searching Job Opportunities…" while it works and fills the list as each group of boards answers.
@@ -436,6 +437,7 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-loc p{margin:0}
 .feed-live{margin:.4rem 0}
 .feed-live p{margin:.2rem 0}
+.feed-card mark{background:rgba(255,196,0,.45);color:inherit;border-radius:3px;padding:0 .12em}
 .feed-searching{color:var(--accent,inherit)}
 .live-btns{display:flex;align-items:end}
 .feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
@@ -1120,7 +1122,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.2.3'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.2.4'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1298,6 +1300,16 @@ function linkHtml(tok) {
 // Full text, line breaks kept by CSS (white-space: pre-wrap).
 function linkifyHtml(text) { return tokenizeText(text).map(k => k.href ? linkHtml(k) : esc(k.t)).join(''); }
 // Short one-paragraph preview: links count as their short label, cut at a word boundary.
+// Highlight the searched words in already-escaped HTML (text between tags only).
+function searchWords() {
+  const q = liveMode() ? state.live.q : state.feedUi.q;
+  return [...new Set(String(q || '').toLowerCase().split(/\s+/).filter(w => w.length > 1 || /\d/.test(w)))];
+}
+function highlightHtml(html, words) {
+  if (!words || !words.length) return html;
+  const re = new RegExp('(' + words.map(w => escapeRe(esc(w))).join('|') + ')', 'gi');
+  return String(html).split(/(<[^>]*>)/).map(part => part.startsWith('<') ? part : part.replace(re, '<mark>$1</mark>')).join('');
+}
 function previewHtml(text, max = 220) {
   const toks = tokenizeText(String(text ?? '').replace(/\s+/g, ' ').trim());
   let used = 0, out = '', cut = false;
@@ -2654,7 +2666,15 @@ function feedCardHtml(i) {
   const isNew = i.origin === 'feed' && i.firstSeenAt && (Date.now() - new Date(i.firstSeenAt)) / 86400000 < FEED_NEW_DAYS;
   const meta = [esc(i.source || ''), when].filter(Boolean).join(' · ') + (isNew ? ' <span class="badge badge-new">New</span>' : '');
   const text = String(i.description || '').replace(/\s+/g, ' ').trim();
-  const snippet = text ? previewHtml(text, 220)
+  const words = searchWords();
+  let shownText = text;
+  if (words.length && text.length > 220) {
+    // Start the preview near the first searched word so the match is visible
+    const low = text.toLowerCase();
+    const at = Math.min(...words.map(w => low.indexOf(w)).filter(n => n >= 0), Infinity);
+    if (at !== Infinity && at > 150) { const st = text.lastIndexOf(' ', at - 70); shownText = '… ' + text.slice(st > 0 ? st + 1 : at - 70); }
+  }
+  const snippet = text ? highlightHtml(previewHtml(shownText, 220), words)
     : (i.origin === 'pasted' ? 'Alert emails have no job description. Open the link to read the full posting.' : '');
   const applyHref = safeHref(i.applyLink);
   let actions = '';
@@ -2669,8 +2689,8 @@ function feedCardHtml(i) {
   if (href) actions += `<a class="btn btn-small" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open link<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
   if (applyHref && normLink(applyHref) !== normLink(href)) actions += `<a class="btn btn-small" href="${esc(applyHref)}" target="_blank" rel="noopener noreferrer">Apply<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
   return `<li class="feed-card${i.hidden ? ' is-hidden' : ''}">
-    <h3>${esc(i.title)}</h3>
-    <p class="feed-company">${esc(company)}</p>
+    <h3>${highlightHtml(esc(i.title), words)}</h3>
+    <p class="feed-company">${highlightHtml(esc(company), words)}</p>
     ${where ? `<p class="feed-meta">${where}</p>` : ''}
     ${meta ? `<p class="feed-meta">${meta}</p>` : ''}
     ${i.needsCheck ? '<p class="feed-note">Check the title and company. This alert did not use the usual layout.</p>' : ''}
