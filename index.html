@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.2.7 shows the live job boards as toggle buttons (check mark when on) that match the tab buttons.
   v1.2.6 hides the Source menu when live search is on (the board checkboxes replace it).
   v1.2.5 lets you pick which job boards a live search reads, loads results 20 at a time (Load more button or
   scroll), and keeps the search bar and result count in view while you scroll.
@@ -442,8 +443,16 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-sticky .sbar{display:flex;gap:.5rem;align-items:center}
 .feed-sticky .sbar input{flex:1;min-width:0}
 .feed-count{margin:.35rem 0 0;font-size:.92rem}
-.live-sources{grid-column:1/-1;border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .8rem;margin:0;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem}
-.live-sources legend{padding:0 .3rem;font-weight:600}
+.live-sources{grid-column:1/-1;border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.5rem}
+.live-sources legend{padding:0;margin:0 0 .45rem;font-weight:600;float:left;width:100%}
+.src-chip{position:relative;display:inline-flex}
+.src-chip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.src-chip span{display:inline-flex;align-items:center;gap:.4rem;min-height:44px;padding:.4rem 1rem;border-radius:999px;border:1px solid var(--border);
+  background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--text);font-weight:600;line-height:1.2}
+@media (hover:hover){ .src-chip:hover span{background:linear-gradient(180deg,var(--tint) 0%,var(--accent-soft) 100%)} }
+.src-chip input:checked + span{background:var(--text);border-color:var(--text);color:var(--bg)}
+.src-chip input:checked + span::before{content:"\2713"}
+.src-chip input:focus-visible + span{outline:3px solid var(--accent-text);outline-offset:2px}
 .feed-live{margin:.4rem 0}
 .feed-live p{margin:.2rem 0}
 .feed-card mark{background:rgba(255,196,0,.45);color:inherit;border-radius:3px;padding:0 .12em}
@@ -729,10 +738,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
     <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
       <fieldset id="liveSources" class="live-sources" hidden>
         <legend>Job boards to search live</legend>
-        <label class="check"><input type="checkbox" name="lsrc" value="jobicy"> Jobicy</label>
-        <label class="check"><input type="checkbox" name="lsrc" value="wwr"> We Work Remotely</label>
-        <label class="check"><input type="checkbox" name="lsrc" value="remotive"> Remotive (saved jobs)</label>
-        <label class="check"><input type="checkbox" name="lsrc" value="boards"> Company boards (Greenhouse, Lever)</label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="jobicy"><span>Jobicy</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="wwr"><span>We Work Remotely</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="remotive"><span>Remotive (saved jobs)</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="boards"><span>Company boards (Greenhouse, Lever)</span></label>
       </fieldset>
       <div id="ffSourceWrap"><label for="ff-source">Source</label><select id="ff-source" name="source"></select></div>
       <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
@@ -1143,7 +1152,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.2.6'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.2.7'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
