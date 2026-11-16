@@ -80,6 +80,8 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.2.5 lets you pick which job boards a live search reads, loads results 20 at a time (Load more button or
+  scroll), and keeps the search bar and result count in view while you scroll.
   v1.2.4 highlights the words you searched for in titles, companies and previews, and finds jobs where the words are in different places (Game in the title, Design in the description).
   v1.2.3 searches the description text too (title matches listed first) and reads more We Work Remotely categories.
   v1.2.2 accepts a live search address that ends in /health or /search (the ending is dropped on save).
@@ -435,11 +437,16 @@ legend{font-weight:600;padding:0 .3rem}
 .title-cell{min-width:0}
 .feed-loc{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.3rem 0 .6rem}
 .feed-loc p{margin:0}
+.feed-sticky{position:sticky;top:var(--hdr,0px);z-index:15;background:var(--bg);padding:.5rem 0 .4rem;margin:0 0 .6rem;border-bottom:1px solid var(--border)}
+.feed-sticky .sbar{display:flex;gap:.5rem;align-items:center}
+.feed-sticky .sbar input{flex:1;min-width:0}
+.feed-count{margin:.35rem 0 0;font-size:.92rem}
+.live-sources{grid-column:1/-1;border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .8rem;margin:0;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem}
+.live-sources legend{padding:0 .3rem;font-weight:600}
 .feed-live{margin:.4rem 0}
 .feed-live p{margin:.2rem 0}
 .feed-card mark{background:rgba(255,196,0,.45);color:inherit;border-radius:3px;padding:0 .12em}
 .feed-searching{color:var(--accent,inherit)}
-.live-btns{display:flex;align-items:end}
 .feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
 .feed-note{font-size:.9rem;font-weight:600}
 .feed-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto;padding-top:.6rem}
@@ -710,14 +717,27 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <p id="pasteResult" class="hint" aria-live="polite"></p>
     </details>
 
+    <div class="feed-sticky" id="feedSticky">
+      <div class="sbar">
+        <label for="ff-q" class="sr-only">Search the feed</label>
+        <input id="ff-q" name="q" type="search" form="feedFilters" placeholder="Search job titles and keywords" autocomplete="off">
+        <button type="submit" form="feedFilters" class="btn btn-primary btn-small" id="liveSearchBtn">Search live</button>
+      </div>
+      <p id="feedCount" class="feed-count" aria-live="polite"></p>
+    </div>
     <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
-      <div class="search"><label for="ff-q">Search the feed</label><input id="ff-q" name="q" type="search" autocomplete="off"></div>
-      <div><label for="ff-source">Source</label><select id="ff-source" name="source"></select></div>
+      <fieldset id="liveSources" class="live-sources" hidden>
+        <legend>Job boards to search live</legend>
+        <label class="check"><input type="checkbox" name="lsrc" value="jobicy"> Jobicy</label>
+        <label class="check"><input type="checkbox" name="lsrc" value="wwr"> We Work Remotely</label>
+        <label class="check"><input type="checkbox" name="lsrc" value="remotive"> Remotive (saved jobs)</label>
+        <label class="check"><input type="checkbox" name="lsrc" value="boards"> Company boards (Greenhouse, Lever)</label>
+      </fieldset>
+      <div><label for="ff-source">Show only one source</label><select id="ff-source" name="source"></select></div>
       <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
-      <div class="live-btns"><button type="submit" class="btn btn-primary btn-small" id="liveSearchBtn">Search live</button></div>
     </form>
     <div id="feedLive" class="feed-live" aria-live="polite"></div>
-    <p id="feedCount" aria-live="polite"></p>
+    <p id="feedHiddenNote" class="hint"></p>
     <div id="feedLocation" class="feed-loc"></div>
     <ul id="feedList" class="feed-list" aria-label="Job openings"></ul>
     <div id="feedMore" style="margin-top:1rem"></div>
@@ -1122,7 +1142,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.2.4'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.2.5'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1598,7 +1618,7 @@ const state = {
   pasted: [],      // records from COLLECTIONS.pasted
   feed: { data: null, loading: false, loaded: false, error: '' },
   feedUi: { q: '', source: '', showHidden: false, showLocation: false, limit: 50 },
-  live: { active: false, loading: false, browseSaved: false, seq: 0, q: '', jobs: [], sources: [], fetchedAt: '', error: '' }, // Search live results (v1.2.0)
+  live: { groups: [], active: false, loading: false, browseSaved: false, seq: 0, q: '', jobs: [], sources: [], fetchedAt: '', error: '' }, // Search live results (v1.2.0)
   feedIndex: new Map(),
   // My Profile and Facts Bank (Phase 3)
   profile: null,           // filled by loadAll()
@@ -2545,7 +2565,24 @@ function classifyFeed() {
 
 // --- Live search (v1.2.0) -----------------------------------
 const LIVE_TIMEOUT_MS = 25000;
-const LIVE_GROUPS = ['jobicy', 'wwr', 'remotive', 'boards']; // the Worker reads each group on its own so results can appear as each finishes
+const LIVE_GROUPS = ['jobicy', 'wwr', 'remotive', 'boards'];
+const LIVE_PAGE_SIZE = 20;
+const pageSize = () => (liveMode() ? LIVE_PAGE_SIZE : FEED_PAGE_SIZE);
+function loadGroups() {
+  try { const g = JSON.parse(localStorage.getItem('jobsearch.liveGroups') || 'null'); if (Array.isArray(g)) return LIVE_GROUPS.filter(x => g.includes(x)); } catch { /* use all */ }
+  return LIVE_GROUPS.slice();
+}
+function saveGroups() { try { localStorage.setItem('jobsearch.liveGroups', JSON.stringify(state.live.groups)); } catch { /* not saved; fine */ } }
+function renderLiveSources() {
+  const box = $('#liveSources');
+  if (!box) return;
+  box.hidden = !state.settings.liveUrl;
+  $$('input[name="lsrc"]', box).forEach(c => { c.checked = state.live.groups.includes(c.value); });
+}
+function syncHeaderHeight() {
+  const h = $('.app-header');
+  if (h) document.documentElement.style.setProperty('--hdr', h.offsetHeight + 'px');
+} // the Worker reads each group on its own so results can appear as each finishes
 async function searchLive() {
   const ff = $('#feedFilters');
   const q = ff.elements.q.value.trim();
@@ -2554,15 +2591,16 @@ async function searchLive() {
   if (base && !q) { Object.assign(L, { active: false, jobs: [], sources: [], q: '', error: '', loading: false, seq: L.seq + 1 }); renderFeed(); return; }
   if (!base) { L.error = 'Live search needs the address of your Cloudflare Worker. Add it in Settings under Live search. Until then the box filters the saved feed.'; L.active = false; renderFeed(); return; }
   if (!/^https:\/\//i.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(base)) { L.error = 'The live search address must start with https://'; L.active = false; renderFeed(); return; }
+  if (!L.groups.length) { L.error = 'Pick at least one job board to search.'; L.active = false; L.jobs = []; renderFeed(); return; }
   const mySeq = ++L.seq;
   Object.assign(L, { loading: true, error: '', q, jobs: [], sources: [], active: true, fetchedAt: new Date().toISOString() });
-  state.feedUi.limit = FEED_PAGE_SIZE;
+  state.feedUi.limit = pageSize();
   renderFeed();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), LIVE_TIMEOUT_MS);
   const seen = new Set();
   let worked = 0, lastError = '';
-  await Promise.all(LIVE_GROUPS.map(async g => {
+  await Promise.all(L.groups.map(async g => {
     try {
       const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&only=${g}`, { signal: ctrl.signal, cache: 'no-store' });
       if (!res.ok) throw new Error(`error ${res.status}`);
@@ -2735,7 +2773,9 @@ function renderFeed() {
     counts.dismissed && `${counts.dismissed} dismissed`
   ].filter(Boolean);
   const liveWaiting = liveMode() && !state.live.q;
-  $('#feedCount').textContent = liveWaiting ? '' : liveMode() && state.live.loading && !visible.length ? 'Searching Job Opportunities…' : `${plural(visible.length, 'opening')} ${liveMode() ? 'found live, to review' : 'to review'}.` + (hiddenParts.length ? ` Hidden: ${hiddenParts.join(', ')}.` : '');
+  $('#feedCount').textContent = liveWaiting ? '' : liveMode() && state.live.loading && !shown.length ? 'Searching Job Opportunities…'
+    : `Showing ${Math.min(shown.length, ui.limit)} of ${plural(shown.length, 'opening')}${liveMode() ? ' found live' : ''}.` + (liveMode() && state.live.loading ? ' Still searching…' : '');
+  $('#feedHiddenNote').textContent = !liveWaiting && hiddenParts.length ? `Hidden: ${hiddenParts.join(', ')}.` : '';
 
   let empty = '';
   if (liveMode() && state.live.loading && !all.length) empty = 'Searching Job Opportunities…';
@@ -2745,7 +2785,26 @@ function renderFeed() {
   $('#feedList').innerHTML = empty ? `<li class="empty">${esc(empty)}</li>` : shown.slice(0, ui.limit).map(feedCardHtml).join('');
   const left = shown.length - ui.limit;
   $('#feedMore').innerHTML = left > 0
-    ? `<button type="button" class="btn" id="feedMoreBtn">Show ${Math.min(FEED_PAGE_SIZE, left)} more (${left} not shown)</button>` : '';
+    ? `<button type="button" class="btn" id="feedMoreBtn">Load more (${left} not shown)</button>` : '';
+  renderLiveSources();
+  watchFeedEnd();
+}
+
+// Load the next page when the bottom of the list scrolls into view.
+let feedEndObserver = null;
+function watchFeedEnd() {
+  const end = $('#feedMore');
+  if (!end || typeof IntersectionObserver === 'undefined') return;
+  if (!feedEndObserver) {
+    feedEndObserver = new IntersectionObserver(entries => {
+      if (!entries.some(e => e.isIntersecting) || state.view !== 'feed') return;
+      if (!$('#feedMoreBtn')) return;
+      state.feedUi.limit += pageSize(); // no focus change while scrolling
+      renderFeed();
+    }, { rootMargin: '0px 0px 300px 0px' });
+  }
+  feedEndObserver.unobserve(end); // observe again so a fresh check runs after every page
+  feedEndObserver.observe(end);
 }
 
 // After a card leaves the list, keep keyboard focus nearby.
@@ -2833,18 +2892,31 @@ function bindFeed() {
     if (e.target.closest('#browseSavedBtn')) browseSaved(true);
     else if (e.target.closest('#backLiveBtn')) browseSaved(false);
   });
-  ff.elements.q.addEventListener('input', debounce(() => {
+  const onType = () => {
     state.feedUi.q = ff.elements.q.value;
-    state.feedUi.limit = FEED_PAGE_SIZE;
+    state.feedUi.limit = pageSize();
     if (liveMode()) searchLive(); // search as you type; an empty box clears the list
     else renderFeed();
-  }, state.settings.liveUrl ? 600 : 200));
+  };
+  const typeLive = debounce(onType, 600), typeSaved = debounce(onType, 200);
+  ff.elements.q.addEventListener('input', () => (liveMode() ? typeLive() : typeSaved()));
+  state.live.groups = loadGroups();
+  syncHeaderHeight();
+  window.addEventListener('resize', debounce(syncHeaderHeight, 150));
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderHeight);
   ff.addEventListener('change', e => {
-    if (e.target.name === 'q') return;
+    if (e.target.name === 'q' || e.target.name === 'lsrc') return;
     state.feedUi.source = ff.elements.source.value;
     state.feedUi.showHidden = ff.elements.showHidden.checked;
-    state.feedUi.limit = FEED_PAGE_SIZE;
+    state.feedUi.limit = pageSize();
     renderFeed();
+  });
+  ff.addEventListener('change', e => {
+    if (e.target.name !== 'lsrc') return;
+    state.live.groups = $$('input[name="lsrc"]:checked', ff).map(c => c.value);
+    saveGroups();
+    if (liveMode() && ff.elements.q.value.trim()) searchLive();
+    else if (!state.live.groups.length) renderLiveStatus();
   });
   $('#view-feed').addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -2858,7 +2930,7 @@ function bindFeed() {
     }
     else if (b.id === 'feedMoreBtn') {
       const first = state.feedUi.limit;
-      state.feedUi.limit += FEED_PAGE_SIZE;
+      state.feedUi.limit += pageSize();
       renderFeed();
       focusFeedCard(first);
     }
