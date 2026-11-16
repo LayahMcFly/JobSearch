@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.3.2 tints Read cards with a dimmed shade of the chosen color theme instead of fading them toward white.
   v1.3.1 marks a job as Read once you open it (the card dims and shows a Read badge), and the reading panel now shows
   descriptions with a Markdown look: lone dashes between paragraphs become divider lines, lines starting with - * or a
   bullet become lists, **bold** and *italic* are styled, and short lines ending in a colon become headings.
@@ -427,8 +428,8 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;
   box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.3rem}
 .feed-card.is-hidden{border-style:dashed;background:var(--tint)}
-.feed-card.is-read{opacity:.62}
-.feed-card.is-read:hover,.feed-card.is-read:focus-within{opacity:1}
+.feed-card.is-read{background:var(--surface-2);background:color-mix(in srgb,var(--accent) 14%,var(--bg));border-color:var(--accent-line)}
+.feed-card.is-read .feed-snippet,.feed-card.is-read .feed-meta,.feed-card.is-read .feed-company{opacity:.8}
 .badge-read{margin-left:.5rem;vertical-align:middle;background:var(--tint);color:var(--text);border:1px solid var(--border,currentColor)}
 .feed-dlg-desc p{margin:.55rem 0}
 .feed-dlg-desc ul{margin:.55rem 0;padding-left:1.3rem}
@@ -1203,7 +1204,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.3.1'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.3.2'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
