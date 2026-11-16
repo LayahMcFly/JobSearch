@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.2.3 searches the description text too (title matches listed first) and reads more We Work Remotely categories.
   v1.2.2 accepts a live search address that ends in /health or /search (the ending is dropped on save).
   v1.2.1 shows "Searching Job Opportunities…" while it works and fills the list as each group of boards answers.
   It also makes the Job Feed live-first once a live search address is saved: no list and no count
@@ -1119,7 +1120,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.2.2'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.2.3'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2561,7 +2562,7 @@ async function searchLive() {
         const key = String(j.link || j.id).replace(/[?#].*$/, '').replace(/\/$/, '').toLowerCase();
         if (!seen.has(key)) { seen.add(key); L.jobs.push(j); }
       }
-      L.jobs.sort((x, y) => String(y.datePosted || '').localeCompare(String(x.datePosted || '')));
+      L.jobs.sort((x, y) => ((x.rank || 0) - (y.rank || 0)) || String(y.datePosted || '').localeCompare(String(x.datePosted || '')));
       L.sources.push(...(Array.isArray(data.sources) ? data.sources : []));
       renderFeed(); // results appear as each group of boards answers
     } catch (e) {

@@ -29,6 +29,10 @@ const MAX_DESC = 6000;
 const USER_AGENT = 'JobSearchTracker/2.0 (personal live search)';
 
 const WWR_FEEDS = [
+  { name: 'We Work Remotely: All Jobs', url: 'https://weworkremotely.com/remote-jobs.rss' },
+  { name: 'We Work Remotely: Programming', url: 'https://weworkremotely.com/categories/remote-programming-jobs.rss' },
+  { name: 'We Work Remotely: Design', url: 'https://weworkremotely.com/categories/remote-design-jobs.rss' },
+  { name: 'We Work Remotely: Customer Support', url: 'https://weworkremotely.com/categories/remote-customer-support-jobs.rss' },
   { name: 'We Work Remotely: Sales and Marketing', url: 'https://weworkremotely.com/categories/remote-sales-and-marketing-jobs.rss' },
   { name: 'We Work Remotely: All Other', url: 'https://weworkremotely.com/categories/all-other-remote-jobs.rss' }
 ];
@@ -109,6 +113,7 @@ function job(src, f) {
     datePosted: f.datePosted || '',
     description,
     descriptionIsSnippet: Boolean(f.snippet),
+    rank: f.rank || 0, // 0 = the search words are in the title, company or location; 1 = only in the description
     live: true
   };
 }
@@ -121,8 +126,10 @@ async function readJobicy(ws, ctx) {
   const data = await getCached(`https://jobicy.com/api/v2/remote-jobs?count=50${ws.length ? '&tag=' + tag : ''}`, 'json', ctx);
   if (!Array.isArray(data.jobs)) throw new Error('Unexpected response');
   return data.jobs
-    .filter(j => hits(ws, j.jobTitle, j.companyName, j.jobGeo, (j.jobIndustry || []).join(' '), (j.jobType || []).join(' ')))
-    .map(j => job(src, {
+    .map(j => ({ j, top: hits(ws, j.jobTitle, j.companyName, j.jobGeo, (j.jobIndustry || []).join(' '), (j.jobType || []).join(' ')) }))
+    .filter(x => x.top || hits(ws, x.j.jobDescription || x.j.jobExcerpt || ''))
+    .map(({ j, top }) => job(src, {
+      rank: top ? 0 : 1,
       externalId: String(j.id), title: j.jobTitle, company: j.companyName, link: j.url, location: j.jobGeo,
       remoteType: 'Remote', datePosted: isoDate(j.pubDate),
       payRange: j.salaryMin || j.salaryMax ? [j.salaryMin, j.salaryMax].filter(Boolean).map(n => '$' + Number(n).toLocaleString('en-US')).join(' to ') + (j.salaryPeriod ? ' ' + j.salaryPeriod : '') : '',
@@ -143,12 +150,15 @@ async function readWwr(feed, ws, ctx) {
     const i = title.indexOf(': ');
     if (i > 0) { company = title.slice(0, i).trim(); title = title.slice(i + 2).trim(); }
     const region = decode(xmlTag(it, 'region'));
-    if (!hits(ws, title, company, region)) continue; // cheap check before any text conversion
+    const top = hits(ws, title, company, region);
+    const raw = decode(xmlTag(it, 'description'));
+    if (!top && !hits(ws, raw)) continue; // cheap checks before any text conversion
     const link = decode(xmlTag(it, 'link'));
     out.push(job(src, {
+      rank: top ? 0 : 1,
       externalId: decode(xmlTag(it, 'guid')) || link, title, company, link, location: region,
       remoteType: 'Remote', datePosted: isoDate(xmlTag(it, 'pubDate')),
-      description: toText(decode(xmlTag(it, 'description')))
+      description: toText(raw)
     }));
   }
   return out;
@@ -171,10 +181,12 @@ async function readLever(b, ws, ctx) {
   const host = b.region === 'eu' ? 'api.eu.lever.co' : 'api.lever.co';
   const data = await getCached(`https://${host}/v0/postings/${encodeURIComponent(b.name)}?mode=json`, 'json', ctx);
   if (!Array.isArray(data)) throw new Error('Unexpected response');
-  return data.filter(p => hits(ws, p.text, b.company || b.name, p.categories?.location, p.categories?.team))
-    .map(p => {
+  return data.map(p => ({ p, top: hits(ws, p.text, b.company || b.name, p.categories?.location, p.categories?.team) }))
+    .filter(x => x.top || hits(ws, x.p.descriptionPlain || ''))
+    .map(({ p, top }) => {
       const wt = String(p.workplaceType || '').toLowerCase();
       return job(src, {
+        rank: top ? 0 : 1,
         externalId: `${b.name}:${p.id}`, title: p.text, company: b.company || titleCase(b.name), link: p.hostedUrl || p.applyUrl,
         applyLink: p.applyUrl && p.applyUrl !== p.hostedUrl ? p.applyUrl : '',
         location: p.categories?.location || (p.categories?.allLocations || []).join(', '),
@@ -228,7 +240,7 @@ async function search(q, ctx, only) {
     seen.add(key);
     jobs.push(j);
   }
-  jobs.sort((a, b) => String(b.datePosted).localeCompare(String(a.datePosted)));
+  jobs.sort((a, b) => (a.rank - b.rank) || String(b.datePosted).localeCompare(String(a.datePosted)));
   return { ok: true, q: clean(q), fetchedAt: new Date().toISOString(), count: Math.min(jobs.length, MAX_RESULTS), jobs: jobs.slice(0, MAX_RESULTS), sources: log };
 }
 
