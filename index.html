@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.4 adds a show/hide (eye) button and a Copy button to the AI access code field in Settings.
   v1.4.3 shows the live board buttons as logo tiles in a grid on phones, where the name buttons would stack like a list.
   v1.4.2 adds two more free live boards: The Muse and Hacker News "Who is hiring".
   v1.4.1 adds a Search Craigslist button to the Job Feed (Craigslist has no free API, so it opens their job search in a new tab)
@@ -477,6 +478,9 @@ legend{font-weight:600;padding:0 .3rem}
   background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--text);font-weight:600;line-height:1.2}
 @media (hover:hover){ .src-chip:hover span{background:linear-gradient(180deg,var(--tint) 0%,var(--accent-soft) 100%)} }
 .src-chip input:checked + span{background:var(--text);border-color:var(--text);color:var(--bg)}
+.code-row{display:flex;gap:.5rem;align-items:stretch}
+.code-row input{flex:1 1 auto;min-width:0}
+.code-btn{flex:0 0 auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
 .src-logo{display:none;border-radius:6px;object-fit:contain}
 .src-name{font-weight:inherit}
 @media (max-width:640px){
@@ -1023,7 +1027,14 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
         </div>
         <div class="field-textarea">
           <label for="ai-code">Access code</label>
-          <input id="ai-code" name="accessCode" type="password" autocomplete="off" aria-describedby="ai-code-hint">
+          <div class="code-row">
+            <input id="ai-code" name="accessCode" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="ai-code-hint">
+            <button type="button" class="btn btn-small code-btn" id="aiCodeEye" aria-pressed="false" aria-label="Show access code" title="Show access code">
+              <svg class="eye-on" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-off" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><path d="M17.9 17.9A10.1 10.1 0 0 1 12 19C5.6 19 2 12 2 12a18.5 18.5 0 0 1 5.1-5.9M9.9 5.2A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a18.5 18.5 0 0 1-2.2 3.2M1 1l22 22"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/></svg>
+            </button>
+            <button type="button" class="btn btn-small code-btn" id="aiCodeCopy">Copy</button>
+          </div>
           <p class="hint" id="ai-code-hint">The APP_ACCESS_CODE you set in the function. Saved on this device only and left out of backup files.</p>
         </div>
       </div>
@@ -1232,7 +1243,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.3'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.4'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -5088,6 +5099,19 @@ function bindAi() {
   });
   f.addEventListener('submit', saveAiForm);
   $('#aiTestBtn').addEventListener('click', testAiConnection);
+  $('#aiCodeEye').addEventListener('click', e => {
+    const inp = $('#ai-code'), btn = e.currentTarget, show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.setAttribute('aria-pressed', String(show));
+    btn.setAttribute('aria-label', show ? 'Hide access code' : 'Show access code');
+    btn.title = btn.getAttribute('aria-label');
+    $('.eye-on', btn).hidden = show; $('.eye-off', btn).hidden = !show;
+  });
+  $('#aiCodeCopy').addEventListener('click', async () => {
+    const v = $('#ai-code').value;
+    if (!v) { toast('There is no access code to copy yet.'); return; }
+    toast((await copyText(v)) ? 'Access code copied. Share it only with people you trust.' : 'Could not copy. Show the code and select it instead.');
+  });
   $('#draftPanel').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
