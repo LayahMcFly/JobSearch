@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.7 asks "Are you sure you want to delete <name>, saved <date and time>?" before removing a saved keyword list.
   v1.4.6 adds a mini library under the Target job titles and Excluded words boxes in Settings: after you edit a list you are asked
   whether to save it, each saved list shows its date and time, starts as Untitled and can be renamed, and Use this list loads it back.
   (The saved-searches idea from v1.4.5 was removed; it was not what was asked for.)
@@ -1263,7 +1264,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.6'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.7'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2458,7 +2459,7 @@ async function saveAdd(e) {
 // A mini library under each keyword box in Settings. Kept in this browser only. After you stop editing a box, a bar asks whether to
 // save the list; each saved list shows its date and time, starts as Untitled and can be renamed.
 const KW_LIB_KEY = 'jobsearch.keywordLibs';
-const kwLib = { data: {}, editing: '', declined: new Set() };
+const kwLib = { data: {}, editing: '', confirming: '', declined: new Set() };
 function loadKwLib() { try { const o = JSON.parse(localStorage.getItem(KW_LIB_KEY) || '{}'); kwLib.data = o && typeof o === 'object' ? o : {}; } catch { kwLib.data = {}; } }
 function saveKwLib() { try { localStorage.setItem(KW_LIB_KEY, JSON.stringify(kwLib.data)); } catch { /* storage blocked */ } }
 const kwItems = f => (Array.isArray(kwLib.data[f]) ? kwLib.data[f] : (kwLib.data[f] = []));
@@ -2474,6 +2475,12 @@ function renderKwLib(f) {
         <input id="kwName-${id}" type="text" maxlength="60" value="${esc(x.name || '')}" placeholder="Untitled" autocomplete="off">
         <button type="button" class="btn btn-small btn-primary" data-kw-savename="${id}">Save name</button>
         <button type="button" class="btn btn-small" data-kw-cancel="1">Cancel</button></div></li>`;
+    }
+    if (kwLib.confirming === x.id) {
+      return `<li class="lib-item"><div class="save-ask" role="alertdialog" aria-label="Confirm delete">
+        <p>Are you sure you want to delete “${esc(x.name || 'Untitled')}”, saved ${esc(kwWhen(x.savedAt))}?</p>
+        <button type="button" class="btn btn-small btn-primary" data-kw-yes="${id}">Yes, delete</button>
+        <button type="button" class="btn btn-small" data-kw-keep="1">Keep it</button></div></li>`;
     }
     return `<li class="lib-item">
       <p class="lib-name${x.name ? '' : ' is-untitled'}">${esc(x.name || 'Untitled')}</p>
@@ -2520,7 +2527,7 @@ function bindKwLibs() {
     box.addEventListener('click', e => {
       const b = e.target.closest('button');
       if (!b) return;
-      const items = kwItems(f), id = b.dataset.kwUse || b.dataset.kwRename || b.dataset.kwDelete;
+      const items = kwItems(f), id = b.dataset.kwUse || b.dataset.kwRename || b.dataset.kwDelete || b.dataset.kwYes;
       if (b.dataset.kwAsk === 'save') {
         items.unshift({ id: uid(), name: '', text: kwNorm($(`#set-${f}`).value), savedAt: new Date().toISOString() });
         saveKwLib(); renderKwLib(f); toast('Saved to your library.');
@@ -2532,10 +2539,12 @@ function bindKwLibs() {
       } else if (b.dataset.kwSavename) { saveKwName(f, b.dataset.kwSavename); }
       else if (b.dataset.kwRename) { kwLib.editing = id; renderKwLib(f); }
       else if (b.dataset.kwCancel) { kwLib.editing = ''; renderKwLib(f); }
-      else if (b.dataset.kwDelete) { kwLib.data[f] = items.filter(i => i.id !== id); saveKwLib(); renderKwLib(f); toast('Removed from your library.'); }
+      else if (b.dataset.kwDelete) { kwLib.confirming = id; renderKwLib(f); const yes = box.querySelector('[data-kw-yes]'); if (yes) yes.focus(); }
+      else if (b.dataset.kwKeep) { const was = kwLib.confirming; kwLib.confirming = ''; renderKwLib(f); const again = box.querySelector(`[data-kw-delete="${was}"]`); if (again) again.focus(); }
+      else if (b.dataset.kwYes) { kwLib.confirming = ''; kwLib.data[f] = items.filter(i => i.id !== id); saveKwLib(); renderKwLib(f); toast('Removed from your library.'); }
     });
     box.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && kwLib.editing) { kwLib.editing = ''; renderKwLib(f); }
+      if (e.key === 'Escape' && (kwLib.editing || kwLib.confirming)) { kwLib.editing = ''; kwLib.confirming = ''; renderKwLib(f); }
       else if (e.key === 'Enter' && e.target.closest('[data-kw-form]')) { e.preventDefault(); saveKwName(f, e.target.closest('[data-kw-form]').dataset.kwForm); }
     });
   });
