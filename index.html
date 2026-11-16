@@ -80,6 +80,8 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.5 adds saved searches under the Job Feed search box: after you change a search you are asked whether to save it, each saved
+  search shows the date and time and starts as Untitled until you rename it, and Search re-runs it with its boards and filters.
   v1.4.4 adds a show/hide (eye) button and a Copy button to the AI access code field in Settings.
   v1.4.3 shows the live board buttons as logo tiles in a grid on phones, where the name buttons would stack like a list.
   v1.4.2 adds two more free live boards: The Muse and Hacker News "Who is hiring".
@@ -478,6 +480,21 @@ legend{font-weight:600;padding:0 .3rem}
   background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--text);font-weight:600;line-height:1.2}
 @media (hover:hover){ .src-chip:hover span{background:linear-gradient(180deg,var(--tint) 0%,var(--accent-soft) 100%)} }
 .src-chip input:checked + span{background:var(--text);border-color:var(--text);color:var(--bg)}
+.search-lib{margin:.6rem 0 .2rem}
+.save-ask{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .6rem;padding:.6rem .8rem;margin-bottom:.6rem;border:1px solid var(--accent-line,var(--border));border-radius:14px;background:var(--accent-soft)}
+.save-ask[hidden]{display:none}
+.save-ask p{margin:0;flex:1 1 14rem;overflow-wrap:anywhere}
+.lib-details{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:.2rem .8rem}
+.lib-details>summary{min-height:44px;display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:600}
+.lib-count{display:inline-block;min-width:1.5rem;padding:0 .45rem;border-radius:999px;background:var(--tint);border:1px solid var(--border);text-align:center;font-size:.85rem}
+.lib-list{list-style:none;margin:.3rem 0 .6rem;padding:0;display:grid;gap:.5rem}
+.lib-item{border:1px solid var(--border);border-radius:12px;padding:.6rem .7rem;background:var(--field)}
+.lib-name{font-weight:700;margin:0;overflow-wrap:anywhere}
+.lib-name.is-untitled{font-style:italic;font-weight:600}
+.lib-meta{margin:.15rem 0 0;font-size:.9rem;color:var(--muted,inherit);overflow-wrap:anywhere}
+.lib-actions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+.lib-edit{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.lib-edit input{flex:1 1 10rem;min-width:0}
 .code-row{display:flex;gap:.5rem;align-items:stretch}
 .code-row input{flex:1 1 auto;min-width:0}
 .code-btn{flex:0 0 auto;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
@@ -783,6 +800,14 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       </div>
       <p id="feedCount" class="feed-count" aria-live="polite"></p>
     </div>
+    <section id="searchLib" class="search-lib" aria-label="Saved searches">
+      <div id="saveAsk" class="save-ask" role="status" aria-live="polite" hidden></div>
+      <details id="libDetails" class="lib-details">
+        <summary>Saved searches <span id="libCount" class="lib-count">0</span></summary>
+        <p class="hint" id="libEmpty">Nothing saved yet. Search for something and you will be asked if you want to keep it here.</p>
+        <ul id="libList" class="lib-list"></ul>
+      </details>
+    </section>
     <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
       <p class="row"><button type="button" class="btn btn-small" id="craigslistBtn">Search Craigslist<span class="sr-only"> (opens in a new tab)</span></button> <span class="hint">Opens Craigslist jobs for your search words. Paste any good find into the tracker.</span></p>
       <fieldset id="liveSources" class="live-sources" hidden>
@@ -1243,7 +1268,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.4'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.5'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3123,6 +3148,133 @@ async function restoreFeedItem(dismissedId, btn) {
   } catch (e) { toast(e.message); }
 }
 
+// --- Saved searches (v1.4.5) ---------------------------------
+// A small library under the search box. Kept in this browser only. After a pause in changing the search or
+// its boards and filters, a bar asks whether to save (or update) it.
+const LIB_KEY = 'jobsearch.savedSearches';
+const libState = { items: [], editing: '', declined: new Set() };
+function loadLib() {
+  try { const a = JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); libState.items = Array.isArray(a) ? a.filter(x => x && x.id && typeof x.q === 'string') : []; } catch { libState.items = []; }
+}
+function saveLib() { try { localStorage.setItem(LIB_KEY, JSON.stringify(libState.items.slice(0, 60))); } catch { /* storage blocked */ } }
+function currentSearch() {
+  const ui = state.feedUi;
+  return { q: String($('#ff-q').value || '').trim(), groups: state.live.groups.slice(), sort: ui.sort || 'new', posted: ui.posted || '', remote: !!ui.remote, pay: !!ui.pay };
+}
+function searchSig(x) { return JSON.stringify([x.q.toLowerCase(), (x.groups || []).slice().sort(), x.sort || 'new', x.posted || '', !!x.remote, !!x.pay]); }
+const libWhen = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); };
+const BOARD_NAMES = { jobicy: 'Jobicy', wwr: 'We Work Remotely', remoteok: 'Remote OK', arbeitnow: 'Arbeitnow', nomads: 'Working Nomads', muse: 'The Muse', hn: 'Hacker News', remotive: 'Remotive', boards: 'Company boards' };
+function libSummary(x) {
+  const bits = [];
+  if (state.settings.liveUrl) bits.push((x.groups || []).length === LIVE_GROUPS.length ? 'All boards' : (x.groups || []).map(g => BOARD_NAMES[g] || g).join(', ') || 'No boards');
+  if (x.sort && x.sort !== 'new') bits.push('sorted ' + x.sort);
+  if (x.posted) bits.push('posted ' + x.posted);
+  if (x.remote) bits.push('remote only');
+  if (x.pay) bits.push('pay listed');
+  return bits.join(' · ');
+}
+function renderLib() {
+  const list = $('#libList');
+  $('#libCount').textContent = String(libState.items.length);
+  $('#libEmpty').hidden = libState.items.length > 0;
+  list.innerHTML = libState.items.map(x => {
+    const when = libWhen(x.savedAt);
+    if (libState.editing === x.id) {
+      return `<li class="lib-item" data-lib="${esc(x.id)}"><form class="lib-edit" data-lib-form="${esc(x.id)}">
+        <label class="sr-only" for="libName-${esc(x.id)}">Name for this search</label>
+        <input id="libName-${esc(x.id)}" class="lib-name-input" type="text" maxlength="60" value="${esc(x.name || '')}" placeholder="Untitled" autocomplete="off">
+        <button type="submit" class="btn btn-small btn-primary">Save name</button>
+        <button type="button" class="btn btn-small" data-lib-cancel="1">Cancel</button></form></li>`;
+    }
+    return `<li class="lib-item" data-lib="${esc(x.id)}">
+      <p class="lib-name${x.name ? '' : ' is-untitled'}">${esc(x.name || 'Untitled')}</p>
+      <p class="lib-meta">“${esc(x.q)}”${libSummary(x) ? ' · ' + esc(libSummary(x)) : ''}</p>
+      <p class="lib-meta">Saved ${esc(when)}</p>
+      <div class="lib-actions">
+        <button type="button" class="btn btn-small btn-primary" data-lib-run="${esc(x.id)}">Search</button>
+        <button type="button" class="btn btn-small" data-lib-rename="${esc(x.id)}">Rename</button>
+        <button type="button" class="btn btn-small" data-lib-delete="${esc(x.id)}">Delete</button>
+      </div></li>`;
+  }).join('');
+  if (libState.editing) { const inp = list.querySelector('.lib-name-input'); if (inp) { inp.focus(); inp.select(); } }
+}
+function hideSaveAsk() { const box = $('#saveAsk'); box.hidden = true; box.innerHTML = ''; }
+function showSaveAsk() {
+  const cur = currentSearch();
+  if (!cur.q) return hideSaveAsk();
+  const sig = searchSig(cur);
+  if (libState.items.some(x => searchSig(x) === sig) || libState.declined.has(sig)) return hideSaveAsk();
+  const same = libState.items.find(x => x.q.toLowerCase() === cur.q.toLowerCase());
+  const box = $('#saveAsk');
+  box.innerHTML = same
+    ? `<p>You changed the boards or filters for “${esc(cur.q)}”. Update “${esc(same.name || 'Untitled')}” in your library?</p>
+       <button type="button" class="btn btn-small btn-primary" data-ask="update">Update</button>
+       <button type="button" class="btn btn-small" data-ask="new">Save as new</button>
+       <button type="button" class="btn btn-small" data-ask="no">Not now</button>`
+    : `<p>Save “${esc(cur.q)}” to your library?</p>
+       <button type="button" class="btn btn-small btn-primary" data-ask="new">Save</button>
+       <button type="button" class="btn btn-small" data-ask="no">Not now</button>`;
+  box.hidden = false;
+}
+const scheduleSaveAsk = debounce(showSaveAsk, 1800);
+function answerSaveAsk(kind) {
+  const cur = currentSearch(), sig = searchSig(cur);
+  if (kind === 'no') libState.declined.add(sig);
+  else {
+    const now = new Date().toISOString();
+    const same = libState.items.find(x => x.q.toLowerCase() === cur.q.toLowerCase());
+    if (kind === 'update' && same) Object.assign(same, cur, { q: cur.q, savedAt: now });
+    else libState.items.unshift(Object.assign({ id: uid(), name: '', savedAt: now }, cur));
+    saveLib(); renderLib(); toast('Saved to your library.');
+  }
+  hideSaveAsk();
+}
+function runSavedSearch(id) {
+  const x = libState.items.find(i => i.id === id);
+  if (!x) return;
+  const ff = $('#feedFilters');
+  ff.elements.q.value = x.q;
+  Object.assign(state.feedUi, { q: x.q, sort: x.sort || 'new', posted: x.posted || '', remote: !!x.remote, pay: !!x.pay, limit: pageSize() });
+  state.live.groups = LIVE_GROUPS.filter(g => (x.groups || []).includes(g));
+  saveGroups(); renderLiveSources(); syncFeedControls();
+  hideSaveAsk();
+  if (liveMode()) searchLive(); else renderFeed();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function bindLib() {
+  loadLib(); renderLib();
+  const lib = $('#searchLib');
+  lib.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.ask) return answerSaveAsk(b.dataset.ask);
+    if (b.dataset.libRun) return runSavedSearch(b.dataset.libRun);
+    if (b.dataset.libRename) { libState.editing = b.dataset.libRename; renderLib(); return; }
+    if (b.dataset.libCancel) { libState.editing = ''; renderLib(); return; }
+    if (b.dataset.libDelete) {
+      libState.items = libState.items.filter(i => i.id !== b.dataset.libDelete);
+      saveLib(); renderLib(); toast('Removed from your library.');
+    }
+  });
+  lib.addEventListener('submit', e => {
+    const f = e.target.closest('[data-lib-form]');
+    if (!f) return;
+    e.preventDefault();
+    const x = libState.items.find(i => i.id === f.dataset.libForm);
+    if (x) x.name = f.querySelector('input').value.trim().slice(0, 60);
+    libState.editing = ''; saveLib(); renderLib();
+    const again = lib.querySelector(`[data-lib-rename="${x ? x.id : ''}"]`); if (again) again.focus();
+  });
+  lib.addEventListener('keydown', e => { if (e.key === 'Escape' && libState.editing) { libState.editing = ''; renderLib(); } });
+  // Any change to the search, boards or filters starts the wait before the save question
+  const changed = e => {
+    if (e.target.closest('#searchLib') || !(e.target.closest('#feedFilters') || e.target.id === 'ff-q')) return;
+    hideSaveAsk(); scheduleSaveAsk();
+  };
+  $('#view-feed').addEventListener('input', changed);
+  $('#view-feed').addEventListener('change', changed);
+  $('#feedFilters').addEventListener('submit', () => { hideSaveAsk(); scheduleSaveAsk(); });
+}
 function bindFeed() {
   const ff = $('#feedFilters');
   ff.addEventListener('submit', e => { e.preventDefault(); searchLive(); });
@@ -3150,6 +3302,7 @@ function bindFeed() {
   const typeLive = debounce(onType, 600), typeSaved = debounce(onType, 200);
   ff.elements.q.addEventListener('input', () => (liveMode() ? typeLive() : typeSaved()));
   state.live.groups = loadGroups();
+  bindLib();
   syncHeaderHeight();
   window.addEventListener('resize', debounce(syncHeaderHeight, 150));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderHeight);
