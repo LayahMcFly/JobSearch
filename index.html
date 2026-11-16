@@ -80,6 +80,8 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.1 adds a Search Craigslist button to the Job Feed (Craigslist has no free API, so it opens their job search in a new tab)
+  and a Craigslist city setting (default valdosta).
   v1.4.0 adds three free live boards: Remote OK, Arbeitnow and Working Nomads (each has its own toggle button).
   v1.3.2 tints Read cards with a dimmed shade of the chosen color theme instead of fading them toward white.
   v1.3.1 marks a job as Read once you open it (the card dims and shows a Read badge), and the reading panel now shows
@@ -762,6 +764,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <p id="feedCount" class="feed-count" aria-live="polite"></p>
     </div>
     <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
+      <p class="row"><button type="button" class="btn btn-small" id="craigslistBtn">Search Craigslist<span class="sr-only"> (opens in a new tab)</span></button> <span class="hint">Opens Craigslist jobs for your search words. Paste any good find into the tracker.</span></p>
       <fieldset id="liveSources" class="live-sources" hidden>
         <legend>Job boards to search live</legend>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="jobicy"><span>Jobicy</span></label>
@@ -968,6 +971,9 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <label for="set-liveUrl">Live search address</label>
       <input id="set-liveUrl" name="liveUrl" type="url" spellcheck="false" autocapitalize="off" placeholder="https://job-search-live.your-name.workers.dev" aria-describedby="set-liveUrl-hint">
       <p class="hint" id="set-liveUrl-hint">The web address of your Cloudflare Worker. Leave it blank to search only the saved feed. Setup steps are in worker/README.md.</p>
+      <label for="set-craigslistCity">Craigslist city</label>
+      <input id="set-craigslistCity" name="craigslistCity" type="text" spellcheck="false" autocapitalize="off" placeholder="valdosta" aria-describedby="set-craigslistCity-hint">
+      <p class="hint" id="set-craigslistCity-hint">The Search Craigslist button in the Job Feed opens this city's job listings. Use the part before .craigslist.org, such as valdosta or atlanta.</p>
       <div class="row"><button type="submit" class="btn btn-primary">Save settings</button></div>
     </form>
 
@@ -1208,7 +1214,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.0'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.1'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1619,7 +1625,7 @@ function createJob(values) {
 
 const DEFAULT_FEED_URL = 'jobs-feed.json';
 const DEFAULT_SETTINGS = {
-  id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, liveUrl: '', sampleSeeded: false,
+  id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, liveUrl: '', craigslistCity: 'valdosta', sampleSeeded: false,
   // v1.1.10: location filter for the Job Feed. Hide list wins unless the location also matches the accept list.
   locationAccept: ['United States', 'Anywhere', 'Worldwide'], locationHide: ['Canada'],
   // Phase 5: AI drafting (main switch Off by default; the three per-draft switches only matter while it is On)
@@ -1640,6 +1646,7 @@ function normalizeSettings(raw) {
   s.locationHide = cleanList(s.locationHide);
   s.feedUrl = String(s.feedUrl || '').trim() || DEFAULT_FEED_URL;
   s.liveUrl = String(s.liveUrl || '').trim().replace(/\/+$/, '').replace(/\/(health|search)(\?.*)?$/i, '').replace(/\/+$/, ''); // a pasted /health or /search ending is dropped
+  s.craigslistCity = String(s.craigslistCity || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\.craigslist\.org.*$/, '').replace(/[^a-z0-9-]/g, '') || 'valdosta';
   s.sampleSeeded = !!s.sampleSeeded;
   s.aiDrafting = s.aiDrafting === true;
   ['aiResume', 'aiAnswers', 'aiEmail'].forEach(k => { s[k] = s[k] !== false; });
@@ -2409,6 +2416,7 @@ function renderSettings() {
     f.elements.locationHide.value = state.settings.locationHide.join('\n');
     f.elements.feedUrl.value = state.settings.feedUrl;
     f.elements.liveUrl.value = state.settings.liveUrl;
+    f.elements.craigslistCity.value = state.settings.craigslistCity;
   }
   const verified = state.facts.filter(f => f.verified).length;
   $('#jobCountLine').textContent = `This browser holds ${plural(state.jobs.length, 'job')} and ${plural(state.facts.length, 'fact')} (${verified} verified).`;
@@ -2433,7 +2441,8 @@ async function saveSettingsForm(e) {
     locationAccept: f.elements.locationAccept.value,
     locationHide: f.elements.locationHide.value,
     feedUrl: f.elements.feedUrl.value,
-    liveUrl: f.elements.liveUrl.value
+    liveUrl: f.elements.liveUrl.value,
+    craigslistCity: f.elements.craigslistCity.value
   }));
   if (state.settings.feedUrl !== oldFeedUrl) Object.assign(state.feed, { data: null, loaded: false, error: '' });
   try {
@@ -3089,6 +3098,10 @@ function bindFeed() {
   const ff = $('#feedFilters');
   ff.addEventListener('submit', e => { e.preventDefault(); searchLive(); });
   $('#feedDialog').addEventListener('close', refreshReadMarks);
+  $('#craigslistBtn').addEventListener('click', () => {
+    const q = encodeURIComponent(String($('#ff-q').value || '').trim());
+    window.open(`https://${state.settings.craigslistCity}.craigslist.org/search/jjj${q ? '?query=' + q : ''}`, '_blank', 'noopener,noreferrer');
+  });
   $('#view-feed').addEventListener('click', e => {
     if (e.target.closest('#browseSavedBtn')) browseSaved(true);
     else if (e.target.closest('#backLiveBtn')) browseSaved(false);
