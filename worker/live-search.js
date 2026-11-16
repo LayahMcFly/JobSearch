@@ -248,6 +248,60 @@ async function readWorkingNomads(ws, ctx) {
     }));
 }
 
+// The Muse: free public list, no key. It has no keyword search, so the newest Flexible / Remote postings
+// (5 pages of 20) are read and matched here.
+async function readMuse(ws, ctx) {
+  const src = { type: 'muse', label: 'The Muse', name: 'The Muse (live)' };
+  const pages = await Promise.allSettled([1, 2, 3, 4, 5].map(n =>
+    getCached(`https://www.themuse.com/api/public/jobs?page=${n}&location=${encodeURIComponent('Flexible / Remote')}`, 'json', ctx)));
+  const ok = pages.filter(p => p.status === 'fulfilled' && Array.isArray(p.value?.results));
+  if (!ok.length) throw new Error(pages[0]?.reason?.message || 'Unexpected response');
+  const names = list => (Array.isArray(list) ? list : []).map(x => x && x.name).filter(Boolean);
+  return ok.flatMap(p => p.value.results)
+    .filter(j => j && j.name && j.refs?.landing_page)
+    .map(j => {
+      const loc = names(j.locations).join(', ');
+      const head = [j.name, j.company?.name, loc, names(j.categories).join(' '), names(j.levels).join(' ')];
+      return { j, loc, top: hits(ws, ...head), any: hits(ws, ...head, j.contents || '') };
+    })
+    .filter(x => x.any)
+    .map(({ j, loc, top }) => job(src, {
+      rank: top ? 0 : 1,
+      externalId: String(j.id), title: decode(j.name), company: decode(j.company?.name || ''), link: j.refs.landing_page,
+      location: loc, remoteType: /flexible|remote/i.test(loc) ? 'Remote' : '', datePosted: isoDate(j.publication_date),
+      description: toText(j.contents || '')
+    }));
+}
+
+// Hacker News "Who is hiring": the newest monthly thread, searched through the free Algolia HN search.
+// Each top-level comment is one posting. The first line usually reads "Company | Role | Location | Remote".
+async function readHackerNews(ws, ctx) {
+  const src = { type: 'hn', label: 'Hacker News: Who is hiring', name: 'Hacker News: Who is hiring (live)' };
+  const threads = await getCached('https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10', 'json', ctx);
+  const thread = (threads.hits || []).find(h => /who is hiring/i.test(h.title || ''));
+  if (!thread) throw new Error('Could not find this month\'s thread');
+  const q = encodeURIComponent(ws.join(' '));
+  const data = await getCached(`https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${thread.objectID}&hitsPerPage=200${ws.length ? '&query=' + q : ''}`, 'json', ctx);
+  if (!Array.isArray(data.hits)) throw new Error('Unexpected response');
+  return data.hits.filter(h => String(h.parent_id) === String(thread.objectID) && h.comment_text)
+    .map(h => {
+      const text = toText(String(h.comment_text).replace(/<p>/gi, '</p>')); // HN separates paragraphs with a bare <p>
+      const first = text.split('\n')[0];
+      const parts = first.split('|').map(x => clean(x));
+      const multi = parts.length >= 3;
+      const head = multi ? parts.join(' ') : first;
+      return { h, text, parts, multi, top: hits(ws, head), any: hits(ws, text) };
+    })
+    .filter(x => x.any)
+    .map(({ h, text, parts, multi, top }) => job(src, {
+      rank: top ? 0 : 1,
+      externalId: String(h.objectID), title: multi ? (parts[1] || parts[0]) : text.split('\n')[0].slice(0, 120), company: multi ? parts[0] : '',
+      link: `https://news.ycombinator.com/item?id=${h.objectID}`,
+      location: multi ? parts.slice(2).join(' | ') : '', remoteType: /\bremote\b/i.test(text.split('\n')[0]) ? 'Remote' : '',
+      datePosted: isoDate(h.created_at), description: text
+    }));
+}
+
 // Remotive asks for 4 requests a day, so live search never calls it.
 // It searches the jobs the 3-hour GitHub run already saved from Remotive.
 async function readRemotiveSaved(ws, ctx) {
@@ -261,7 +315,7 @@ async function search(q, ctx, only) {
   const ws = words(q);
   const log = [];
   const tasks = [];
-  const want = only ? only.split(',').map(x => x.trim()) : null; // groups: jobicy, wwr, remoteok, arbeitnow, nomads, remotive, boards
+  const want = only ? only.split(',').map(x => x.trim()) : null; // groups: jobicy, wwr, remoteok, arbeitnow, nomads, muse, hn, remotive, boards
   const has = g => !want || want.includes(g);
   const run = (name, fn) => tasks.push(fn().then(
     jobs => { log.push({ name, status: 'ok', count: jobs.length }); return jobs; },
@@ -273,6 +327,8 @@ async function search(q, ctx, only) {
   if (has('remoteok')) run('Remote OK', () => readRemoteOk(ws, ctx));
   if (has('arbeitnow')) run('Arbeitnow', () => readArbeitnow(ws, ctx));
   if (has('nomads')) run('Working Nomads', () => readWorkingNomads(ws, ctx));
+  if (has('muse')) run('The Muse', () => readMuse(ws, ctx));
+  if (has('hn')) run('Hacker News: Who is hiring', () => readHackerNews(ws, ctx));
   if (has('remotive')) run('Remotive (saved)', () => readRemotiveSaved(ws, ctx));
 
   let boards = { greenhouse: [], lever: [] };

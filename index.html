@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.2 adds two more free live boards: The Muse and Hacker News "Who is hiring".
   v1.4.1 adds a Search Craigslist button to the Job Feed (Craigslist has no free API, so it opens their job search in a new tab)
   and a Craigslist city setting (default valdosta).
   v1.4.0 adds three free live boards: Remote OK, Arbeitnow and Working Nomads (each has its own toggle button).
@@ -772,6 +773,8 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
         <label class="src-chip"><input type="checkbox" name="lsrc" value="remoteok"><span>Remote OK</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="arbeitnow"><span>Arbeitnow</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="nomads"><span>Working Nomads</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="muse"><span>The Muse</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="hn"><span>Hacker News: Who is hiring</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="remotive"><span>Remotive (saved jobs)</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="boards"><span>Company boards (Greenhouse, Lever)</span></label>
       </fieldset>
@@ -1214,7 +1217,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.1'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.2'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2709,8 +2712,8 @@ function classifyFeed() {
 
 // --- Live search (v1.2.0) -----------------------------------
 const LIVE_TIMEOUT_MS = 25000;
-const LIVE_GROUPS = ['jobicy', 'wwr', 'remoteok', 'arbeitnow', 'nomads', 'remotive', 'boards'];
-const LIVE_GROUPS_OLD = ['jobicy', 'wwr', 'remotive', 'boards']; // boards that existed before v1.4.0; newer ones start switched on
+const LIVE_GROUPS = ['jobicy', 'wwr', 'remoteok', 'arbeitnow', 'nomads', 'muse', 'hn', 'remotive', 'boards'];
+const LIVE_GROUPS_OLD = ['jobicy', 'wwr', 'remotive', 'boards']; // boards that existed before v1.4.0; newer ones start switched on until you save a choice
 const LIVE_PAGE_SIZE = 20;
 const pageSize = () => (liveMode() ? LIVE_PAGE_SIZE : FEED_PAGE_SIZE);
 function loadGroups() {
@@ -2765,7 +2768,7 @@ async function searchLive() {
       L.sources.push(...(Array.isArray(data.sources) ? data.sources : []));
       renderFeed(); // results appear as each group of boards answers
     } catch (e) {
-      if (mySeq === L.seq) L.sources.push({ name: { jobicy: 'Jobicy', wwr: 'We Work Remotely', remoteok: 'Remote OK', arbeitnow: 'Arbeitnow', nomads: 'Working Nomads', remotive: 'Remotive (saved)', boards: 'Greenhouse and Lever' }[g], status: 'failed', message: e.name === 'AbortError' ? 'took too long' : String(e.message || e) });
+      if (mySeq === L.seq) L.sources.push({ name: { jobicy: 'Jobicy', wwr: 'We Work Remotely', remoteok: 'Remote OK', arbeitnow: 'Arbeitnow', nomads: 'Working Nomads', muse: 'The Muse', hn: 'Hacker News: Who is hiring', remotive: 'Remotive (saved)', boards: 'Greenhouse and Lever' }[g], status: 'failed', message: e.name === 'AbortError' ? 'took too long' : String(e.message || e) });
       lastError = e.name === 'AbortError' ? 'The live search took too long.' : (e.name === 'TypeError' ? 'The live search could not be reached. Check the address in Settings.' : 'The live search answered with ' + e.message + '.');
     }
   }));
