@@ -194,21 +194,23 @@ async function readRemotiveSaved(ws, ctx) {
 }
 
 /* ---------- search ---------- */
-async function search(q, ctx) {
+async function search(q, ctx, only) {
   const ws = words(q);
   const log = [];
   const tasks = [];
+  const want = only ? only.split(',').map(x => x.trim()) : null; // groups: jobicy, wwr, remotive, boards
+  const has = g => !want || want.includes(g);
   const run = (name, fn) => tasks.push(fn().then(
     jobs => { log.push({ name, status: 'ok', count: jobs.length }); return jobs; },
     e => { log.push({ name, status: 'failed', message: String(e.message || e) }); return []; }
   ));
 
-  run('Jobicy', () => readJobicy(ws, ctx));
-  for (const f of WWR_FEEDS) run(f.name, () => readWwr(f, ws, ctx));
-  run('Remotive (saved)', () => readRemotiveSaved(ws, ctx));
+  if (has('jobicy')) run('Jobicy', () => readJobicy(ws, ctx));
+  if (has('wwr')) for (const f of WWR_FEEDS) run(f.name, () => readWwr(f, ws, ctx));
+  if (has('remotive')) run('Remotive (saved)', () => readRemotiveSaved(ws, ctx));
 
   let boards = { greenhouse: [], lever: [] };
-  try {
+  if (has('boards')) try {
     const cfg = await getCached(new URL('job-sources.json', SITE_URL).href, 'json', ctx);
     boards = { greenhouse: cfg.greenhouse?.boards || cfg.greenhouse || [], lever: cfg.lever?.boards || cfg.lever || [] };
   } catch (e) { log.push({ name: 'Company list (job-sources.json)', status: 'failed', message: String(e.message || e) }); }
@@ -251,7 +253,7 @@ export default {
     if (url.pathname === '/search') {
       if (origin && !allowed) return reply({ ok: false, error: 'This site is not allowed to use the search.' }, 403);
       const q = (url.searchParams.get('q') || '').slice(0, 120);
-      try { return reply(await search(q, ctx)); }
+      try { return reply(await search(q, ctx, (url.searchParams.get('only') || '').slice(0, 60))); }
       catch (e) { return reply({ ok: false, error: String(e.message || e) }, 500); }
     }
     return reply({ ok: false, error: 'Not found. Try /health or /search?q=copywriter' }, 404);
