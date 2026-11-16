@@ -80,6 +80,8 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.3.0 adds sort (newest first by default) and filters (posted within, remote only, shows pay) to the Job Feed, and a
+  reading panel: press a job's title, Read button or description to read the full posting before adding it to the tracker.
   v1.2.7 shows the live job boards as toggle buttons (check mark when on) that match the tab buttons.
   v1.2.6 hides the Source menu when live search is on (the board checkboxes replace it).
   v1.2.5 lets you pick which job boards a live search reads, loads results 20 at a time (Load more button or
@@ -423,6 +425,13 @@ legend{font-weight:600;padding:0 .3rem}
   box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.3rem}
 .feed-card.is-hidden{border-style:dashed;background:var(--tint)}
 .feed-card h3{margin:0;font-size:1.1rem}
+.feed-title-btn{all:unset;cursor:pointer;color:var(--accent-text);text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}
+.feed-title-btn:focus-visible{outline:3px solid var(--accent-text);outline-offset:2px;border-radius:4px}
+.feed-snippet[data-feed-open]{cursor:pointer}
+.feed-dlg-meta{margin:.2rem 0;color:var(--muted,inherit)}
+.feed-dlg-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.9rem 0}
+.feed-dlg-desc{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;margin-top:.5rem}
+#feedDialog mark,.feed-card mark{background:rgba(255,196,0,.45);color:inherit;border-radius:3px;padding:0 .12em}
 .feed-card p{margin:0}
 .feed-company{font-weight:600}
 .feed-meta{color:var(--muted);font-size:.92rem}
@@ -451,6 +460,10 @@ legend{font-weight:600;padding:0 .3rem}
   background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--text);font-weight:600;line-height:1.2}
 @media (hover:hover){ .src-chip:hover span{background:linear-gradient(180deg,var(--tint) 0%,var(--accent-soft) 100%)} }
 .src-chip input:checked + span{background:var(--text);border-color:var(--text);color:var(--bg)}
+.chip-group{border:0;padding:0;margin:.6rem 0 0;display:flex;flex-wrap:wrap;gap:.5rem}
+.chip-group legend{padding:0;margin:0 0 .4rem;font-weight:600;float:left;width:100%}
+.filter-details{grid-column:1/-1}
+.filter-details>summary{font-weight:600;cursor:pointer;padding:.3rem 0}
 .src-chip input:checked + span::before{content:"\2713"}
 .src-chip input:focus-visible + span{outline:3px solid var(--accent-text);outline-offset:2px}
 .feed-live{margin:.4rem 0}
@@ -743,6 +756,25 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
         <label class="src-chip"><input type="checkbox" name="lsrc" value="remotive"><span>Remotive (saved jobs)</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="boards"><span>Company boards (Greenhouse, Lever)</span></label>
       </fieldset>
+      <details class="filter-details" open>
+        <summary>Sort and filter</summary>
+        <fieldset class="chip-group"><legend>Sort by</legend>
+          <label class="src-chip"><input type="radio" name="sort" value="new"><span>Newest first</span></label>
+          <label class="src-chip"><input type="radio" name="sort" value="old"><span>Oldest first</span></label>
+          <label class="src-chip"><input type="radio" name="sort" value="match"><span>Best match</span></label>
+          <label class="src-chip"><input type="radio" name="sort" value="company"><span>Company A to Z</span></label>
+        </fieldset>
+        <fieldset class="chip-group"><legend>Posted</legend>
+          <label class="src-chip"><input type="radio" name="posted" value=""><span>Any time</span></label>
+          <label class="src-chip"><input type="radio" name="posted" value="1"><span>Last 24 hours</span></label>
+          <label class="src-chip"><input type="radio" name="posted" value="7"><span>Last 7 days</span></label>
+          <label class="src-chip"><input type="radio" name="posted" value="30"><span>Last 30 days</span></label>
+        </fieldset>
+        <fieldset class="chip-group"><legend>Only show</legend>
+          <label class="src-chip"><input type="checkbox" name="onlyRemote"><span>Remote</span></label>
+          <label class="src-chip"><input type="checkbox" name="onlyPay"><span>Lists pay</span></label>
+        </fieldset>
+      </details>
       <div id="ffSourceWrap"><label for="ff-source">Source</label><select id="ff-source" name="source"></select></div>
       <div><label class="check" for="ff-hidden"><input type="checkbox" id="ff-hidden" name="showHidden"> Show hidden jobs</label></div>
     </form>
@@ -1036,6 +1068,14 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
 <!-- ============================================================
      JOB DETAIL DIALOG
      ============================================================ -->
+<dialog id="feedDialog" class="panel" aria-labelledby="feedDlgTitle">
+  <div class="panel-head">
+    <h2 id="feedDlgTitle">Job</h2>
+    <button type="button" class="icon-btn" data-close aria-label="Close job">&times;</button>
+  </div>
+  <div class="panel-body" id="feedDlgBody"></div>
+</dialog>
+
 <dialog id="detailDialog" class="panel" aria-labelledby="detailTitle">
   <form id="detailForm">
     <div class="panel-head">
@@ -1152,7 +1192,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.2.7'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.3.0'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1627,7 +1667,7 @@ const state = {
   dismissed: [],   // records from COLLECTIONS.dismissed
   pasted: [],      // records from COLLECTIONS.pasted
   feed: { data: null, loading: false, loaded: false, error: '' },
-  feedUi: { q: '', source: '', showHidden: false, showLocation: false, limit: 50 },
+  feedUi: { q: '', source: '', showHidden: false, showLocation: false, limit: 50, sort: 'new', posted: '', remote: false, pay: false },
   live: { groups: [], active: false, loading: false, browseSaved: false, seq: 0, q: '', jobs: [], sources: [], fetchedAt: '', error: '' }, // Search live results (v1.2.0)
   feedIndex: new Map(),
   // My Profile and Facts Bank (Phase 3)
@@ -2677,6 +2717,31 @@ function renderLiveStatus() {
   el.innerHTML = html;
 }
 
+// Sort and filters from the Sort and filter box
+function feedDate(i) { return String(i.datePosted || (i.pastedAt ? toDateStr(new Date(i.pastedAt)) : '')).slice(0, 10); }
+function applyFeedView(list, ui) {
+  let out = list;
+  if (ui.posted) {
+    const cut = toDateStr(new Date(Date.now() - Number(ui.posted) * 86400000));
+    out = out.filter(i => feedDate(i) && feedDate(i) >= cut);
+  }
+  if (ui.remote) out = out.filter(i => i.remoteType === 'Remote');
+  if (ui.pay) out = out.filter(i => String(i.payRange || '').trim());
+  const d = i => feedDate(i);
+  const newest = (a, b) => (d(b) > d(a) ? 1 : d(b) < d(a) ? -1 : 0);
+  const oldest = (a, b) => (!d(a) ? 1 : !d(b) ? -1 : (d(a) > d(b) ? 1 : d(a) < d(b) ? -1 : 0)); // jobs with no date go last
+  const by = { new: newest, old: oldest, match: (a, b) => ((a.rank || 0) - (b.rank || 0)) || newest(a, b),
+    company: (a, b) => String(a.company || '').localeCompare(String(b.company || '')) || newest(a, b) };
+  return out.slice().sort(by[ui.sort] || newest);
+}
+function syncFeedControls() {
+  const ff = $('#feedFilters'), ui = state.feedUi;
+  $$('input[name="sort"]', ff).forEach(r => { r.checked = r.value === ui.sort; });
+  $$('input[name="posted"]', ff).forEach(r => { r.checked = r.value === ui.posted; });
+  ff.elements.onlyRemote.checked = ui.remote;
+  ff.elements.onlyPay.checked = ui.pay;
+}
+
 // --- Rendering ----------------------------------------------
 function renderFeedStatus() {
   if (liveMode()) { $('#feedStatus').innerHTML = ''; $('#feedStatus').hidden = true; return; } // saved-feed details only matter when browsing it
@@ -2729,24 +2794,24 @@ function feedCardHtml(i) {
   const snippet = text ? highlightHtml(previewHtml(shownText, 220), words)
     : (i.origin === 'pasted' ? 'Alert emails have no job description. Open the link to read the full posting.' : '');
   const applyHref = safeHref(i.applyLink);
-  let actions = '';
+  let actions = `<button type="button" class="btn btn-small" data-feed-open="${esc(i.id)}">Read<span class="sr-only"> ${who}</span></button>`;
   if (i.hiddenType === 'tracker') {
-    actions = '<span class="feed-note">Already in your tracker.</span>';
+    actions += '<span class="feed-note">Already in your tracker.</span>';
   } else if (i.hiddenType === 'dismissed') {
-    actions = `<button type="button" class="btn btn-small" data-feed-restore="${esc(i.dismissedId)}">Restore<span class="sr-only"> ${who}</span></button>`;
+    actions += `<button type="button" class="btn btn-small" data-feed-restore="${esc(i.dismissedId)}">Restore<span class="sr-only"> ${who}</span></button>`;
   } else {
-    actions = `<button type="button" class="btn btn-primary btn-small" data-feed-add="${esc(i.id)}">Add to Tracker<span class="sr-only">: ${who}</span></button>
+    actions += `<button type="button" class="btn btn-primary btn-small" data-feed-add="${esc(i.id)}">Add to Tracker<span class="sr-only">: ${who}</span></button>
       <button type="button" class="btn btn-small" data-feed-dismiss="${esc(i.id)}">Dismiss<span class="sr-only"> ${who}</span></button>`;
   }
   if (href) actions += `<a class="btn btn-small" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open link<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
   if (applyHref && normLink(applyHref) !== normLink(href)) actions += `<a class="btn btn-small" href="${esc(applyHref)}" target="_blank" rel="noopener noreferrer">Apply<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
   return `<li class="feed-card${i.hidden ? ' is-hidden' : ''}">
-    <h3>${highlightHtml(esc(i.title), words)}</h3>
+    <h3><button type="button" class="feed-title-btn" data-feed-open="${esc(i.id)}">${highlightHtml(esc(i.title), words)}</button></h3>
     <p class="feed-company">${highlightHtml(esc(company), words)}</p>
     ${where ? `<p class="feed-meta">${where}</p>` : ''}
     ${meta ? `<p class="feed-meta">${meta}</p>` : ''}
     ${i.needsCheck ? '<p class="feed-note">Check the title and company. This alert did not use the usual layout.</p>' : ''}
-    ${snippet ? `<p class="feed-snippet">${snippet}</p>` : ''}
+    ${snippet ? `<p class="feed-snippet" data-feed-open="${esc(i.id)}">${snippet}</p>` : ''}
     ${i.descriptionIsSnippet ? '<p class="feed-meta">This source shares only a short part of the description.</p>' : ''}
     ${i.hidden ? `<p class="feed-reason">Hidden: ${esc(i.hidden)}</p>` : ''}
     <div class="feed-actions">${actions}</div>
@@ -2768,8 +2833,8 @@ function renderFeed() {
   ff.elements.showHidden.checked = ui.showHidden;
 
   const q = liveMode() ? '' : ui.q.trim().toLowerCase(); // live results are already matched to the search
-  const matches = all.filter(i => (!ui.source || i.source === ui.source) &&
-    (!q || q.split(/\s+/).every(w => [i.title, i.company, i.location, i.description].join(' ').toLowerCase().includes(w))));
+  const matches = applyFeedView(all.filter(i => (!ui.source || i.source === ui.source) &&
+    (!q || q.split(/\s+/).every(w => [i.title, i.company, i.location, i.description].join(' ').toLowerCase().includes(w)))), ui);
   const visible = matches.filter(i => !i.hidden);
   const counts = { keywords: 0, tracker: 0, dismissed: 0, location: 0 };
   matches.forEach(i => { if (i.hiddenType) counts[i.hiddenType]++; });
@@ -2801,6 +2866,7 @@ function renderFeed() {
   $('#feedMore').innerHTML = left > 0
     ? `<button type="button" class="btn" id="feedMoreBtn">Load more (${left} not shown)</button>` : '';
   renderLiveSources();
+  syncFeedControls();
   watchFeedEnd();
 }
 
@@ -2830,6 +2896,38 @@ function focusFeedCard(pos) {
 }
 function cardPosition(btn) {
   return $$('#feedList > li').findIndex(li => li.contains(btn));
+}
+
+// --- Reading panel ------------------------------------------
+function openFeedJob(id) {
+  const i = state.feedIndex.get(id);
+  if (!i) return;
+  const words = searchWords();
+  const href = safeHref(i.link), applyHref = safeHref(i.applyLink);
+  const who = `${esc(i.title)} at ${esc(i.company || 'this company')}`;
+  const when = i.origin === 'pasted' ? (i.pastedAt ? `Pasted ${formatDate(toDateStr(new Date(i.pastedAt)))}` : 'Pasted')
+    : (i.datePosted ? `Posted ${formatDate(String(i.datePosted).slice(0, 10))}` : '');
+  const meta = [i.location, i.remoteType, i.payRange].filter(Boolean).map(esc).join(' · ');
+  let actions = '';
+  if (i.hiddenType === 'tracker') actions += '<span class="feed-note">Already in your tracker.</span>';
+  else if (i.hiddenType === 'dismissed') actions += `<button type="button" class="btn btn-small" data-feed-restore="${esc(i.dismissedId)}">Restore</button>`;
+  else actions += `<button type="button" class="btn btn-primary" data-feed-add="${esc(i.id)}">Add to Tracker</button><button type="button" class="btn" data-feed-dismiss="${esc(i.id)}">Dismiss</button>`;
+  if (href) actions += `<a class="btn" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Open posting<span class="sr-only"> for ${who} (opens in a new tab)</span></a>`;
+  if (applyHref && normLink(applyHref) !== normLink(href)) actions += `<a class="btn" href="${esc(applyHref)}" target="_blank" rel="noopener noreferrer">Apply</a>`;
+  const text = String(i.description || '').trim();
+  const desc = text
+    ? highlightHtml(tokenizeText(text).map(k => k.href ? linkHtml(k) : esc(k.t)).join(''), words)
+    : '<p class="hint">This source does not share the job description. Open the posting to read it.</p>';
+  $('#feedDlgTitle').innerHTML = highlightHtml(esc(i.title), words);
+  $('#feedDlgBody').innerHTML = `<p><strong>${highlightHtml(esc(i.company || 'Company not listed'), words)}</strong></p>
+    ${meta ? `<p class="feed-dlg-meta">${meta}</p>` : ''}
+    <p class="feed-dlg-meta">${[esc(i.source || ''), esc(when)].filter(Boolean).join(' · ')}</p>
+    <div class="feed-dlg-actions">${actions}</div>
+    ${i.descriptionIsSnippet && text ? '<p class="hint">This source shares only a short part of the description. Open the posting for the rest.</p>' : ''}
+    <div class="feed-dlg-desc">${desc}</div>`;
+  const dlg = $('#feedDialog');
+  if (!dlg.open) dlg.showModal();
+  $('#feedDlgBody').scrollTop = 0;
 }
 
 // --- Actions ------------------------------------------------
@@ -2905,6 +3003,10 @@ function bindFeed() {
   $('#view-feed').addEventListener('click', e => {
     if (e.target.closest('#browseSavedBtn')) browseSaved(true);
     else if (e.target.closest('#backLiveBtn')) browseSaved(false);
+    else {
+      const open = e.target.closest('[data-feed-open]');
+      if (open && !e.target.closest('a')) openFeedJob(open.dataset.feedOpen); // links inside a preview still open normally
+    }
   });
   const onType = () => {
     state.feedUi.q = ff.elements.q.value;
@@ -2920,6 +3022,11 @@ function bindFeed() {
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderHeight);
   ff.addEventListener('change', e => {
     if (e.target.name === 'q' || e.target.name === 'lsrc') return;
+    if (['sort', 'posted', 'onlyRemote', 'onlyPay'].includes(e.target.name)) {
+      Object.assign(state.feedUi, { sort: ff.elements.sort.value || 'new', posted: ff.elements.posted.value || '', remote: ff.elements.onlyRemote.checked, pay: ff.elements.onlyPay.checked, limit: pageSize() });
+      renderFeed();
+      return;
+    }
     state.feedUi.source = ff.elements.source.value;
     state.feedUi.showHidden = ff.elements.showHidden.checked;
     state.feedUi.limit = pageSize();
@@ -4872,6 +4979,7 @@ function bindAi() {
    ============================================================ */
 // Close a dialog, asking first if there are unsaved edits.
 function requestClose(dlg) {
+  if (dlg.id === 'feedDialog') { dlg.close(); return true; }
   if (dlg.id === 'draftDialog' && state.gen.busy) { toast('Wait for the draft to finish, or press Cancel.'); return false; }
   let dirty;
   if (dlg.id === 'detailDialog') dirty = state.detailSnapshot && JSON.stringify(readForm($('#detailForm'))) !== state.detailSnapshot;
@@ -4926,6 +5034,16 @@ function bindEvents() {
   $$('dialog').forEach(dlg => {
     dlg.addEventListener('click', e => { if (e.target.closest('[data-close]')) requestClose(dlg); });
     dlg.addEventListener('cancel', e => { e.preventDefault(); requestClose(dlg); });
+  });
+
+  // Reading panel for Job Feed openings
+  $('#feedDialog').addEventListener('click', async e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const dlg = $('#feedDialog');
+    if (b.dataset.feedAdd) { dlg.close(); await addFeedItem(b.dataset.feedAdd, b); }
+    else if (b.dataset.feedDismiss) { dlg.close(); await dismissFeedItem(b.dataset.feedDismiss, b); }
+    else if (b.dataset.feedRestore) { dlg.close(); await restoreFeedItem(b.dataset.feedRestore, b); }
   });
 
   // Detail panel
