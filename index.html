@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.0 adds three free live boards: Remote OK, Arbeitnow and Working Nomads (each has its own toggle button).
   v1.3.2 tints Read cards with a dimmed shade of the chosen color theme instead of fading them toward white.
   v1.3.1 marks a job as Read once you open it (the card dims and shows a Read badge), and the reading panel now shows
   descriptions with a Markdown look: lone dashes between paragraphs become divider lines, lines starting with - * or a
@@ -765,6 +766,9 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
         <legend>Job boards to search live</legend>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="jobicy"><span>Jobicy</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="wwr"><span>We Work Remotely</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="remoteok"><span>Remote OK</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="arbeitnow"><span>Arbeitnow</span></label>
+        <label class="src-chip"><input type="checkbox" name="lsrc" value="nomads"><span>Working Nomads</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="remotive"><span>Remotive (saved jobs)</span></label>
         <label class="src-chip"><input type="checkbox" name="lsrc" value="boards"><span>Company boards (Greenhouse, Lever)</span></label>
       </fieldset>
@@ -1204,7 +1208,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.3.2'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.0'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2696,14 +2700,15 @@ function classifyFeed() {
 
 // --- Live search (v1.2.0) -----------------------------------
 const LIVE_TIMEOUT_MS = 25000;
-const LIVE_GROUPS = ['jobicy', 'wwr', 'remotive', 'boards'];
+const LIVE_GROUPS = ['jobicy', 'wwr', 'remoteok', 'arbeitnow', 'nomads', 'remotive', 'boards'];
+const LIVE_GROUPS_OLD = ['jobicy', 'wwr', 'remotive', 'boards']; // boards that existed before v1.4.0; newer ones start switched on
 const LIVE_PAGE_SIZE = 20;
 const pageSize = () => (liveMode() ? LIVE_PAGE_SIZE : FEED_PAGE_SIZE);
 function loadGroups() {
-  try { const g = JSON.parse(localStorage.getItem('jobsearch.liveGroups') || 'null'); if (Array.isArray(g)) return LIVE_GROUPS.filter(x => g.includes(x)); } catch { /* use all */ }
+  try { const g = JSON.parse(localStorage.getItem('jobsearch.liveGroups') || 'null'); if (Array.isArray(g)) { const known = JSON.parse(localStorage.getItem('jobsearch.liveGroupsKnown') || 'null') || LIVE_GROUPS_OLD; return LIVE_GROUPS.filter(x => g.includes(x) || !known.includes(x)); } } catch { /* use all */ }
   return LIVE_GROUPS.slice();
 }
-function saveGroups() { try { localStorage.setItem('jobsearch.liveGroups', JSON.stringify(state.live.groups)); } catch { /* not saved; fine */ } }
+function saveGroups() { try { localStorage.setItem('jobsearch.liveGroups', JSON.stringify(state.live.groups)); localStorage.setItem('jobsearch.liveGroupsKnown', JSON.stringify(LIVE_GROUPS)); } catch { /* not saved; fine */ } }
 function renderLiveSources() {
   const box = $('#liveSources');
   if (!box) return;
@@ -2751,7 +2756,7 @@ async function searchLive() {
       L.sources.push(...(Array.isArray(data.sources) ? data.sources : []));
       renderFeed(); // results appear as each group of boards answers
     } catch (e) {
-      if (mySeq === L.seq) L.sources.push({ name: { jobicy: 'Jobicy', wwr: 'We Work Remotely', remotive: 'Remotive (saved)', boards: 'Greenhouse and Lever' }[g], status: 'failed', message: e.name === 'AbortError' ? 'took too long' : String(e.message || e) });
+      if (mySeq === L.seq) L.sources.push({ name: { jobicy: 'Jobicy', wwr: 'We Work Remotely', remoteok: 'Remote OK', arbeitnow: 'Arbeitnow', nomads: 'Working Nomads', remotive: 'Remotive (saved)', boards: 'Greenhouse and Lever' }[g], status: 'failed', message: e.name === 'AbortError' ? 'took too long' : String(e.message || e) });
       lastError = e.name === 'AbortError' ? 'The live search took too long.' : (e.name === 'TypeError' ? 'The live search could not be reached. Check the address in Settings.' : 'The live search answered with ' + e.message + '.');
     }
   }));

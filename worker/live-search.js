@@ -197,6 +197,57 @@ async function readLever(b, ws, ctx) {
     });
 }
 
+// Remote OK: one public list of the newest ~100 postings. Terms ask us to name Remote OK as the source and link to
+// its posting page, which the card does (source name, and "Open link" goes to remoteok.com).
+async function readRemoteOk(ws, ctx) {
+  const src = { type: 'remoteok', label: 'Remote OK', name: 'Remote OK (live)' };
+  const data = await getCached('https://remoteok.com/api', 'json', ctx);
+  if (!Array.isArray(data)) throw new Error('Unexpected response');
+  return data.filter(j => j && j.position && j.url)
+    .map(j => { const head = [j.position, j.company, j.location, (j.tags || []).join(' ')]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.description || '') }; })
+    .filter(x => x.any)
+    .map(({ j, top }) => job(src, {
+      rank: top ? 0 : 1,
+      externalId: String(j.id || j.slug), title: decode(j.position), company: decode(j.company || ''), link: j.url,
+      applyLink: j.apply_url || '', location: j.location || 'Worldwide', remoteType: 'Remote', datePosted: isoDate(j.date),
+      payRange: j.salary_min > 0 ? '$' + Number(j.salary_min).toLocaleString('en-US') + (j.salary_max > 0 ? ' to $' + Number(j.salary_max).toLocaleString('en-US') : '') + ' a year' : '',
+      description: toText(j.description || '')
+    }));
+}
+
+// Arbeitnow: free list, mostly Europe. Only postings marked remote are kept.
+async function readArbeitnow(ws, ctx) {
+  const src = { type: 'arbeitnow', label: 'Arbeitnow', name: 'Arbeitnow (live)' };
+  const data = await getCached('https://www.arbeitnow.com/api/job-board-api', 'json', ctx);
+  if (!Array.isArray(data.data)) throw new Error('Unexpected response');
+  return data.data.filter(j => j && j.remote && j.title && j.url)
+    .map(j => { const head = [j.title, j.company_name, j.location, (j.tags || []).join(' '), (j.job_types || []).join(' ')]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.description || '') }; })
+    .filter(x => x.any)
+    .map(({ j, top }) => job(src, {
+      rank: top ? 0 : 1,
+      externalId: String(j.slug || j.url), title: decode(j.title), company: decode(j.company_name || ''), link: j.url,
+      location: j.location, remoteType: 'Remote',
+      datePosted: isoDate(typeof j.created_at === 'number' && j.created_at < 1e12 ? j.created_at * 1000 : j.created_at),
+      description: toText(j.description || '')
+    }));
+}
+
+// Working Nomads: public list of remote jobs.
+async function readWorkingNomads(ws, ctx) {
+  const src = { type: 'nomads', label: 'Working Nomads', name: 'Working Nomads (live)' };
+  const data = await getCached('https://www.workingnomads.com/api/exposed_jobs/', 'json', ctx);
+  if (!Array.isArray(data)) throw new Error('Unexpected response');
+  return data.filter(j => j && j.title && j.url)
+    .map(j => { const tags = Array.isArray(j.tags) ? j.tags.join(' ') : String(j.tags || ''); const head = [j.title, j.company_name, j.location, j.category_name, tags]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.description || '') }; })
+    .filter(x => x.any)
+    .map(({ j, top }) => job(src, {
+      rank: top ? 0 : 1,
+      externalId: String(j.url), title: decode(j.title), company: decode(j.company_name || ''), link: j.url,
+      location: j.location, remoteType: 'Remote', datePosted: isoDate(j.pub_date),
+      description: toText(j.description || '')
+    }));
+}
+
 // Remotive asks for 4 requests a day, so live search never calls it.
 // It searches the jobs the 3-hour GitHub run already saved from Remotive.
 async function readRemotiveSaved(ws, ctx) {
@@ -210,7 +261,7 @@ async function search(q, ctx, only) {
   const ws = words(q);
   const log = [];
   const tasks = [];
-  const want = only ? only.split(',').map(x => x.trim()) : null; // groups: jobicy, wwr, remotive, boards
+  const want = only ? only.split(',').map(x => x.trim()) : null; // groups: jobicy, wwr, remoteok, arbeitnow, nomads, remotive, boards
   const has = g => !want || want.includes(g);
   const run = (name, fn) => tasks.push(fn().then(
     jobs => { log.push({ name, status: 'ok', count: jobs.length }); return jobs; },
@@ -219,6 +270,9 @@ async function search(q, ctx, only) {
 
   if (has('jobicy')) run('Jobicy', () => readJobicy(ws, ctx));
   if (has('wwr')) for (const f of WWR_FEEDS) run(f.name, () => readWwr(f, ws, ctx));
+  if (has('remoteok')) run('Remote OK', () => readRemoteOk(ws, ctx));
+  if (has('arbeitnow')) run('Arbeitnow', () => readArbeitnow(ws, ctx));
+  if (has('nomads')) run('Working Nomads', () => readWorkingNomads(ws, ctx));
   if (has('remotive')) run('Remotive (saved)', () => readRemotiveSaved(ws, ctx));
 
   let boards = { greenhouse: [], lever: [] };
