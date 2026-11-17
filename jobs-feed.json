@@ -1,7 +1,7 @@
 {
  "app": "job-search-tracker",
  "feedFormat": 1,
- "generatedAt": "2026-11-16T19:40:24.241Z",
+ "generatedAt": "2026-11-17T03:56:28.608Z",
  "sources": [
   {
    "name": "Remotive: writing",
@@ -21,9 +21,9 @@
    "name": "Jobicy: marketing",
    "type": "jobicy",
    "status": "ok",
-   "count": 12,
+   "count": 10,
    "fetched": 100,
-   "ms": 1736
+   "ms": 691
   },
   {
    "name": "Jobicy: \"content\"",
@@ -31,7 +31,7 @@
    "status": "ok",
    "count": 24,
    "fetched": 100,
-   "ms": 652
+   "ms": 554
   },
   {
    "name": "Jobicy: \"copywriter\"",
@@ -39,15 +39,15 @@
    "status": "ok",
    "count": 5,
    "fetched": 5,
-   "ms": 593
+   "ms": 459
   },
   {
    "name": "Jobicy: \"seo\"",
    "type": "jobicy",
    "status": "ok",
    "count": 19,
-   "fetched": 53,
-   "ms": 674
+   "fetched": 54,
+   "ms": 613
   },
   {
    "name": "RSS: We Work Remotely: Sales and Marketing",
@@ -55,7 +55,7 @@
    "status": "ok",
    "count": 48,
    "fetched": 154,
-   "ms": 1089
+   "ms": 415
   },
   {
    "name": "RSS: We Work Remotely: All Other",
@@ -63,7 +63,7 @@
    "status": "ok",
    "count": 3,
    "fetched": 93,
-   "ms": 379
+   "ms": 232
   }
  ],
  "jobs": [
@@ -203,6 +203,21 @@
    "firstSeenAt": "2026-11-16T06:38:25.844Z"
   },
   {
+   "id": "jobicy:162683",
+   "title": "IP Lawyer (Trademarks and Copyright)",
+   "company": "Ruby Labs",
+   "link": "https://jobicy.com/jobs/162683-ip-lawyer-trademarks-and-copyright",
+   "source": "Jobicy",
+   "sourceName": "Jobicy: \"content\"",
+   "location": "Europe",
+   "remoteType": "Remote",
+   "payRange": "",
+   "datePosted": "2026-11-16",
+   "description": "About us\n\nRuby Labs is a leading tech company that creates and operates innovative consumer products. We offer a diverse range of opportunities across the health, education, and entertainment industries. Our innovative teams are driving the future of consumer-led products, and we're always looking for passionate individuals to join us. Learn more about our story at: https://rubylabs.com/about-us/\n\nAbout the role\n\nWe are looking for an IP Lawyer to own the protection of our brands. You will handle escalated infringement cases and manage our IP portfolio – mainly trademarks and copyright – from filing to enforcement. You will work closely with our brand protection team, which handles first-line monitoring and complaints, and with external IP agents. This is a hands-on role with a high level of ownership: you will make decisions on cases yourself and help build how IP protection works across our brands.\n\nKey Responsibilities\n\n•\nEscalated IP cases. Take over infringement cases that the first line cannot resolve: copies of our websites and content, misuse of our trademarks, infringing ads and domains. Prepare legal letters and cease-and-desist demands, file UDRP and similar domain complaints, and choose the right route for non-standard cases.\n\n•\nIP portfolio. Manage our trademarks and copyright: prepare and support filings and registrations, track deadlines, renewals and office actions, and keep the portfolio up to date.\n\n•\nBrand strategy. Build an IP protection strategy for each brand: where and what to register, what to monitor and how to enforce.\n\n•\nExternal counsel. Work with external IP agents and lawyers in different countries: set tasks, check the quality of their work and keep track of deadlines and costs.\n\n•\nSupport the team. Help the first-line team handle more complex cases and review open cases with them regularly.\n\n•\nProcesses. Keep templates, playbooks and case records up to date, and suggest ways to automate routine work.\n\nQualifications\n\n•\n2+ years of legal practice, ideally in intellectual property, brand protection or a tech or e-commerce company.\n\n•\nExperience drafting legal letters, complaints and other legal documents in English.\n\n•\nA law degree.\n\n•\nEnglish at B1 level or higher – written and spoken.\n\n•\nStrong attention to detail and accuracy with deadlines.\n\n•\nOwnership: you take a case from start to finish without being reminded.\n\n•\nAbility to work independently, prioritise many cases at once and explain legal risk in plain language.\n\n•\nComfortable using AI tools and online research in daily work.\n\nNice to have\n\n•\nBackground in intellectual property: trademark filing, copyright, online enforcement or domain disputes (UDRP).\n\n•\nExperience with trademark offices such as USPTO, EUIPO and UKIPO.\n\n•\nExperience in a subscription, tech or e-commerce business.\n\nLocation\n\nRuby Labs operates within the CET (Central European Time) zone. Applicants from any country are welcome to apply for the position as long as they are located within approximately ± 4 hours of CET. This ensures optimal collaboration and communication during working hours.\n\nBenefits\n\nDiscover the perks of being part of our vibrant team! We offer:\n\n•\nRemote Work Environment: Embrace the freedom to work from anywhere, anytime, promoting a healthy work-life balance.\n\n•\nUnlimited PTO: Enjoy unlimited paid time off to recharge and prioritize your well-being, without counting days.\n\n•\nPaid National Holidays: Celebrate and relax on national holidays with paid time off to unwind and recharge.\n\n•\nCompany-provided MacBook: Experience seamless productivity with top-notch Apple MacBooks provided to all employees who need them.\n\n•\nFlexible Independent Contractor Agreement: Unlock the benefits of flexibility, autonomy, and entrepreneurial opportunities. Benefit from tax advantages, networking opportunities, reduced employment obligations, and the freedom to work from anywhere. Read more about it here: https://docs.google.com/document/d/1nkrN76JlZkbKj9WSOhlT1_mni_CZeDkHdwfIjPXVwvk/preview?tab=t.0#heading=h.ndsdl4wapxtt\n\nBe part of our fast-growing team and seize this excellent opportunity for personal and professional growth!\n\nInterview Process\n\nAfter submitting your application, we conduct a thorough review which typically takes 3 to 5 days, but may occasionally take longer due to the volume of applications received. If we see a potential fit, we proceed with the following steps:\n\n•\nRecruiter Screening (40 minutes)\n\n•\nFinal Interview with the Hiring Manager (60 minutes)\n\nLife at Ruby Labs\n\nAt Ruby Labs, we move fast, aim high, and expect the same from our team. We’re not here to play small—we’re here to build, grow, and win. That means we look for people who are ambitious, driven, and ready to give their best every single day.\n\nThis is a place for individuals who thrive under pressure, embrace challenges, and see opportunity in every obstacle. If you’re hungry to achieve, motivated by impact, and want to grow at the speed of your own ambition, Ruby Labs offers the platform to make it happen.\n\nHere, effort is matched with reward. We recognize those who go all in and deliver results, and we create space for people who want more—more responsibility, more growth, and more success.\n\n#LI-Remote",
+   "descriptionIsSnippet": false,
+   "firstSeenAt": "2026-11-17T03:56:28.608Z"
+  },
+  {
    "id": "jobicy:162626",
    "title": "Director, Product Communications and Special Projects",
    "company": "Amplify",
@@ -338,27 +353,12 @@
    "firstSeenAt": "2026-11-15T16:25:15.179Z"
   },
   {
-   "id": "jobicy:162416",
-   "title": "Senior Marketing Manager",
-   "company": "Enode",
-   "link": "https://jobicy.com/jobs/162416-senior-marketing-manager-2",
-   "source": "Jobicy",
-   "sourceName": "Jobicy: marketing",
-   "location": "Europe",
-   "remoteType": "Remote",
-   "payRange": "",
-   "datePosted": "2026-11-15",
-   "description": "About Enode\n\nThe grid was built for predictable, centralised power. Today it's absorbing intermittent supply from grid scale solar and wind, alongside dynamic demand from EVs, heat pumps, and home batteries. The missing piece is software that can connect and orchestrate these devices at scale.\n\nWe’re the layer between the home and the grid. Our platform connects every asset, coordinates every home and shapes thousands as one. Asset connectivity gives energy retailers one API for 1,000+ device models across 100+ brands. Home energy coordination turns that connection into smarter behavior at home, like charging an EV in the cheapest hours or using more of your own solar. Residential flexibility brings connected homes together into a dispatchable resource the grid can count on.\n\nEurope’s largest energy companies build on Enode : retailers, utilities and the teams that trade for them. The platform spans 1.7M+ connected households and 5,000+ MW of controllable load. We’re backed by Y Combinator, Lowercarbon Capital and Creandum.\n\nThe decisions made now will shape how the next grid gets built. We’re looking for people who take ownership, think clearly under complexity and care deeply about the craft of building software that matters.\n\nAI is fundamental to how we work\n\nAI is how a team our size keeps rewiring the way we work, fast enough to match what our mission demands. We look for people who reach for AI as a reflex and who can drop a habit that used to work. People who care about unblocking others, not just about what they ship themselves. If that's not quite how you work yet but it's the direction you're heading, we'd still like to hear from you. We assess this in our interview process, alongside everything else we look at.\n\nWhat we're looking for\n\nWe're hiring a Senior Marketing Manager to build Enode's growth engine and shape how energy companies across Europe discover and understand what we do.\n\nMillions of EVs, heat pumps, batteries and solar systems are coming onto the grid, and energy companies need software to connect and coordinate them. We have a strong product, a new brand and a growing list of enterprise customers. We now want to build a marketing function that sharpens how we tell our story and creates a steady flow of demand from the companies we most want to work with.\n\nThis is an opportunity to build marketing at a renewable energy tech company in one of the most interesting parts of the energy transition, where your work has a direct effect on how quickly homes electrify.\n\nYou'll report to Fredrik, our VP Revenue, and work closely with our account executives, Customer Success and Partnerships teams. You'll also work with Daniël, our Head of Design, and the Design team, who own our brand and visual identity.\n\nYou'll have a lot of ownership from day one. There's no team underneath you, so you'll do much of the hands on work yourself, and you'll play a central part in defining what marketing at Enode looks like in 2027 and beyond.\n\nIn this role, you will:\n\n•\nBuild Enode's demand generation engine, creating a steady flow of conversations with the energy companies we most want to work with.\n\n•\nRun account based marketing with our account executives, getting to know our key accounts in depth and building relationships with the executives who make decisions.\n\n•\nSharpen our positioning and story, based on a clear understanding of what energy retailers, utilities and traders need and where they're under pressure.\n\n•\nWrite the copy for campaigns, outreach, our website and LinkedIn, so the way we talk about Enode is clear and consistent everywhere.\n\n•\nShape the marketing roadmap for 2027 and beyond with Fredrik, including priorities, budget, channels and events.\n\n•\nPlan and run campaigns and events that put Enode in front of the right people, and learn quickly from what works.\n\n•\nBuild AI workflows that let you work at the scale of a larger team, from researching accounts and mapping buying groups to personalising outreach and reporting on results.\n\n•\nMeasure marketing's impact on pipeline in HubSpot and use it to decide where to invest next.\n\nThis role will be right for you, if\n\nYou're a B2B marketer who enjoys building things. You've created demand for a technical product and seen your work turn into real conversations and deals, working closely with sales on the accounts that matter most. You like getting to the heart of what customers need, and you can turn a complex product into a story a commercial director understands and remembers. You write well and enjoy doing it.\n\nYou've likely been the first or only marketer at a company, or you're a senior marketer at a larger company who wants more room to shape things. AI is already part of how you work: you've built your own workflows for research, outreach and analysis, and you're curious about what else it can do. You care about the energy transition and want your work to help speed it up. You bring:\n\n•\nExperience building demand generation for a B2B product, including owning a pipeline target.\n\n•\nAccount based marketing experience with named enterprise accounts, including reaching executives.\n\n•\nStrong copywriting and storytelling, with examples you wrote yourself.\n\n•\nExperience leading positioning or go-to-market work for a technical product.\n\n•\nFamiliarity with HubSpot or a similar CRM.\n\nNice to have:\n\n•\nExperience in energy, utilities, mobility or climate tech.\n\n•\nA background as the first or only marketer at a startup.\n\n•\nPrior exposure to running events that led to meetings and pipeline.\n\nWhat we offer:\n\n•\nOpportunity to join and impact an early-stage climate tech startup with global aspirations as we scale.\n\n•\nA mission-driven, fun and caring environment with high drive and ambition.\n\n•\nCompetitive compensation, including a very attractive employee option program - you’re part of our journey.\n\n•\nAccess to best in class AI tooling, we think the ceiling on what a small team can do has fundamentally shifted, and we want you to feel that.\n\n•\nReal investment in your AI fluency. Dedicated time to build the skill, an internal skills library you can contribute to, and the tooling budget to work properly.\n\n•\nRemote-first in Europe, with the option of attending an office in Oslo or receiving a co-working pass on demand.\n\n•\nThree annual off-sites to connect with the team in exciting & fun places.\n\n•\nFlexible, human-first culture.\n\n•\nStipend for setting up your home office.\n\n------------------------------------------------------------------------------------------\n\nA few things to note:\n\n•\nEnode is an equal opportunities employer. Don’t meet every single requirement? Studies have shown that women and people of colour are less likely to apply to jobs unless they meet every single qualification. We are dedicated to building a diverse, inclusive and authentic workplace, so if you’re excited about this role but your past experience doesn’t align perfectly with every qualification in the job description, we encourage you to apply anyway. You may just be the right candidate for this or other roles.\n\n•\nOur values are integral to the way we work and are embedded into all our hiring processes. You can read more about our values here .",
-   "descriptionIsSnippet": false,
-   "firstSeenAt": "2026-11-15T16:25:15.179Z"
-  },
-  {
    "id": "jobicy:162413",
    "title": "Senior Director, Brand",
    "company": "Airalo",
    "link": "https://jobicy.com/jobs/162413-senior-director-brand",
    "source": "Jobicy",
-   "sourceName": "Jobicy: marketing",
+   "sourceName": "Jobicy: \"content\"",
    "location": "UK",
    "remoteType": "Remote",
    "payRange": "GBP 117,500 to 158,500 yearly",
@@ -583,7 +583,7 @@
    "company": "Nash",
    "link": "https://jobicy.com/jobs/155301-product-marketing-lead-3",
    "source": "Jobicy",
-   "sourceName": "Jobicy: \"content\"",
+   "sourceName": "Jobicy: \"copywriter\"",
    "location": "USA",
    "remoteType": "Remote",
    "payRange": "",
