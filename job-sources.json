@@ -1,18 +1,26 @@
 {
   "_help": "Where the job finder looks. Setup guide: top of .github/workflows/fetch-jobs.yml. Keys that start with an underscore are notes and are ignored.",
-
   "greenhouse": [],
   "_greenhouseFormat": "Add one entry per company: { \"token\": \"BOARD_TOKEN\", \"company\": \"Name to show\" }. The token is the word after boards.greenhouse.io/ or job-boards.greenhouse.io/ in one of the company's job links.",
-
   "lever": [],
   "_leverFormat": "Add one entry per company: { \"name\": \"COMPANY_NAME\", \"company\": \"Name to show\" }. The name is the word after jobs.lever.co/ in one of the company's job links. Add \"region\": \"eu\" if the link starts with jobs.eu.lever.co.",
-
-  "remotive": { "enabled": true, "categories": ["customer-support", "writing", "marketing", "all-others"], "runHoursUtc": [9] },
-  "_remotiveHelp": "Remotive asks for 4 requests a day at most and lists jobs 24 hours late. Each category is one request, so 4 categories x 1 run hour = 4 a day. Change runHoursUtc only if you also change the number of categories.",
-
-  "jobicy": { "enabled": true, "count": 100, "searches": [ { "tag": "support" }, { "tag": "customer" }, { "tag": "chat" }, { "tag": "editor" }, { "tag": "proofreader" }, { "tag": "assistant" }, { "tag": "content" }, { "tag": "copywriter" } ] },
-  "_jobicyHelp": "Jobicy is free with no key or payment. Each search is one request per run. Keep it to a few searches: its guide asks for no more than one polling run an hour. industry = a category slug (marketing), tag = a keyword (3 to 50 letters), geo = optional region such as usa.",
-
+  "remotive": {
+    "enabled": true,
+    "categories": [],
+    "runHoursUtc": [
+      9,
+      21
+    ]
+  },
+  "_remotiveHelp": "Remotive asks for 4 requests a day at most and lists jobs 24 hours late. With no categories listed it makes one request for everything, so 1 request x 2 run hours = 2 a day. Add categories only if you want a narrower list.",
+  "jobicy": {
+    "enabled": true,
+    "count": 100,
+    "searches": [
+      {}
+    ]
+  },
+  "_jobicyHelp": "Jobicy is free with no key or payment. An empty search {} fetches the latest jobs of every type, which is the default so the feed never favors one kind of job. Add { \"tag\": \"word\" } or { \"industry\": \"slug\" } only to dig deeper into one area. Keep it to a few searches: its guide asks for no more than one polling run an hour.",
   "rss": [
     {
       "name": "We Work Remotely: Customer Support",
@@ -41,17 +49,35 @@
       "url": "https://weworkremotely.com/categories/all-other-remote-jobs.rss",
       "titleFormat": "company: title",
       "remoteType": "Remote"
+    },
+    {
+      "name": "We Work Remotely: Programming",
+      "label": "We Work Remotely",
+      "url": "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+      "titleFormat": "company: title",
+      "remoteType": "Remote"
+    },
+    {
+      "name": "We Work Remotely: Design",
+      "label": "We Work Remotely",
+      "url": "https://weworkremotely.com/categories/remote-design-jobs.rss",
+      "titleFormat": "company: title",
+      "remoteType": "Remote"
     }
   ],
-
-  "adzuna": { "country": "us", "searches": [] },
-  "_adzunaFormat": "Turned off: Adzuna needs keys and may need payment. Each search can also use \"where\": \"city or state\" and \"whatExclude\": \"words to leave out\". Needs the ADZUNA_APP_ID and ADZUNA_APP_KEY secrets.",
-
-  "prefilter": {
-    "titleKeywords": ["customer", "support", "service", "chat", "email", "correspondence", "non voice", "non phone", "ticket", "messaging", "help desk", "care", "client services", "member services", "contact center", "call center", "editorial", "editor", "proofread", "copy", "content", "publishing", "document", "knowledge base", "help center", "product description", "catalog", "product listing", "ecommerce", "virtual assistant", "assistant", "administrative", "office support", "operations support", "back office", "data entry", "data processing", "records", "clerk", "order", "crm", "inbox", "patient", "appointment", "scheduler", "scheduling", "intake", "reservation", "onboarding", "writer", "writing", "seo", "communications", "brand", "marketing"],
-    "excludedWords": ["manager", "director", "senior", "sr", "outbound sales"]
+  "adzuna": {
+    "country": "us",
+    "searches": []
   },
-  "_prefilterHelp": "A broad first cut so the feed file stays small. Jobs are kept only when the title contains one of titleKeywords (empty list = keep all). The words above come from the support, editorial, admin and data-entry job titles in Settings, plus the original writing words. The app then applies your exact keywords from Settings.",
-
-  "limits": { "maxAgeDays": 30, "maxJobsPerSource": 200, "maxDescriptionChars": 12000 }
+  "_adzunaFormat": "Turned off: Adzuna needs keys and may need payment. Each search can also use \"where\": \"city or state\" and \"whatExclude\": \"words to leave out\". Needs the ADZUNA_APP_ID and ADZUNA_APP_KEY secrets.",
+  "prefilter": {
+    "titleKeywords": [],
+    "excludedWords": []
+  },
+  "_prefilterHelp": "Left empty on purpose: the feed saves every job from every source, and the app filters by the keywords and excluded words in Settings the moment you change them. Add words here only to shrink the feed file.",
+  "limits": {
+    "maxAgeDays": 30,
+    "maxJobsPerSource": 200,
+    "maxDescriptionChars": 5000
+  }
 }

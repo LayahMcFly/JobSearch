@@ -386,8 +386,8 @@ function buildSources(config) {
   }
   if (config.jobicy && config.jobicy.enabled) {
     for (const q of config.jobicy.searches || []) {
-      if (!q || !(q.industry || q.tag)) continue;
-      const what = q.tag ? `"${q.tag}"` : q.industry;
+      if (!q) continue;
+      const what = q.tag ? `"${q.tag}"` : (q.industry || 'latest jobs');
       list.push({ type: 'jobicy', label: 'Jobicy', name: `Jobicy: ${what}`, run: () => readJobicy({ ...q, geo: q.geo || config.jobicy.geo, count: q.count || config.jobicy.count }) });
     }
   }
