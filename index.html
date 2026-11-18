@@ -80,6 +80,8 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.8 lets Search live with an empty box search every selected board for the keywords in Settings (20 at a time, up to 120), and
+  the Worker accepts several terms separated by |. A keyword search clears when the Settings keywords change.
   v1.4.7 asks "Are you sure you want to delete <name>, saved <date and time>?" before removing a saved keyword list.
   v1.4.6 adds a mini library under the Target job titles and Excluded words boxes in Settings: after you edit a list you are asked
   whether to save it, each saved list shows its date and time, starts as Untitled and can be renamed, and Use this list loads it back.
@@ -1264,7 +1266,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.7'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.8'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2578,6 +2580,7 @@ async function saveSettingsForm(e) {
     return;
   }
   const oldFeedUrl = state.settings.feedUrl;
+  const oldTitles = state.settings.targetTitles.join('\n');
   state.settings = normalizeSettings(Object.assign({}, state.settings, {
     noWordDays: days,
     targetTitles: f.elements.targetTitles.value,
@@ -2591,6 +2594,7 @@ async function saveSettingsForm(e) {
   if (state.settings.feedUrl !== oldFeedUrl) Object.assign(state.feed, { data: null, loaded: false, error: '' });
   try {
     await saveSettings();
+    if (state.live.kw && oldTitles !== state.settings.targetTitles.join('\n')) Object.assign(state.live, { kw: 0, active: false, jobs: [], sources: [], seq: state.live.seq + 1 }); // keyword results are stale
     const flipped = await applyNoWordRule();
     f.elements.noWordDays.blur();
     render();
@@ -2876,26 +2880,38 @@ function syncHeaderHeight() {
   const h = $('.app-header');
   if (h) document.documentElement.style.setProperty('--hdr', h.offsetHeight + 'px');
 } // the Worker reads each group on its own so results can appear as each finishes
-async function searchLive() {
+const KW_BATCH = 20, KW_MAX_BATCHES = 6; // keywords from Settings go to the boards 20 at a time, up to 120
+async function searchLive(opts = {}) {
   const ff = $('#feedFilters');
   const q = ff.elements.q.value.trim();
+  const terms = !q && opts.keywords ? state.settings.targetTitles.filter(t => t.length > 1).slice(0, KW_BATCH * KW_MAX_BATCHES) : [];
+  const batches = [];
+  for (let i = 0; i < terms.length; i += KW_BATCH) batches.push(terms.slice(i, i + KW_BATCH).map(t => t.replace(/\|/g, ' ')).join('|'));
   const base = state.settings.liveUrl;
   const L = state.live;
-  if (base && !q) { Object.assign(L, { active: false, jobs: [], sources: [], q: '', error: '', loading: false, seq: L.seq + 1 }); renderFeed(); return; }
+  if (base && !q && !batches.length) { Object.assign(L, { kw: 0 }, { active: false, jobs: [], sources: [], q: '', error: '', loading: false, seq: L.seq + 1 }); renderFeed(); return; }
   if (!base) { L.error = 'Live search needs the address of your Cloudflare Worker. Add it in Settings under Live search. Until then the box filters the saved feed.'; L.active = false; renderFeed(); return; }
   if (!/^https:\/\//i.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(base)) { L.error = 'The live search address must start with https://'; L.active = false; renderFeed(); return; }
   if (!L.groups.length) { L.error = 'Pick at least one job board to search.'; L.active = false; L.jobs = []; renderFeed(); return; }
   const mySeq = ++L.seq;
-  Object.assign(L, { loading: true, error: '', q, jobs: [], sources: [], active: true, fetchedAt: new Date().toISOString() });
+  Object.assign(L, { loading: true, error: '', q, kw: terms.length, jobs: [], sources: [], active: true, fetchedAt: new Date().toISOString() });
   state.feedUi.limit = pageSize();
   renderFeed();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), LIVE_TIMEOUT_MS);
   const seen = new Set();
   let worked = 0, lastError = '';
-  await Promise.all(L.groups.map(async g => {
+  const addSources = list => {
+    for (const src of list) {
+      const same = L.sources.find(x => x.name === src.name);
+      if (!same) L.sources.push({ ...src });
+      else if (src.status === 'ok') { if (same.status === 'ok') same.count = (same.count || 0) + (src.count || 0); else Object.assign(same, src); }
+    }
+  };
+  const jobsFor = batches.length ? batches : [q];
+  await Promise.all(L.groups.flatMap(g => jobsFor.map(async qq => {
     try {
-      const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&only=${g}`, { signal: ctrl.signal, cache: 'no-store' });
+      const res = await fetch(`${base}/search?q=${encodeURIComponent(qq)}&only=${g}`, { signal: ctrl.signal, cache: 'no-store' });
       if (!res.ok) throw new Error(`error ${res.status}`);
       const data = await res.json();
       if (!data || !data.ok || !Array.isArray(data.jobs)) throw new Error((data && data.error) || 'unexpected answer');
@@ -2906,13 +2922,13 @@ async function searchLive() {
         if (!seen.has(key)) { seen.add(key); L.jobs.push(j); }
       }
       L.jobs.sort((x, y) => ((x.rank || 0) - (y.rank || 0)) || String(y.datePosted || '').localeCompare(String(x.datePosted || '')));
-      L.sources.push(...(Array.isArray(data.sources) ? data.sources : []));
+      addSources(Array.isArray(data.sources) ? data.sources : []);
       renderFeed(); // results appear as each group of boards answers
     } catch (e) {
-      if (mySeq === L.seq) L.sources.push({ name: { jobicy: 'Jobicy', wwr: 'We Work Remotely', remoteok: 'Remote OK', arbeitnow: 'Arbeitnow', nomads: 'Working Nomads', muse: 'The Muse', hn: 'Hacker News: Who is hiring', remotive: 'Remotive (saved)', boards: 'Greenhouse and Lever' }[g], status: 'failed', message: e.name === 'AbortError' ? 'took too long' : String(e.message || e) });
+      if (mySeq === L.seq) addSources([{ name: { jobicy: 'Jobicy', wwr: 'We Work Remotely', remoteok: 'Remote OK', arbeitnow: 'Arbeitnow', nomads: 'Working Nomads', muse: 'The Muse', hn: 'Hacker News: Who is hiring', remotive: 'Remotive (saved)', boards: 'Greenhouse and Lever' }[g], status: 'failed', message: e.name === 'AbortError' ? 'took too long' : String(e.message || e) }]);
       lastError = e.name === 'AbortError' ? 'The live search took too long.' : (e.name === 'TypeError' ? 'The live search could not be reached. Check the address in Settings.' : 'The live search answered with ' + e.message + '.');
     }
-  }));
+  })));
   clearTimeout(timer);
   if (mySeq !== L.seq) return;
   L.loading = false;
@@ -2942,8 +2958,11 @@ function renderLiveStatus() {
       <div class="row"><button type="button" class="btn btn-small" id="backLiveBtn">Back to live search</button></div>`;
   }
   if (L.active && liveMode()) {
-    html += `<p><strong>Live results for \u201c${esc(L.q)}\u201d.</strong> Read ${esc(formatDateTime(L.fetchedAt))}. Postings a board has taken down are gone. Press Search live to read the boards again.</p>
+    html += `<p><strong>Live results for ${L.kw ? esc(plural(L.kw, 'keyword') + ' from Settings') : '\u201c' + esc(L.q) + '\u201d'}.</strong> Read ${esc(formatDateTime(L.fetchedAt))}. Postings a board has taken down are gone. Press Search live to read the boards again.</p>
       <div class="row"><button type="button" class="btn btn-small" id="browseSavedBtn">Browse the saved feed instead</button></div>`;
+  }
+  if (!L.active && !L.loading && liveMode() && state.settings.targetTitles.length && !$('#ff-q').value.trim()) {
+    html += `<p class="hint">Press Search live with the box empty to search every selected board for your ${esc(plural(state.settings.targetTitles.length, 'keyword'))} from Settings. Type a word first to search just that.</p>`;
   }
   if (L.active && liveMode()) {
     if (L.sources.length) {
@@ -3091,15 +3110,15 @@ function renderFeed() {
     counts.tracker && `${counts.tracker} already in your tracker`,
     counts.dismissed && `${counts.dismissed} dismissed`
   ].filter(Boolean);
-  const liveWaiting = liveMode() && !state.live.q;
+  const liveWaiting = liveMode() && !state.live.q && !state.live.kw;
   $('#feedCount').textContent = liveWaiting ? '' : liveMode() && state.live.loading && !shown.length ? 'Searching Job Opportunities…'
     : `Showing ${Math.min(shown.length, ui.limit)} of ${plural(shown.length, 'opening')}${liveMode() ? ' found live' : ''}.` + (liveMode() && state.live.loading ? ' Still searching…' : '');
   $('#feedHiddenNote').textContent = !liveWaiting && hiddenParts.length ? `Hidden: ${hiddenParts.join(', ')}.` : '';
 
   let empty = '';
   if (liveMode() && state.live.loading && !all.length) empty = 'Searching Job Opportunities…';
-  else if (liveMode() && !state.live.q) empty = 'Type a job title or keyword above. The job boards are searched as you type, so nothing is listed until you do.';
-  else if (!all.length) empty = liveMode() ? `No live openings match \u201c${state.live.q}\u201d. Try fewer or different words.` : (state.feed.loading ? '' : 'No openings yet. Run the GitHub workflow or paste a LinkedIn alert above.');
+  else if (liveMode() && !state.live.q && !state.live.kw) empty = 'Type a job title or keyword above. The job boards are searched as you type, so nothing is listed until you do.';
+  else if (!all.length) empty = liveMode() ? (state.live.kw ? 'No live openings match your Settings keywords right now. Try again later or type a word to search just that.' : `No live openings match \u201c${state.live.q}\u201d. Try fewer or different words.`) : (state.feed.loading ? '' : 'No openings yet. Run the GitHub workflow or paste a LinkedIn alert above.');
   else if (!shown.length) empty = matches.length ? 'Every opening here is hidden. Turn on Show hidden jobs to see why.' : 'No openings match your search.';
   $('#feedList').innerHTML = empty ? `<li class="empty">${esc(empty)}</li>` : shown.slice(0, ui.limit).map(feedCardHtml).join('');
   const left = shown.length - ui.limit;
@@ -3240,7 +3259,7 @@ async function restoreFeedItem(dismissedId, btn) {
 
 function bindFeed() {
   const ff = $('#feedFilters');
-  ff.addEventListener('submit', e => { e.preventDefault(); searchLive(); });
+  ff.addEventListener('submit', e => { e.preventDefault(); searchLive({ keywords: true }); });
   $('#feedDialog').addEventListener('close', refreshReadMarks);
   // A logo that cannot load falls back to the board's first letter
   $('#liveSources').addEventListener('error', e => { if (e.target.classList && e.target.classList.contains('src-logo')) e.target.parentElement.classList.add('no-logo'); }, true);

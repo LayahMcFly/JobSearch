@@ -75,7 +75,10 @@ const findPay = t => (String(t).match(PAY_RE) || [''])[0].trim();
 
 function words(q) { return clean(q).toLowerCase().split(' ').filter(w => w.length > 1 || /\d/.test(w)); }
 // Every search word must appear somewhere in the job (title, company, location, tags, description). The words can be in different places.
+// A search with several terms separated by | (the app sends the keywords from Settings this way) matches a job
+// that satisfies any one term, and each term needs all of its own words.
 function hits(ws, ...fields) {
+  if (ws.alts) { const hay = fields.join(' ').toLowerCase(); return ws.alts.some(t => t.every(w => hay.includes(w))); }
   if (!ws.length) return true;
   const hay = fields.join(' ').toLowerCase();
   return ws.every(w => hay.includes(w));
@@ -123,7 +126,7 @@ async function readJobicy(ws, ctx) {
   const src = { type: 'jobicy', label: 'Jobicy', name: 'Jobicy (live)' };
   // Jobicy's own tag search finds the most relevant posts; matching below is stricter.
   const tag = encodeURIComponent(ws.join(' '));
-  const data = await getCached(`https://jobicy.com/api/v2/remote-jobs?count=50${ws.length ? '&tag=' + tag : ''}`, 'json', ctx);
+  const data = await getCached(`https://jobicy.com/api/v2/remote-jobs?count=${ws.alts ? 100 : 50}${ws.length ? '&tag=' + tag : ''}`, 'json', ctx);
   if (!Array.isArray(data.jobs)) throw new Error('Unexpected response');
   return data.jobs
     .map(j => { const head = [j.jobTitle, j.companyName, j.jobGeo, (j.jobIndustry || []).join(' '), (j.jobType || []).join(' ')]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.jobDescription || j.jobExcerpt || '') }; })
@@ -312,7 +315,8 @@ async function readRemotiveSaved(ws, ctx) {
 
 /* ---------- search ---------- */
 async function search(q, ctx, only) {
-  const ws = words(q);
+  const terms = String(q).split('|').map(words).filter(t => t.length).slice(0, 25);
+  const ws = terms.length > 1 ? Object.assign([], { alts: terms }) : (terms[0] || []);
   const log = [];
   const tasks = [];
   const want = only ? only.split(',').map(x => x.trim()) : null; // groups: jobicy, wwr, remoteok, arbeitnow, nomads, muse, hn, remotive, boards
@@ -374,7 +378,7 @@ export default {
     if (url.pathname === '/health') return reply({ ok: true, name: 'job-search-live' });
     if (url.pathname === '/search') {
       if (origin && !allowed) return reply({ ok: false, error: 'This site is not allowed to use the search.' }, 403);
-      const q = (url.searchParams.get('q') || '').slice(0, 120);
+      const q = (url.searchParams.get('q') || '').slice(0, 900);
       try { return reply(await search(q, ctx, (url.searchParams.get('only') || '').slice(0, 60))); }
       catch (e) { return reply({ ok: false, error: String(e.message || e) }, 500); }
     }
