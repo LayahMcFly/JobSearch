@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.16 keeps live results that matched a keyword anywhere (the title phrase check only applies to the saved feed), deals results out one keyword at a time with a Keyword label on each card, and searches each comma-separated phrase in the box separately.
   v1.4.15 fades the tab strip at its edges instead of cutting tabs off, and makes the tab arrows full circles.
   v1.4.14 makes the result counts in the Job Feed count up like a digital clock as results arrive.
   v1.4.13 shows a banner at the top when a newer version is published (it names the new version and the one you have, with Update now and Later),
@@ -1305,7 +1306,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.15'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.16'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2811,10 +2812,11 @@ function wholeWordRe(word) {
 function buildKeywordFilter() {
   const targets = state.settings.targetTitles.map(normText).filter(Boolean);
   const excluded = state.settings.excludedWords.map(w => ({ word: w, re: wholeWordRe(w) }));
+  const live = liveMode(); // live results were already searched by keyword, so only the excluded words apply
   return item => {
     const hit = excluded.find(x => x.re.test(item.title || '') || x.re.test(item.description || ''));
     if (hit) return `Excluded word: ${hit.word}`;
-    if (item.origin !== 'pasted' && targets.length && !targets.some(t => normText(item.title).includes(t))) {
+    if (!live && item.origin !== 'pasted' && targets.length && !targets.some(t => normText(item.title).includes(t))) {
       return 'Title does not match your target titles';
     }
     return '';
@@ -2891,8 +2893,9 @@ function feedItems() {
   if (liveMode()) {
     // With a live address saved, the feed is only what the last live search found (nothing before you type).
     const cutoff = toDateStr(new Date(Date.now() - LIVE_MAX_AGE_DAYS * 86400000)); // nothing posted more than a month ago; undated postings stay
-    return state.live.jobs.filter(j => j && j.title && !(j.datePosted && String(j.datePosted).slice(0, 10) < cutoff))
+    const live = state.live.jobs.filter(j => j && j.title && !(j.datePosted && String(j.datePosted).slice(0, 10) < cutoff))
       .map(j => Object.assign({}, j, { origin: 'feed', id: String(j.id || ('feed:' + (normLink(j.link) || titleKey(j)))) }));
+    return state.live.kw ? interleaveByKeyword(live, state.live.terms || []) : live;
   }
   const pasted = state.pasted.map(p => Object.assign({}, p, { origin: 'pasted' }))
     .sort((a, b) => (b.pastedAt || '').localeCompare(a.pastedAt || ''));
@@ -2914,6 +2917,24 @@ function classifyFeed() {
   });
 }
 
+// Keyword searches (empty box): tag each opening with the keyword it matched, then deal the list out
+// one keyword at a time so the first page shows a mix of keywords instead of one keyword's results.
+function interleaveByKeyword(jobs, terms) {
+  const tw = terms.map(t => ({ t, w: normText(t).split(' ').filter(Boolean) })).filter(x => x.w.length);
+  const has = (text, w) => w.every(x => text.includes(x));
+  const groups = new Map();
+  for (const j of jobs) {
+    const title = ' ' + normText(j.title) + ' ', all = title + normText(j.description) + ' ';
+    const hit = tw.find(x => has(title, x.w.map(w => ' ' + w))) || tw.find(x => has(all, x.w.map(w => ' ' + w)));
+    j.kwMatch = hit ? hit.t : '';
+    const key = j.kwMatch || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(j);
+  }
+  const lists = [...groups.values()], out = [];
+  for (let n = 0; out.length < jobs.length; n++) for (const l of lists) if (n < l.length) out.push(l[n]);
+  return out;
+}
 // --- Live search (v1.2.0) -----------------------------------
 const LIVE_TIMEOUT_MS = 25000;
 const LIVE_GROUPS = ['jobicy', 'wwr', 'remoteok', 'arbeitnow', 'nomads', 'muse', 'hn', 'remotive', 'boards'];
@@ -2945,7 +2966,9 @@ async function searchLive(opts = {}) {
   const ff = $('#feedFilters');
   const q = ff.elements.q.value.trim();
   state.feedUi.q = ff.elements.q.value; // keep the saved copy in step, or the box is redrawn with older text when it loses focus
-  const terms = !q && opts.keywords ? state.settings.targetTitles.filter(t => t.length > 1).slice(0, KW_BATCH * KW_MAX_BATCHES) : [];
+  // Empty box: every Settings keyword is its own search. Commas in the box do the same (one search per phrase).
+  const typed = q.split(/[,\n;]+/).map(t => t.trim()).filter(t => t.length > 1);
+  const terms = !q && opts.keywords ? state.settings.targetTitles.filter(t => t.length > 1).slice(0, KW_BATCH * KW_MAX_BATCHES) : (typed.length > 1 ? typed.slice(0, KW_BATCH * KW_MAX_BATCHES) : []);
   const batches = [];
   for (let i = 0; i < terms.length; i += KW_BATCH) batches.push(terms.slice(i, i + KW_BATCH).map(t => t.replace(/\|/g, ' ')).join('|'));
   const base = state.settings.liveUrl;
@@ -2955,7 +2978,7 @@ async function searchLive(opts = {}) {
   if (!/^https:\/\//i.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(base)) { L.error = 'The live search address must start with https://'; L.active = false; renderFeed(); return; }
   if (!L.groups.length) { L.error = 'Pick at least one job board to search.'; L.active = false; L.jobs = []; renderFeed(); return; }
   const mySeq = ++L.seq;
-  Object.assign(L, { loading: true, error: '', q, kw: terms.length, jobs: [], sources: [], active: true, fetchedAt: new Date().toISOString() });
+  Object.assign(L, { loading: true, error: '', q, kw: terms.length, terms, jobs: [], sources: [], active: true, fetchedAt: new Date().toISOString() });
   state.feedUi.limit = pageSize();
   tickShown[0] = 0; tickShown[1] = 0; // the count climbs from zero for each new search
   renderFeed();
@@ -3146,6 +3169,7 @@ function feedCardHtml(i) {
     <p class="feed-company">${highlightHtml(esc(company), words)}</p>
     ${where ? `<p class="feed-meta">${where}</p>` : ''}
     ${meta ? `<p class="feed-meta">${meta}</p>` : ''}
+    ${i.kwMatch ? `<p class="feed-meta"><span class="badge kw-badge">Keyword: ${esc(i.kwMatch)}</span></p>` : ''}
     ${i.needsCheck ? '<p class="feed-note">Check the title and company. This alert did not use the usual layout.</p>' : ''}
     ${snippet ? `<p class="feed-snippet" data-feed-open="${esc(i.id)}">${snippet}</p>` : ''}
     ${i.descriptionIsSnippet ? '<p class="feed-meta">This source shares only a short part of the description.</p>' : ''}
