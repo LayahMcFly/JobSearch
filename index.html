@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.10 fixes the Job Feed search box being emptied when you tap Search live or tap away before the typing pause ends.
   v1.4.9 adds Only show jobs I can work from in the United States (Settings, on by default): openings in other countries or regions are hidden.
   v1.4.8 lets Search live with an empty box search every selected board for the keywords in Settings (20 at a time, up to 120), and
   the Worker accepts several terms separated by |. A keyword search clears when the Settings keywords change.
@@ -1271,7 +1272,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.9'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.10'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2906,6 +2907,7 @@ const KW_BATCH = 20, KW_MAX_BATCHES = 6; // keywords from Settings go to the boa
 async function searchLive(opts = {}) {
   const ff = $('#feedFilters');
   const q = ff.elements.q.value.trim();
+  state.feedUi.q = ff.elements.q.value; // keep the saved copy in step, or the box is redrawn with older text when it loses focus
   const terms = !q && opts.keywords ? state.settings.targetTitles.filter(t => t.length > 1).slice(0, KW_BATCH * KW_MAX_BATCHES) : [];
   const batches = [];
   for (let i = 0; i < terms.length; i += KW_BATCH) batches.push(terms.slice(i, i + KW_BATCH).map(t => t.replace(/\|/g, ' ')).join('|'));
@@ -3297,6 +3299,7 @@ function bindFeed() {
       if (open && !e.target.closest('a')) openFeedJob(open.dataset.feedOpen); // links inside a preview still open normally
     }
   });
+  ff.elements.q.addEventListener('input', () => { state.feedUi.q = ff.elements.q.value; }); // always current, even before the search-as-you-type pause ends
   const onType = () => {
     state.feedUi.q = ff.elements.q.value;
     state.feedUi.limit = pageSize();
