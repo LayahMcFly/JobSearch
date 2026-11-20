@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.9 adds Only show jobs I can work from in the United States (Settings, on by default): openings in other countries or regions are hidden.
   v1.4.8 lets Search live with an empty box search every selected board for the keywords in Settings (20 at a time, up to 120), and
   the Worker accepts several terms separated by |. A keyword search clears when the Settings keywords change.
   v1.4.7 asks "Are you sure you want to delete <name>, saved <date and time>?" before removing a saved keyword list.
@@ -997,6 +998,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <p class="hint">The Job Feed uses these to hide openings in places you cannot work from. Enter one per line.</p>
       <div class="stack" style="margin-top:.8rem">
         <div>
+          <label class="src-chip" for="set-usOnly"><input type="checkbox" id="set-usOnly" name="usOnly" aria-describedby="set-usOnly-hint"><span>Only show jobs I can work from in the United States</span></label>
+          <p class="hint" id="set-usOnly-hint">Hides openings whose location is another country or region, such as Spain, Europe Only or Asia Only. Openings that say United States, North America, Anywhere or Worldwide, name a US state or city, or give no location stay visible. Anything hidden can be revealed from the Job Feed. Locations under Locations I accept always stay.</p>
+        </div>
+        <div>
           <label for="set-locationAccept">Locations I accept</label>
           <textarea id="set-locationAccept" name="locationAccept" rows="4" aria-describedby="set-locationAccept-hint"></textarea>
           <p class="hint" id="set-locationAccept-hint">If an opening's location also matches one of these, it stays visible even when it matches a hidden location. For example, "Canada or United States" stays. United States also counts as US, USA, and America. Anywhere also counts as worldwide and global.</p>
@@ -1266,7 +1271,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.8'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.9'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1679,7 +1684,7 @@ const DEFAULT_FEED_URL = 'jobs-feed.json';
 const DEFAULT_SETTINGS = {
   id: SETTINGS_ID, noWordDays: 14, targetTitles: [], excludedWords: [], feedUrl: DEFAULT_FEED_URL, liveUrl: '', craigslistCity: 'valdosta', sampleSeeded: false,
   // v1.1.10: location filter for the Job Feed. Hide list wins unless the location also matches the accept list.
-  locationAccept: ['United States', 'Anywhere', 'Worldwide'], locationHide: ['Canada'],
+  locationAccept: ['United States', 'Anywhere', 'Worldwide'], locationHide: ['Canada'], usOnly: true,
   // Phase 5: AI drafting (main switch Off by default; the three per-draft switches only matter while it is On)
   aiDrafting: false, aiResume: true, aiAnswers: true, aiEmail: true,
   aiModel: 'claude-haiku-5-5', aiMonthlyLimit: 30, aiFunctionUrl: '',
@@ -1696,6 +1701,7 @@ function normalizeSettings(raw) {
   s.excludedWords = cleanList(s.excludedWords);
   s.locationAccept = cleanList(s.locationAccept);
   s.locationHide = cleanList(s.locationHide);
+  s.usOnly = s.usOnly !== false; // on unless switched off
   s.feedUrl = String(s.feedUrl || '').trim() || DEFAULT_FEED_URL;
   s.liveUrl = String(s.liveUrl || '').trim().replace(/\/+$/, '').replace(/\/(health|search)(\?.*)?$/i, '').replace(/\/+$/, ''); // a pasted /health or /search ending is dropped
   s.craigslistCity = String(s.craigslistCity || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\.craigslist\.org.*$/, '').replace(/[^a-z0-9-]/g, '') || 'valdosta';
@@ -2560,6 +2566,7 @@ function renderSettings() {
     f.elements.excludedWords.value = state.settings.excludedWords.join('\n');
     f.elements.locationAccept.value = state.settings.locationAccept.join('\n');
     f.elements.locationHide.value = state.settings.locationHide.join('\n');
+    f.elements.usOnly.checked = state.settings.usOnly;
     f.elements.feedUrl.value = state.settings.feedUrl;
     f.elements.liveUrl.value = state.settings.liveUrl;
     f.elements.craigslistCity.value = state.settings.craigslistCity;
@@ -2587,6 +2594,7 @@ async function saveSettingsForm(e) {
     excludedWords: f.elements.excludedWords.value,
     locationAccept: f.elements.locationAccept.value,
     locationHide: f.elements.locationHide.value,
+    usOnly: f.elements.usOnly.checked,
     feedUrl: f.elements.feedUrl.value,
     liveUrl: f.elements.liveUrl.value,
     craigslistCity: f.elements.craigslistCity.value
@@ -2796,11 +2804,25 @@ function locationTerms(list) {
   });
   return out;
 }
+const US_STATE_NAMES = 'alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon pennsylvania tennessee texas utah vermont virginia washington wisconsin wyoming'.split(' ').concat(['new hampshire', 'new jersey', 'new mexico', 'new york', 'north carolina', 'north dakota', 'rhode island', 'south carolina', 'south dakota', 'west virginia', 'district of columbia']);
+const US_STATE_ABBR = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
+// True when a location text could be worked from in the United States: it names the US, North America, a US state, or is open to anywhere.
+function usFriendly(loc) {
+  const t = String(loc || '').trim().toLowerCase();
+  if (!t || /^(remote|work from home|wfh|hybrid|home based|home-based)$/.test(t)) return true;
+  if (/\b(usa|u\.s\.a?\.?|united states|north america|americas?)\b/.test(t) && !/\b(latin|south|central) america\b/.test(t.replace(/north america/g, ''))) return true;
+  if (/(^|[^a-z])us($|[^a-z])/.test(t)) return true;
+  if (/\b(anywhere|worldwide|global|flexible)\b/.test(t)) return true;
+  if (US_STATE_NAMES.some(n => new RegExp('(^|[^a-z])' + n + '($|[^a-z])').test(t))) return true;
+  return (String(loc).match(/\b[A-Z]{2}\b/g) || []).some(a => US_STATE_ABBR.has(a));
+}
 function buildLocationFilter() {
   const hide = locationTerms(state.settings.locationHide || []);
   const accept = locationTerms(state.settings.locationAccept || []);
+  const usOnly = state.settings.usOnly !== false;
   return item => {
     const loc = String(item.location || '');
+    if (usOnly && loc && !usFriendly(loc) && !accept.some(x => x.re.test(loc))) return `Location: ${loc}`;
     if (!loc || !hide.length) return '';
     const hit = hide.find(x => x.re.test(loc));
     if (!hit) return '';
