@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.18 adds a Search Google Jobs button next to Search Craigslist.
   v1.4.17 adds an Undo button to the pop-up after Dismiss and Add to Tracker (stays 8 seconds).
   v1.4.16 keeps live results that matched a keyword anywhere (the title phrase check only applies to the saved feed), deals results out one keyword at a time with a Keyword label on each card, and searches each comma-separated phrase in the box separately.
   v1.4.15 fades the tab strip at its edges instead of cutting tabs off, and makes the tab arrows full circles.
@@ -844,7 +845,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <p id="feedCount" class="feed-count" aria-live="polite"></p>
     </div>
     <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
-      <p class="row"><button type="button" class="btn btn-small" id="craigslistBtn">Search Craigslist<span class="sr-only"> (opens in a new tab)</span></button> <span class="hint">Opens Craigslist jobs for your search words. Paste any good find into the tracker.</span></p>
+      <p class="row"><button type="button" class="btn btn-small" id="craigslistBtn">Search Craigslist<span class="sr-only"> (opens in a new tab)</span></button> <button type="button" class="btn btn-small" id="googleJobsBtn">Search Google Jobs<span class="sr-only"> (opens in a new tab)</span></button> <span class="hint">These open Craigslist or Google's job search for your search words (the first Settings keyword when the box is empty). Paste any good find into the tracker.</span></p>
       <fieldset id="liveSources" class="live-sources" hidden>
         <legend>Job boards to search live</legend>
         <label class="src-chip" title="Jobicy"><input type="checkbox" name="lsrc" value="jobicy"><span data-letter="J"><img class="src-logo" alt="" width="28" height="28" loading="lazy" decoding="async" src="https://www.google.com/s2/favicons?domain=jobicy.com&amp;sz=64"><b class="src-name">Jobicy</b></span></label>
@@ -1310,7 +1311,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.17'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.18'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3402,6 +3403,12 @@ function bindFeed() {
   $('#feedDialog').addEventListener('close', refreshReadMarks);
   // A logo that cannot load falls back to the board's first letter
   $('#liveSources').addEventListener('error', e => { if (e.target.classList && e.target.classList.contains('src-logo')) e.target.parentElement.classList.add('no-logo'); }, true);
+  $('#googleJobsBtn').addEventListener('click', () => {
+    const typed = String($('#ff-q').value || '').trim().split(/[,\n;]+/)[0].trim();
+    const q = typed || (state.settings.targetTitles[0] || '');
+    const loc = state.settings.usOnly ? ' remote USA' : ' remote';
+    window.open(`https://www.google.com/search?q=${encodeURIComponent((q + loc).trim())}&ibp=htl;jobs`, '_blank', 'noopener,noreferrer');
+  });
   $('#craigslistBtn').addEventListener('click', () => {
     const q = encodeURIComponent(String($('#ff-q').value || '').trim());
     window.open(`https://${state.settings.craigslistCity}.craigslist.org/search/jjj${q ? '?query=' + q : ''}`, '_blank', 'noopener,noreferrer');
