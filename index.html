@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.14 makes the result counts in the Job Feed count up like a digital clock as results arrive.
   v1.4.13 shows a banner at the top when a newer version is published (it names the new version and the one you have, with Update now and Later),
   and the search box's clear (x) button and the disabled Searching button now follow the theme.
   v1.4.12 colors the typing cursor with the theme and gives the Searching indicator a glowing blinking cursor; an unchanged result list is no longer redrawn.
@@ -484,6 +485,8 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-sticky .sbar{display:flex;gap:.5rem;align-items:center}
 .feed-sticky .sbar input{flex:1;min-width:0}
 .feed-count{margin:.35rem 0 0;font-size:.92rem}
+.feed-count .tick{display:inline-block;min-width:1.6ch;padding:0 .3em;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;font-weight:700;
+  text-align:center;color:var(--accent);background:var(--tint);border:1px solid var(--accent-line,var(--border));text-shadow:0 0 .5em color-mix(in srgb,var(--accent) 40%,transparent)}
 .live-sources{grid-column:1/-1;border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.5rem}
 .live-sources legend{padding:0;margin:0 0 .45rem;font-weight:600;float:left;width:100%}
 .src-chip{position:relative;display:inline-flex}
@@ -1295,7 +1298,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.13'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.14'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2945,6 +2948,7 @@ async function searchLive(opts = {}) {
   const mySeq = ++L.seq;
   Object.assign(L, { loading: true, error: '', q, kw: terms.length, jobs: [], sources: [], active: true, fetchedAt: new Date().toISOString() });
   state.feedUi.limit = pageSize();
+  tickShown[0] = 0; tickShown[1] = 0; // the count climbs from zero for each new search
   renderFeed();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), LIVE_TIMEOUT_MS);
@@ -3040,6 +3044,21 @@ function applyFeedView(list, ui) {
   const by = { new: newest, old: oldest, match: (a, b) => ((a.rank || 0) - (b.rank || 0)) || newest(a, b),
     company: (a, b) => String(a.company || '').localeCompare(String(b.company || '')) || newest(a, b) };
   return out.slice().sort(by[ui.sort] || newest);
+}
+// The result numbers count up like a digital clock whenever they grow, starting from the number last on screen.
+const tickShown = [0, 0], tickRaf = [0, 0];
+function tickTo(el, i, to) {
+  cancelAnimationFrame(tickRaf[i]);
+  const from = tickShown[i];
+  if (from === to || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { tickShown[i] = to; el.textContent = String(to); return; }
+  const t0 = performance.now(), dur = Math.min(900, 250 + Math.abs(to - from) * 12);
+  el.textContent = String(from);
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur), v = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+    tickShown[i] = v; el.textContent = String(v);
+    if (k < 1) tickRaf[i] = requestAnimationFrame(step);
+  };
+  tickRaf[i] = requestAnimationFrame(step);
 }
 function syncFeedControls() {
   const ff = $('#feedFilters'), ui = state.feedUi;
@@ -3160,8 +3179,14 @@ function renderFeed() {
     counts.dismissed && `${counts.dismissed} dismissed`
   ].filter(Boolean);
   const liveWaiting = liveMode() && !state.live.q && !state.live.kw;
-  $('#feedCount').textContent = liveWaiting ? '' : liveMode() && state.live.loading && !shown.length ? 'Searching Job Opportunities…'
-    : `Showing ${Math.min(shown.length, ui.limit)} of ${plural(shown.length, 'opening')}${liveMode() ? ' found live' : ''}.` + (liveMode() && state.live.loading ? ' Still searching…' : '');
+  const countEl = $('#feedCount');
+  if (liveWaiting) countEl.textContent = '';
+  else if (liveMode() && state.live.loading && !shown.length) countEl.textContent = 'Searching Job Opportunities…';
+  else {
+    const nShown = Math.min(shown.length, ui.limit);
+    countEl.innerHTML = `Showing <span class="tick" data-to="${nShown}">${nShown}</span> of <span class="tick" data-to="${shown.length}">${shown.length}</span> ${shown.length === 1 ? 'opening' : 'openings'}${liveMode() ? ' found live' : ''}.` + (liveMode() && state.live.loading ? ' Still searching…' : '');
+    $$('.tick', countEl).forEach((el, i) => tickTo(el, i, Number(el.dataset.to)));
+  }
   $('#feedHiddenNote').textContent = !liveWaiting && hiddenParts.length ? `Hidden: ${hiddenParts.join(', ')}.` : '';
 
   let empty = '';
