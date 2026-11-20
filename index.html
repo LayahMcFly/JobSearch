@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.21 fades the release notes card at its top and bottom edges while more rows are hidden.
   v1.4.20 adds a Release notes button in the footer that opens a card with a table of every version (RELEASES list near APP_VERSION; add a row with each update).
   v1.4.19 makes dismissed openings that have no company name stay hidden too (matched by title and board).
   v1.4.18 adds a Search Google Jobs button next to Search Craigslist.
@@ -649,10 +650,14 @@ dialog.notes-card{margin:auto;padding:0;border:1px solid var(--border);border-ra
 dialog.notes-card[open]{display:flex;flex-direction:column}
 dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
 .notes-card .panel-head{border-radius:16px 16px 0 0}
-.notes-scroll{overflow:auto;padding:.25rem 1rem 1rem}
+.notes-scroll{overflow:auto;padding:.25rem 1rem 1rem;--fade-t:0rem;--fade-b:0rem;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-t),#000 calc(100% - var(--fade-b)),transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-t),#000 calc(100% - var(--fade-b)),transparent 100%)}
+.notes-scroll.fade-t{--fade-t:1.8rem}
+.notes-scroll.fade-b{--fade-b:1.8rem}
 .notes-grid{display:grid;grid-template-columns:max-content 1fr;font-size:.95rem}
 .notes-grid>*{padding:.65rem .5rem;border-bottom:1px solid var(--border)}
-.notes-grid .nh{position:sticky;top:0;z-index:1;background:var(--surface);font-weight:700;border-bottom:2px solid var(--border)}
+.notes-grid .nh{font-weight:700;border-bottom:2px solid var(--border)}
 .notes-grid .nv{font-weight:700;white-space:nowrap}
 .notes-grid .nv .badge{display:block;margin:.3rem 0 0;font-size:.72rem;width:max-content}
 .notes-grid .is-current{background:var(--tint)}
@@ -1347,9 +1352,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.20'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.21'; // shown in the footer; numbering rule is in the comment at the top of this file
 // Release notes shown by the footer button, newest first. Add a row here with every new version.
 const RELEASES = [
+  ['v1.4.21', 'The release notes card fades at its top and bottom edges while more rows are hidden, like the tab strip.'],
   ['v1.4.20', 'Release notes card in the footer: a table of every version and what it added. Selected text and held-down buttons use the theme color instead of the browser blue.'],
   ['v1.4.19', 'Dismissed openings that have no company name now stay hidden too.'],
   ['v1.4.18', 'Search Google Jobs button next to Search Craigslist.'],
@@ -5873,7 +5879,15 @@ async function init() {
   fillProfileForms();
   $('#appVersion').textContent = APP_VERSION;
   $('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => { const c = v === APP_VERSION ? ' is-current' : ''; return `<div class="nv${c}" role="cell">${esc(v)}${c ? '<span class="badge">You have this</span>' : ''}</div><div class="${c.trim()}" role="cell">${esc(t)}</div>`; }).join(''));
-  $('#notesBtn').addEventListener('click', () => { $('#notesDialog').showModal(); $('#notesDialog .notes-scroll').scrollTop = 0; });
+  const notesBox = $('#notesDialog .notes-scroll');
+  const fadeNotes = () => {
+    const max = notesBox.scrollHeight - notesBox.clientHeight;
+    notesBox.classList.toggle('fade-t', notesBox.scrollTop > 2);
+    notesBox.classList.toggle('fade-b', notesBox.scrollTop < max - 2);
+  };
+  notesBox.addEventListener('scroll', fadeNotes, { passive: true });
+  window.addEventListener('resize', debounce(fadeNotes, 100));
+  $('#notesBtn').addEventListener('click', () => { $('#notesDialog').showModal(); notesBox.scrollTop = 0; fadeNotes(); });
   showView(viewFromHash());
   watchForUpdate();
 }
