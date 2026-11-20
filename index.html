@@ -80,6 +80,9 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.13 shows a banner at the top when a newer version is published (it names the new version and the one you have, with Update now and Later),
+  and the search box's clear (x) button and the disabled Searching button now follow the theme.
+  v1.4.12 colors the typing cursor with the theme and gives the Searching indicator a glowing blinking cursor; an unchanged result list is no longer redrawn.
   v1.4.11 shows every live result posted in the last 30 days (older postings are dropped) with no fixed cap: the Worker now returns up to 500
   per board group and reads deeper into Remote OK, Arbeitnow, The Muse and Hacker News.
   v1.4.10 fixes the Job Feed search box being emptied when you tap Search live or tap away before the typing pause ends.
@@ -256,7 +259,8 @@ main:focus{outline:none}
   border-color:var(--accent-hover);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.18);
   box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 30%,transparent)}
 .btn-primary:hover{background:linear-gradient(135deg,var(--accent) 0%,var(--accent-hover) 100%)}
-.btn:disabled{background:var(--surface-2);box-shadow:none}
+.btn:disabled{background:var(--surface-2);box-shadow:none;color:var(--muted,var(--text));opacity:.85}
+.btn-primary:disabled{color:var(--text)}
 .btn-danger{color:var(--danger);border-color:#c99a9a}
 .btn-danger:hover{background:#f6e3e3}
 .btn-small{min-height:40px;padding:.3rem .8rem;font-size:.92rem}
@@ -530,6 +534,22 @@ legend{font-weight:600;padding:0 .3rem}
 .feed-live p{margin:.2rem 0}
 .feed-card mark{background:rgba(255,196,0,.45);color:inherit;border-radius:3px;padding:0 .12em}
 .feed-searching{color:var(--accent,inherit)}
+/* Typing cursor and the searching cursor follow the theme color */
+input,textarea{caret-color:var(--accent)}
+#ff-q{caret-color:var(--accent);caret-shape:bar}
+/* The clear (x) button inside search boxes uses the theme color, not the browser's blue */
+input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;width:1.1rem;height:1.1rem;cursor:pointer;background:var(--accent);
+  -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'><path d='M5 5l14 14M19 5L5 19'/></svg>") center/contain no-repeat;
+  mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'><path d='M5 5l14 14M19 5L5 19'/></svg>") center/contain no-repeat}
+/* New version banner */
+.update-banner{position:fixed;top:.6rem;left:50%;transform:translateX(-50%);z-index:2000;width:min(34rem,calc(100% - 1.2rem));display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .7rem;
+  padding:.75rem .9rem;border:1px solid var(--accent-line,var(--border));border-radius:16px;background:var(--surface);box-shadow:0 8px 28px color-mix(in srgb,var(--accent) 30%,transparent)}
+.update-banner p{margin:0;flex:1 1 15rem}
+.update-banner[hidden]{display:none}
+.feed-searching::after,#feedCount.is-searching::after{content:'';display:inline-block;width:.5em;height:1.05em;margin-left:.35em;vertical-align:text-bottom;border-radius:2px;
+  background:var(--accent);box-shadow:0 0 .55em color-mix(in srgb,var(--accent) 55%,transparent);animation:searchCaret 1.1s ease-in-out infinite}
+@keyframes searchCaret{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.feed-searching::after,#feedCount.is-searching::after{animation:none}}
 .feed-reason{font-size:.9rem;font-weight:600;color:var(--danger)}
 .feed-note{font-size:.9rem;font-weight:600}
 .feed-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:auto;padding-top:.6rem}
@@ -1265,6 +1285,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
 </dialog>
 
 <datalist id="sourceOptions"></datalist>
+<div id="updateBanner" class="update-banner" role="status" aria-live="polite" hidden></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -1274,7 +1295,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.11'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.13'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -3148,7 +3169,9 @@ function renderFeed() {
   else if (liveMode() && !state.live.q && !state.live.kw) empty = 'Type a job title or keyword above. The job boards are searched as you type, so nothing is listed until you do.';
   else if (!all.length) empty = liveMode() ? (state.live.kw ? 'No live openings match your Settings keywords right now. Try again later or type a word to search just that.' : `No live openings match \u201c${state.live.q}\u201d. Try fewer or different words.`) : (state.feed.loading ? '' : 'No openings yet. Run the GitHub workflow or paste a LinkedIn alert above.');
   else if (!shown.length) empty = matches.length ? 'Every opening here is hidden. Turn on Show hidden jobs to see why.' : 'No openings match your search.';
-  $('#feedList').innerHTML = empty ? `<li class="empty">${esc(empty)}</li>` : shown.slice(0, ui.limit).map(feedCardHtml).join('');
+  $('#feedCount').classList.toggle('is-searching', liveMode() && state.live.loading);
+  const listHtml = empty ? `<li class="empty">${esc(empty)}</li>` : shown.slice(0, ui.limit).map(feedCardHtml).join('');
+  if (listHtml !== renderFeed.last) { $('#feedList').innerHTML = listHtml; renderFeed.last = listHtml; } // an unchanged list is left alone so it does not flash
   const left = shown.length - ui.limit;
   $('#feedMore').innerHTML = left > 0
     ? `<button type="button" class="btn" id="feedMoreBtn">Load more (${left} not shown)</button>` : '';
@@ -5669,6 +5692,36 @@ async function init() {
   fillProfileForms();
   $('#appVersion').textContent = APP_VERSION;
   showView(viewFromHash());
+  watchForUpdate();
+}
+
+// --- New version notice (v1.4.13) ----------------------------
+// Reads the published page now and then. When its APP_VERSION is newer than this one, a banner at the top offers to reload.
+const versionParts = v => String(v).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+function isNewerVersion(a, b) { const x = versionParts(a), y = versionParts(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; }
+async function checkForUpdate() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const url = location.origin + location.pathname + '?versioncheck=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return;
+    const m = (await res.text()).match(/const APP_VERSION = '(v[\d.]+)'/);
+    if (!m || !isNewerVersion(m[1], APP_VERSION)) return;
+    let skipped = ''; try { skipped = sessionStorage.getItem('jobsearch.skipUpdate') || ''; } catch { /* fine */ }
+    if (skipped === m[1]) return;
+    const box = $('#updateBanner');
+    box.innerHTML = `<p><strong>A new version is out: ${esc(m[1])}.</strong> You have ${esc(APP_VERSION)}. Your saved jobs and settings stay as they are.</p>
+      <button type="button" class="btn btn-small btn-primary" id="updateNowBtn">Update now</button>
+      <button type="button" class="btn btn-small" id="updateLaterBtn">Later</button>`;
+    box.hidden = false;
+    $('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + location.hash; });
+    $('#updateLaterBtn').addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('jobsearch.skipUpdate', m[1]); } catch { /* fine */ } });
+  } catch { /* offline or blocked: try again later */ }
+}
+function watchForUpdate() {
+  checkForUpdate();
+  setInterval(checkForUpdate, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
 }
 init();
 </script>
