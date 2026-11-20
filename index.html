@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.15 fades the tab strip at its edges instead of cutting tabs off, and makes the tab arrows full circles.
   v1.4.14 makes the result counts in the Job Feed count up like a digital clock as results arrive.
   v1.4.13 shows a banner at the top when a newer version is published (it names the new version and the one you have, with Update now and Later),
   and the search box's clear (x) button and the disabled Searching button now follow the theme.
@@ -231,7 +232,13 @@ main:focus{outline:none}
 .tab-pager{display:flex;align-items:center;gap:.35rem}
 .tab-pager .tabs{flex:1;min-width:0;scrollbar-width:none;scroll-behavior:smooth}
 .tab-pager .tabs::-webkit-scrollbar{display:none}
-.tab-arrow{display:none;flex:none;width:36px;height:44px;border-radius:999px;border:1px solid var(--border);
+/* Tabs that run past an edge fade out instead of being cut off */
+.tab-pager .tabs{--fade-l:0rem;--fade-r:0rem;
+  -webkit-mask-image:linear-gradient(to right,transparent 0,#000 var(--fade-l),#000 calc(100% - var(--fade-r)),transparent 100%);
+  mask-image:linear-gradient(to right,transparent 0,#000 var(--fade-l),#000 calc(100% - var(--fade-r)),transparent 100%)}
+.tab-pager .tabs.fade-l{--fade-l:1.6rem}
+.tab-pager .tabs.fade-r{--fade-r:1.6rem}
+.tab-arrow{display:none;flex:none;width:44px;height:44px;border-radius:50%;border:1px solid var(--border);
   background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%);color:var(--accent-text);
   font:inherit;font-size:1.6rem;line-height:1;font-weight:700;cursor:pointer;padding:0 0 .15rem}
 .tab-arrow:disabled{opacity:.35;cursor:default}
@@ -1298,7 +1305,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.14'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.15'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2016,6 +2023,8 @@ function tabPageWidth() { const list = $('#tabsList'); return list ? list.client
 function updateTabArrows() {
   const list = $('#tabsList'); if (!list) return;
   const max = list.scrollWidth - list.clientWidth;
+  list.classList.toggle('fade-l', list.scrollLeft > 2);
+  list.classList.toggle('fade-r', list.scrollLeft < max - 2);
   $('#tabsPrev').disabled = list.scrollLeft <= 2;
   $('#tabsNext').disabled = list.scrollLeft >= max - 2;
 }
