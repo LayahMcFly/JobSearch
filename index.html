@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.19 makes dismissed openings that have no company name stay hidden too (matched by title and board).
   v1.4.18 adds a Search Google Jobs button next to Search Craigslist.
   v1.4.17 adds an Undo button to the pop-up after Dismiss and Add to Tracker (stays 8 seconds).
   v1.4.16 keeps live results that matched a keyword anywhere (the title phrase check only applies to the saved feed), deals results out one keyword at a time with a Keyword label on each card, and searches each comma-separated phrase in the box separately.
@@ -1311,7 +1312,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.18'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.19'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2797,7 +2798,8 @@ function relativeTime(iso) {
   return plural(Math.round(h / 24), 'day') + ' ago';
 }
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const titleKey = x => (normText(x.company) && normText(x.title)) ? normText(x.company) + '|' + normText(x.title) : '';
+// Company and title identify a posting across boards and links. With no company, title and source stand in.
+const titleKey = x => normText(x.title) ? ((normText(x.company) ? normText(x.company) : '~' + normText(x.source)) + '|' + normText(x.title)) : '';
 
 async function loadFeed() {
   state.feed.loading = true;
@@ -3620,7 +3622,7 @@ async function parsePastedAlert() {
   let repeats = 0;
   try {
     for (const f of found) {
-      const id = f.linkedinId ? 'linkedin:' + f.linkedinId : 'pasted:' + (titleKey(f) || normText(f.title));
+      const id = f.linkedinId ? 'linkedin:' + f.linkedinId : 'pasted:' + ((normText(f.company) && normText(f.title)) ? normText(f.company) + '|' + normText(f.title) : normText(f.title));
       if (existing.has(id)) { repeats++; continue; }
       existing.add(id);
       newIds.add(id);
