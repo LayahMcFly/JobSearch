@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.22 puts a gap between the Search Craigslist and Search Google Jobs buttons.
   v1.4.21 fades the release notes card at its top and bottom edges while more rows are hidden.
   v1.4.20 adds a Release notes button in the footer that opens a card with a table of every version (RELEASES list near APP_VERSION; add a row with each update).
   v1.4.19 makes dismissed openings that have no company name stay hidden too (matched by title and board).
@@ -642,6 +643,8 @@ dialog.panel-wide{width:min(1000px,100vw)}
 .draft-warnings{margin:.6rem 0 0;padding-left:1.2rem;color:#7a5410;font-weight:600;font-size:.95rem}
 textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;background:var(--tint)}
 .app-footer{text-align:center;color:var(--muted);font-size:.85rem;padding:1.5rem 1rem 2rem}
+.board-links{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem .7rem;margin:.4rem 0}
+.board-links .hint{flex:1 1 100%;margin:.1rem 0 0}
 .app-footer .notes-btn{margin-left:.6rem;min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent,var(--text));font:inherit;font-weight:600;cursor:pointer}
 .app-footer .notes-btn:hover{border-color:var(--accent,var(--text))}
 .app-footer .notes-btn:focus-visible{outline:3px solid var(--accent,currentColor);outline-offset:2px}
@@ -874,7 +877,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
       <p id="feedCount" class="feed-count" aria-live="polite"></p>
     </div>
     <form id="feedFilters" class="filters" role="search" aria-label="Filter the job feed">
-      <p class="row"><button type="button" class="btn btn-small" id="craigslistBtn">Search Craigslist<span class="sr-only"> (opens in a new tab)</span></button> <button type="button" class="btn btn-small" id="googleJobsBtn">Search Google Jobs<span class="sr-only"> (opens in a new tab)</span></button> <span class="hint">These open Craigslist or Google's job search for your search words (the first Settings keyword when the box is empty). Paste any good find into the tracker.</span></p>
+      <div class="board-links"><button type="button" class="btn btn-small" id="craigslistBtn">Search Craigslist<span class="sr-only"> (opens in a new tab)</span></button> <button type="button" class="btn btn-small" id="googleJobsBtn">Search Google Jobs<span class="sr-only"> (opens in a new tab)</span></button><p class="hint">These open Craigslist or Google's job search for your search words (the first Settings keyword when the box is empty). Paste any good find into the tracker.</p></div>
       <fieldset id="liveSources" class="live-sources" hidden>
         <legend>Job boards to search live</legend>
         <label class="src-chip" title="Jobicy"><input type="checkbox" name="lsrc" value="jobicy"><span data-letter="J"><img class="src-logo" alt="" width="28" height="28" loading="lazy" decoding="async" src="https://www.google.com/s2/favicons?domain=jobicy.com&amp;sz=64"><b class="src-name">Jobicy</b></span></label>
@@ -1352,9 +1355,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.21'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.22'; // shown in the footer; numbering rule is in the comment at the top of this file
 // Release notes shown by the footer button, newest first. Add a row here with every new version.
 const RELEASES = [
+  ['v1.4.22', 'Search Craigslist and Search Google Jobs buttons keep a gap between them when they wrap on a phone.'],
   ['v1.4.21', 'The release notes card fades at its top and bottom edges while more rows are hidden, like the tab strip.'],
   ['v1.4.20', 'Release notes card in the footer: a table of every version and what it added. Selected text and held-down buttons use the theme color instead of the browser blue.'],
   ['v1.4.19', 'Dismissed openings that have no company name now stay hidden too.'],
