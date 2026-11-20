@@ -23,7 +23,8 @@ const SITE_URL = 'https://layahmcfly.github.io/JobSearch/';
 const ALLOWED_ORIGINS = ['https://layahmcfly.github.io', 'http://localhost:8000', 'http://127.0.0.1:8000'];
 
 const CACHE_SECONDS = 300;      // same search within 5 minutes reuses the answer
-const MAX_RESULTS = 100;
+const MAX_RESULTS = 500;      // per request; each board group is its own request
+const MAX_AGE_DAYS = 30;       // postings older than this are dropped; postings with no date are kept
 const MAX_COMPANY_BOARDS = 25;  // Greenhouse + Lever boards read per search (50 request limit)
 const MAX_DESC = 6000;
 const USER_AGENT = 'JobSearchTracker/2.0 (personal live search)';
@@ -126,7 +127,7 @@ async function readJobicy(ws, ctx) {
   const src = { type: 'jobicy', label: 'Jobicy', name: 'Jobicy (live)' };
   // Jobicy's own tag search finds the most relevant posts; matching below is stricter.
   const tag = encodeURIComponent(ws.join(' '));
-  const data = await getCached(`https://jobicy.com/api/v2/remote-jobs?count=${ws.alts ? 100 : 50}${ws.length ? '&tag=' + tag : ''}`, 'json', ctx);
+  const data = await getCached(`https://jobicy.com/api/v2/remote-jobs?count=100${ws.length ? '&tag=' + tag : ''}`, 'json', ctx);
   if (!Array.isArray(data.jobs)) throw new Error('Unexpected response');
   return data.jobs
     .map(j => { const head = [j.jobTitle, j.companyName, j.jobGeo, (j.jobIndustry || []).join(' '), (j.jobType || []).join(' ')]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.jobDescription || j.jobExcerpt || '') }; })
@@ -221,8 +222,10 @@ async function readRemoteOk(ws, ctx) {
 // Arbeitnow: free list, mostly Europe. Only postings marked remote are kept.
 async function readArbeitnow(ws, ctx) {
   const src = { type: 'arbeitnow', label: 'Arbeitnow', name: 'Arbeitnow (live)' };
-  const data = await getCached('https://www.arbeitnow.com/api/job-board-api', 'json', ctx);
-  if (!Array.isArray(data.data)) throw new Error('Unexpected response');
+  const pages = await Promise.allSettled([1, 2, 3].map(n => getCached(`https://www.arbeitnow.com/api/job-board-api?page=${n}`, 'json', ctx)));
+  const okPages = pages.filter(p => p.status === 'fulfilled' && Array.isArray(p.value?.data));
+  if (!okPages.length) throw new Error(pages[0]?.reason?.message || 'Unexpected response');
+  const data = { data: okPages.flatMap(p => p.value.data) };
   return data.data.filter(j => j && j.remote && j.title && j.url)
     .map(j => { const head = [j.title, j.company_name, j.location, (j.tags || []).join(' '), (j.job_types || []).join(' ')]; return { j, top: hits(ws, ...head), any: hits(ws, ...head, j.description || '') }; })
     .filter(x => x.any)
@@ -252,10 +255,10 @@ async function readWorkingNomads(ws, ctx) {
 }
 
 // The Muse: free public list, no key. It has no keyword search, so the newest Flexible / Remote postings
-// (5 pages of 20) are read and matched here.
+// (10 pages of 20) are read and matched here.
 async function readMuse(ws, ctx) {
   const src = { type: 'muse', label: 'The Muse', name: 'The Muse (live)' };
-  const pages = await Promise.allSettled([1, 2, 3, 4, 5].map(n =>
+  const pages = await Promise.allSettled([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n =>
     getCached(`https://www.themuse.com/api/public/jobs?page=${n}&location=${encodeURIComponent('Flexible / Remote')}`, 'json', ctx)));
   const ok = pages.filter(p => p.status === 'fulfilled' && Array.isArray(p.value?.results));
   if (!ok.length) throw new Error(pages[0]?.reason?.message || 'Unexpected response');
@@ -284,7 +287,7 @@ async function readHackerNews(ws, ctx) {
   const thread = (threads.hits || []).find(h => /who is hiring/i.test(h.title || ''));
   if (!thread) throw new Error('Could not find this month\'s thread');
   const q = encodeURIComponent(ws.join(' '));
-  const data = await getCached(`https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${thread.objectID}&hitsPerPage=200${ws.length ? '&query=' + q : ''}`, 'json', ctx);
+  const data = await getCached(`https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${thread.objectID}&hitsPerPage=500${ws.length ? '&query=' + q : ''}`, 'json', ctx);
   if (!Array.isArray(data.hits)) throw new Error('Unexpected response');
   return data.hits.filter(h => String(h.parent_id) === String(thread.objectID) && h.comment_text)
     .map(h => {
@@ -347,10 +350,12 @@ async function search(q, ctx, only) {
   for (const b of lv) if (room-- > 0) run(`Lever: ${b.company || b.name}`, () => readLever(b, ws, ctx));
 
   const seen = new Set(), jobs = [];
+  const cutoff = new Date(Date.now() - MAX_AGE_DAYS * 86400000).toISOString().slice(0, 10);
   for (const j of (await Promise.all(tasks)).flat()) {
     if (!j.title || !j.link) continue;
     const key = j.link.replace(/[?#].*$/, '').replace(/\/$/, '').toLowerCase() || j.id;
     if (seen.has(key)) continue;
+    if (j.datePosted && j.datePosted < cutoff) continue; // more than a month old
     seen.add(key);
     jobs.push(j);
   }

@@ -80,6 +80,8 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.11 shows every live result posted in the last 30 days (older postings are dropped) with no fixed cap: the Worker now returns up to 500
+  per board group and reads deeper into Remote OK, Arbeitnow, The Muse and Hacker News.
   v1.4.10 fixes the Job Feed search box being emptied when you tap Search live or tap away before the typing pause ends.
   v1.4.9 adds Only show jobs I can work from in the United States (Settings, on by default): openings in other countries or regions are hidden.
   v1.4.8 lets Search live with an empty box search every selected board for the keywords in Settings (20 at a time, up to 120), and
@@ -1272,7 +1274,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.10'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.11'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -2855,7 +2857,8 @@ const liveMode = () => !!state.settings.liveUrl && !state.live.browseSaved;
 function feedItems() {
   if (liveMode()) {
     // With a live address saved, the feed is only what the last live search found (nothing before you type).
-    return state.live.jobs.filter(j => j && j.title)
+    const cutoff = toDateStr(new Date(Date.now() - LIVE_MAX_AGE_DAYS * 86400000)); // nothing posted more than a month ago; undated postings stay
+    return state.live.jobs.filter(j => j && j.title && !(j.datePosted && String(j.datePosted).slice(0, 10) < cutoff))
       .map(j => Object.assign({}, j, { origin: 'feed', id: String(j.id || ('feed:' + (normLink(j.link) || titleKey(j)))) }));
   }
   const pasted = state.pasted.map(p => Object.assign({}, p, { origin: 'pasted' }))
@@ -2883,6 +2886,7 @@ const LIVE_TIMEOUT_MS = 25000;
 const LIVE_GROUPS = ['jobicy', 'wwr', 'remoteok', 'arbeitnow', 'nomads', 'muse', 'hn', 'remotive', 'boards'];
 const LIVE_GROUPS_OLD = ['jobicy', 'wwr', 'remotive', 'boards']; // boards that existed before v1.4.0; newer ones start switched on until you save a choice
 const LIVE_PAGE_SIZE = 20;
+const LIVE_MAX_AGE_DAYS = 30;
 const pageSize = () => (liveMode() ? LIVE_PAGE_SIZE : FEED_PAGE_SIZE);
 function loadGroups() {
   try { const g = JSON.parse(localStorage.getItem('jobsearch.liveGroups') || 'null'); if (Array.isArray(g)) { const known = JSON.parse(localStorage.getItem('jobsearch.liveGroupsKnown') || 'null') || LIVE_GROUPS_OLD; return LIVE_GROUPS.filter(x => g.includes(x) || !known.includes(x)); } } catch { /* use all */ }
