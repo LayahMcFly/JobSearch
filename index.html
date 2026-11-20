@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.17 adds an Undo button to the pop-up after Dismiss and Add to Tracker (stays 8 seconds).
   v1.4.16 keeps live results that matched a keyword anywhere (the title phrase check only applies to the saved feed), deals results out one keyword at a time with a Keyword label on each card, and searches each comma-separated phrase in the box separately.
   v1.4.15 fades the tab strip at its edges instead of cutting tabs off, and makes the tab arrows full circles.
   v1.4.14 makes the result counts in the Job Feed count up like a digital clock as results arrive.
@@ -439,7 +440,10 @@ legend{font-weight:600;padding:0 .3rem}
 .radio input{width:auto;min-height:0}
 #toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:var(--text);color:var(--bg);
   padding:.7rem 1.1rem;border-radius:10px;max-width:min(560px,92vw);box-shadow:var(--shadow);z-index:200;display:none}
-#toast.show{display:block}
+#toast.show{display:flex;align-items:center;gap:.9rem}
+#toast .toast-undo{flex:none;min-height:36px;padding:.3rem .95rem;border-radius:999px;border:1.5px solid currentColor;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer}
+#toast .toast-undo:hover{background:rgba(255,255,255,.16)}
+#toast .toast-undo:focus-visible{outline:3px solid var(--accent,#fff);outline-offset:2px}
 @media (prefers-reduced-motion:no-preference){ .card,.status-card{transition:background .15s} }
 
 /* ============================================================
@@ -1306,7 +1310,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.16'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.17'; // shown in the footer; numbering rule is in the comment at the top of this file
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -1595,12 +1599,24 @@ function refreshLinkedView(el) {
 }
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, undo) {
   const el = $('#toast');
-  el.textContent = msg;
+  el.textContent = '';
+  const span = document.createElement('span');
+  span.textContent = msg;
+  el.appendChild(span);
+  if (undo) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'toast-undo'; b.textContent = 'Undo';
+    b.addEventListener('click', async () => {
+      clearTimeout(toastTimer); el.classList.remove('show');
+      try { await undo(); } catch (e) { toast(e.message || 'Could not undo.'); }
+    });
+    el.appendChild(b);
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+  toastTimer = setTimeout(() => el.classList.remove('show'), undo ? 8000 : 4000);
 }
 
 /* ============================================================
@@ -3330,12 +3346,19 @@ async function addFeedItem(id, btn) {
   job.origin = 'finder';
   job.externalId = item.id;
   const pos = cardPosition(btn);
+  const pastedRec = item.origin === 'pasted' ? state.pasted.find(p => p.id === item.id) : null;
   try {
     await saveJob(job);
     if (item.origin === 'pasted') await removePasted(item.id);
     renderFeed();
     focusFeedCard(pos);
-    toast(`Added ${item.title} to your tracker as Found.`);
+    toast(`Added ${item.title} to your tracker as Found.`, async () => {
+      await deleteJob(job.id);
+      if (pastedRec) { await Storage.save(COLLECTIONS.pasted, pastedRec); state.pasted.push(pastedRec); }
+      render();
+      renderFeed();
+      toast('Undone. The opening is back in the feed.');
+    });
   } catch (e) { toast(e.message); }
 }
 
@@ -3345,13 +3368,20 @@ async function dismissFeedItem(id, btn) {
   const rec = { id: item.id, linkKey: normLink(item.link), titleKey: titleKey(item), title: item.title,
     company: item.company || '', source: item.source || '', dismissedAt: new Date().toISOString() };
   const pos = cardPosition(btn);
+  const pastedRec = item.origin === 'pasted' ? state.pasted.find(p => p.id === item.id) : null;
   try {
     await Storage.save(COLLECTIONS.dismissed, rec);
     state.dismissed = state.dismissed.filter(d => d.id !== rec.id).concat(rec);
     if (item.origin === 'pasted') await removePasted(item.id);
     renderFeed();
     focusFeedCard(pos);
-    toast(`Dismissed ${item.title}.`);
+    toast(`Dismissed ${item.title}.`, async () => {
+      await Storage.delete(COLLECTIONS.dismissed, rec.id);
+      state.dismissed = state.dismissed.filter(d => d.id !== rec.id);
+      if (pastedRec) { await Storage.save(COLLECTIONS.pasted, pastedRec); state.pasted.push(pastedRec); }
+      renderFeed();
+      toast('Undone. The opening is back in the feed.');
+    });
   } catch (e) { toast(e.message); }
 }
 
