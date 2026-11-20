@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.20 adds a Release notes button in the footer that opens a card with a table of every version (RELEASES list near APP_VERSION; add a row with each update).
   v1.4.19 makes dismissed openings that have no company name stay hidden too (matched by title and board).
   v1.4.18 adds a Search Google Jobs button next to Search Craigslist.
   v1.4.17 adds an Undo button to the pop-up after Dismiss and Add to Tracker (stays 8 seconds).
@@ -207,6 +208,13 @@ h3{font-size:1.15rem;margin:1.5rem 0 .6rem}
 a{color:var(--accent-text)}
 :focus-visible{outline:3px solid var(--accent-text);outline-offset:2px} /* keyboard focus ring in the theme color */
 *{-webkit-tap-highlight-color:transparent} /* no blue flash when tapping on phones */
+/* Highlighted (selected) text uses the theme color instead of the browser's blue */
+::selection{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
+::-moz-selection{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
+/* Pressing and holding a button, tab or chip must not select its label (that shows as a blue overlay on phones) */
+button,.btn,.tabs,.tab-arrow,summary,.src-chip,label.check,label.radio{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button:focus:not(:focus-visible),a:focus:not(:focus-visible),summary:focus:not(:focus-visible){outline:none}
+input,textarea,select{-webkit-tap-highlight-color:transparent}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .skip-link{position:absolute;left:-9999px;top:.5rem;background:var(--text);color:var(--bg);padding:.6rem 1rem;border-radius:8px;z-index:100}
 .skip-link:focus{left:.5rem}
@@ -633,6 +641,21 @@ dialog.panel-wide{width:min(1000px,100vw)}
 .draft-warnings{margin:.6rem 0 0;padding-left:1.2rem;color:#7a5410;font-weight:600;font-size:.95rem}
 textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;background:var(--tint)}
 .app-footer{text-align:center;color:var(--muted);font-size:.85rem;padding:1.5rem 1rem 2rem}
+.app-footer .notes-btn{margin-left:.6rem;min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent,var(--text));font:inherit;font-weight:600;cursor:pointer}
+.app-footer .notes-btn:hover{border-color:var(--accent,var(--text))}
+.app-footer .notes-btn:focus-visible{outline:3px solid var(--accent,currentColor);outline-offset:2px}
+/* Release notes card: a centered pop-up with its own scrolling, so the page stays short */
+dialog.notes-card{margin:auto;padding:0;border:1px solid var(--border);border-radius:16px;width:min(680px,94vw);max-height:min(80dvh,640px);background:var(--surface);color:var(--text);box-shadow:0 18px 50px rgba(40,25,10,.3);overflow:hidden}
+dialog.notes-card[open]{display:flex;flex-direction:column}
+dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
+.notes-card .panel-head{border-radius:16px 16px 0 0}
+.notes-scroll{overflow:auto;padding:.25rem 1rem 1rem}
+.notes-grid{display:grid;grid-template-columns:max-content 1fr;font-size:.95rem}
+.notes-grid>*{padding:.65rem .5rem;border-bottom:1px solid var(--border)}
+.notes-grid .nh{position:sticky;top:0;z-index:1;background:var(--surface);font-weight:700;border-bottom:2px solid var(--border)}
+.notes-grid .nv{font-weight:700;white-space:nowrap}
+.notes-grid .nv .badge{display:block;margin:.3rem 0 0;font-size:.72rem;width:max-content}
+.notes-grid .is-current{background:var(--tint)}
 
 /* ============================================================
    C12. AI DRAFTING
@@ -1155,7 +1178,19 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
   </section>
 </main>
 
-<footer class="app-footer"><span id="appVersion"></span></footer>
+<footer class="app-footer"><span id="appVersion"></span><button type="button" class="notes-btn" id="notesBtn" aria-haspopup="dialog">Release notes</button></footer>
+
+<dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
+  <div class="panel-head">
+    <h2 id="notesTitle">Release notes</h2>
+    <button type="button" class="icon-btn" data-close aria-label="Close release notes">&times;</button>
+  </div>
+  <div class="notes-scroll">
+    <div class="notes-grid" id="notesBody" role="table" aria-label="Release notes by version">
+      <div class="nh" role="columnheader">Version</div><div class="nh" role="columnheader">What is in it</div>
+    </div>
+  </div>
+</dialog>
 
 <!-- ============================================================
      ADD JOB DIALOG
@@ -1312,7 +1347,56 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.19'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.20'; // shown in the footer; numbering rule is in the comment at the top of this file
+// Release notes shown by the footer button, newest first. Add a row here with every new version.
+const RELEASES = [
+  ['v1.4.20', 'Release notes card in the footer: a table of every version and what it added. Selected text and held-down buttons use the theme color instead of the browser blue.'],
+  ['v1.4.19', 'Dismissed openings that have no company name now stay hidden too.'],
+  ['v1.4.18', 'Search Google Jobs button next to Search Craigslist.'],
+  ['v1.4.17', 'Undo button on the pop-up after Dismiss and Add to Tracker (stays 8 seconds).'],
+  ['v1.4.16', 'Live results that matched a keyword anywhere are kept, results are dealt out one keyword at a time with a Keyword label on each card, and commas in the search box search each phrase separately.'],
+  ['v1.4.15', 'The tab strip fades at its edges instead of cutting tabs off, and the tab arrows are full circles.'],
+  ['v1.4.14', 'Result counts in the Job Feed count up like a digital clock as results arrive.'],
+  ['v1.4.13', 'Banner at the top when a newer version is published, naming the new version and yours, with Update now and Later. The search box clear (x) button and the Searching button follow the theme.'],
+  ['v1.4.12', 'Typing cursor uses the theme color, the Searching indicator has a glowing blinking cursor, and an unchanged result list is no longer redrawn.'],
+  ['v1.4.11', 'Every live result from the last 30 days is shown with no fixed cap. Older postings are dropped.'],
+  ['v1.4.10', 'Fixed the Job Feed search box being emptied when you tap Search live or tap away.'],
+  ['v1.4.9', 'Setting to only show jobs you can work from in the United States (on by default).'],
+  ['v1.4.8', 'Search live with an empty box searches every selected board for your Settings keywords.'],
+  ['v1.4.7', 'Asks "Are you sure you want to delete" with the list name and time before removing a saved keyword list.'],
+  ['v1.4.6', 'Saved keyword lists library under Target job titles and Excluded words in Settings, with dates, renaming and Use this list.'],
+  ['v1.4.4', 'Show/hide (eye) and Copy buttons on the AI access code field in Settings.'],
+  ['v1.4.3', 'Live board buttons show as logo tiles in a grid on phones.'],
+  ['v1.4.2', 'Two more free live boards: The Muse and Hacker News "Who is hiring".'],
+  ['v1.4.1', 'Search Craigslist button and a Craigslist city setting (default valdosta).'],
+  ['v1.4.0', 'Three more free live boards: Remote OK, Arbeitnow and Working Nomads.'],
+  ['v1.3.2', 'Read cards are tinted with a dimmed shade of your color theme.'],
+  ['v1.3.1', 'Jobs are marked Read once opened, and the reading panel shows descriptions with a Markdown look (dividers, lists, bold, italic, headings).'],
+  ['v1.3.0', 'Sort and filters in the Job Feed (posted within, remote only, shows pay) and a reading panel for full postings.'],
+  ['v1.2.7', 'Live job boards shown as toggle buttons with a check mark when on.'],
+  ['v1.2.6', 'Source menu hidden when live search is on.'],
+  ['v1.2.5', 'Pick which boards a live search reads, results load 20 at a time, and the search bar and count stay in view.'],
+  ['v1.2.4', 'Searched words are highlighted, and jobs match when the words sit in different places.'],
+  ['v1.2.3', 'Live search also reads description text and more We Work Remotely categories.'],
+  ['v1.2.2', 'Live search address may end in /health or /search; the ending is dropped on save.'],
+  ['v1.2.1', 'Shows "Searching Job Opportunities…" and fills the list as each group of boards answers. The Job Feed is live-first once an address is saved.'],
+  ['v1.2.0', 'Search live: a free Cloudflare Worker reads the job boards at that moment, so results are current.'],
+  ['v1.1.14', 'Jobicy added as a free source; Adzuna turned off.'],
+  ['v1.1.13', 'Remotive Marketing category added, with a 4-requests-a-day limit.'],
+  ['v1.1.12', 'The saved job fetch runs every 3 hours instead of once a day.'],
+  ['v1.1.11', 'The posting link stays under the job title in the phone Table layout.'],
+  ['v1.1.10', 'Links in job text become short clickable words, and a location filter hides openings by place.'],
+  ['v1.1.9', 'Animated favicon and link preview tags.'],
+  ['v1.1.8', 'Stripes on the Colors card stop moving.'],
+  ['v1.1.7', 'Old-fashioned mouse cursors in the theme color.'],
+  ['v1.1.6', 'Animated pattern on the Settings Colors card.'],
+  ['v1.1.5', 'Fixed dropdowns that stayed highlighted after choosing on phones.'],
+  ['v1.1.4', 'Tabs show three at a time on phones, with arrow buttons.'],
+  ['v1.1.3', 'Gradient input boxes and dropdowns, glowing status cards, no blue tap flash on phones.'],
+  ['v1.1.2', 'Fixed the color picker on phones.'],
+  ['v1.1.1', 'Gradient buttons and dark mode.'],
+  ['v1.1.0', 'Favicon, styled scroll bar and Settings > Colors (original, purple, or any color you pick).']
+];
 const SCHEMA_VERSION = 5; // backup format: v2 feed data, v3 profile and Facts Bank, v4 drafts, v5 AI usage
 const STATUSES = ['Found', 'Drafting', 'Applied', 'Waiting', 'No Word', 'Declined', 'Interview', 'Accepted'];
 const AUTO_NO_WORD_FROM = ['Applied', 'Waiting'];   // statuses the No Word rule watches
@@ -5788,6 +5872,8 @@ async function init() {
   if (!state.profile) state.profile = blankProfile();
   fillProfileForms();
   $('#appVersion').textContent = APP_VERSION;
+  $('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => { const c = v === APP_VERSION ? ' is-current' : ''; return `<div class="nv${c}" role="cell">${esc(v)}${c ? '<span class="badge">You have this</span>' : ''}</div><div class="${c.trim()}" role="cell">${esc(t)}</div>`; }).join(''));
+  $('#notesBtn').addEventListener('click', () => { $('#notesDialog').showModal(); $('#notesDialog .notes-scroll').scrollTop = 0; });
   showView(viewFromHash());
   watchForUpdate();
 }
