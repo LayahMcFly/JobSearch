@@ -80,6 +80,7 @@
   to read the job boards at that moment, so results are current and a posting that is taken down
   disappears on the next search. Settings has a new "Live search address" field. The middle number
   went up because the last number passed 10 (rule above).
+  v1.4.25 stacks the footer and gives the hub link a back arrow.
   v1.4.24 updates the tab strip fades and arrows on every frame while dragging (they used to wait until the scrolling stopped).
   v1.4.23 labels these notes as Job Search only and adds an All tools (Hub) link in the footer to hub/index.html (the new Job Spot Hub, with its own versions).
   v1.4.22 puts a gap between the Search Craigslist and Search Google Jobs buttons.
@@ -647,7 +648,10 @@ textarea.prompt-out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monos
 .app-footer{text-align:center;color:var(--muted);font-size:.85rem;padding:1.5rem 1rem 2rem}
 .board-links{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem .7rem;margin:.4rem 0}
 .board-links .hint{flex:1 1 100%;margin:.1rem 0 0}
-.app-footer .notes-btn{display:inline-flex;align-items:center;text-decoration:none;margin:.3rem 0 0 .6rem;min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent,var(--text));font:inherit;font-weight:600;cursor:pointer}
+.app-footer{display:flex;flex-direction:column;align-items:center;gap:.6rem}
+.app-footer .back-btn svg{width:18px;height:18px;margin-right:.45rem;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+@media (hover:hover){.app-footer .back-btn:hover svg{transform:translateX(-3px)}}
+.app-footer .notes-btn{display:inline-flex;align-items:center;text-decoration:none;margin:0;min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent,var(--text));font:inherit;font-weight:600;cursor:pointer}
 .app-footer .notes-btn:hover{border-color:var(--accent,var(--text))}
 .app-footer .notes-btn:focus-visible{outline:3px solid var(--accent,currentColor);outline-offset:2px}
 /* Release notes card: a centered pop-up with its own scrolling, so the page stays short */
@@ -1188,7 +1192,7 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
   </section>
 </main>
 
-<footer class="app-footer"><span id="appVersion"></span><button type="button" class="notes-btn" id="notesBtn" aria-haspopup="dialog">Job Search release notes</button><a class="notes-btn" href="hub/">All tools (Hub)</a></footer>
+<footer class="app-footer"><span id="appVersion"></span><button type="button" class="notes-btn" id="notesBtn" aria-haspopup="dialog">Job Search release notes</button><a class="notes-btn back-btn" href="hub/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All tools (Hub)</a></footer>
 
 <dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
   <div class="panel-head">
@@ -1357,9 +1361,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.24'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.25'; // shown in the footer; numbering rule is in the comment at the top of this file
 // Release notes shown by the footer button, newest first. Add a row here with every new version.
 const RELEASES = [
+  ['v1.4.25', 'Footer buttons are stacked, and the hub link is a back button with an arrow icon.'],
   ['v1.4.24', 'The tab strip fades and arrows update while you drag, not after you let go.'],
   ['v1.4.23', 'These notes are now labeled Job Search only, and the footer has an All tools (Hub) link to the new hub page.'],
   ['v1.4.22', 'Search Craigslist and Search Google Jobs buttons keep a gap between them when they wrap on a phone.'],
