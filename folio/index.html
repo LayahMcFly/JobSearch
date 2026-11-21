@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#f7f2ea">
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23a5532c'/%3E%3Cstop offset='1' stop-color='%236f3116'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M10 6h8l5 5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 9 25V7.5A1.5 1.5 0 0 1 10 6z' fill='%23fff'/%3E%3Cpath d='M18 6v5h5' fill='none' stroke='%23a5532c' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M12 16h8M12 20h8M12 24h5' stroke='%238a3f1f' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E">
 <title>Folio: Resume and Hire-Me Site Builder</title>
 <meta name="description" content="Build a resume, pick its style, fonts and colors, then publish a one-page site with a hire-me form.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,9 +14,10 @@
   (like Ko-fi or Carrd, on your own address). One self-contained file; your work is saved in this browser.
   It lives at /folio/ in the JobSearch repo as its own file. It never reads or changes Job Search.
 
-  Sections: 1 data and sample | 2 style choices | 3 page builder (buildSite) | 4 editor panels | 5 preview | 6 export and backup | 7 theme
+  Sections: 1 data and sample | 2 style choices | 3 page builder (buildSite) | 3b data cleaning | 4 editor panels | 5 preview | 6 export, backup, confirm dialog | 7 theme
 
   Versions (Folio has its own notes, separate from Job Search and the hub):
+  v1.0.1 Phase 0 fixes: demo-only preview, provider-aware success handling, safe serialization, email-mode validation, contrast, themed confirmations, touch targets, favicon.
   v1.0.0 first release: resume editor, 6 layouts, 6 font pairs, colors and paper tone, live preview, Save as PDF,
          one-page site export with services, a poll question and a hire-me form (Formspree, Web3Forms or email), backup and restore.
 -->
@@ -69,7 +71,7 @@ label.f small{font-weight:400;color:var(--muted)}
 input[type=text],input[type=email],input[type=url],input[type=tel],textarea,select{width:100%;font:inherit;font-weight:400;color:var(--text);padding:.6rem .75rem;border-radius:10px;border:1.5px solid var(--input-border);background:linear-gradient(var(--field),var(--field)) padding-box;caret-color:var(--accent);transition:box-shadow .15s,border-color .15s}
 textarea{min-height:5.5rem;resize:vertical}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
-::placeholder{color:#8a7f72;opacity:1}
+::placeholder{color:#6b6157;opacity:1}
 .selwrap{position:relative}
 .selwrap select{appearance:none;-webkit-appearance:none;padding-right:2.4rem;cursor:pointer}
 .selwrap::after{content:"";position:absolute;right:1rem;top:50%;width:8px;height:8px;border-right:2.5px solid var(--accent);border-bottom:2.5px solid var(--accent);transform:translateY(-70%) rotate(45deg);pointer-events:none}
@@ -102,6 +104,22 @@ dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
 .notes-grid{display:grid;grid-template-columns:max-content 1fr;font-size:.95rem}
 .notes-grid>*{padding:.65rem .5rem;border-bottom:1px solid var(--border)}
 .notes-grid .nh{font-weight:700;border-bottom:2px solid var(--border)}.notes-grid .nv{font-weight:700;white-space:nowrap}
+
+/* touch targets: every button, field and section header is at least 44px tall, with 8px between neighbours */
+.btn,.btn-small{min-height:44px}
+input[type=text],input[type=email],input[type=url],input[type=tel],select{min-height:44px}
+details.card>summary{min-height:48px}
+.notes-btn{min-height:44px;padding:.35rem 1rem}
+.view-tabs,.seg,.btnrow{gap:.5rem}
+.card-body .btn,.entry .btn{margin:0}
+.fielderr{color:var(--danger);font-weight:600;font-size:.9rem}
+input[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--danger);box-shadow:0 0 0 3px color-mix(in srgb,var(--danger) 25%,transparent)}
+.btn-danger-fill{background:var(--danger);border-color:var(--danger);color:#fff;text-shadow:none}
+@media (hover:hover){.btn-danger-fill:hover{background:#7d2020}}
+dialog.confirm-card{margin:auto;width:min(440px,92vw);padding:1.3rem;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:0 18px 50px rgba(40,25,10,.3)}
+dialog.confirm-card::backdrop{background:rgba(42,36,31,.5)}
+dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card p{margin:0 0 1.1rem;color:var(--muted)}
+.cf-actions{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
 </style>
 </head>
 <body data-show="edit">
@@ -122,7 +140,7 @@ dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
       <button type="button" class="btn btn-small" data-view="resume" aria-pressed="true">Resume</button>
       <button type="button" class="btn btn-small" data-view="site" aria-pressed="false">Whole site</button>
     </div>
-    <iframe id="frame" title="Live preview"></iframe>
+    <iframe id="frame" title="Live preview" sandbox="allow-same-origin allow-scripts allow-modals"></iframe>
   </div>
 </div>
 
@@ -133,6 +151,12 @@ dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<dialog id="confirmDialog" class="confirm-card" role="alertdialog" aria-labelledby="cfTitle" aria-describedby="cfMsg">
+  <h2 id="cfTitle"></h2>
+  <p id="cfMsg"></p>
+  <div class="cf-actions"><button type="button" class="btn" id="cfCancel">Cancel</button><button type="button" class="btn btn-danger-fill" id="cfOk">Confirm</button></div>
+</dialog>
+
 <dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
   <div class="panel-head"><h2 id="notesTitle">Folio release notes</h2><button type="button" class="icon-btn" id="notesClose" aria-label="Close Folio release notes">&times;</button></div>
   <div class="notes-scroll"><div class="notes-grid" id="notesBody" role="table" aria-label="Folio release notes by version">
@@ -141,8 +165,9 @@ dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.0.0';
+const APP_VERSION = 'v1.0.1';
 const RELEASES = [
+  ['v1.0.1', 'Safer and clearer: the Whole site preview is now a demonstration that cannot send anything; form results are read from each service\'s reply and never claim an email was sent; all text is escaped for where it lands (fixes a thank-you message that could break the page); email mode needs a valid recipient and shows a Copy address option; readable colors on every paper; themed confirmation boxes; larger touch targets; a Folio favicon.'],
   ['v1.0.0', 'First release: resume editor, 6 layouts, 6 font pairs, colors and paper tone, live preview, Save as PDF, one-page site download with services, a poll question and a hire-me form (Formspree, Web3Forms or email), backup and restore.']
 ];
 const $ = s => document.querySelector(s);
@@ -170,7 +195,6 @@ const SAMPLE = {
 };
 const STYLE0 = { layout: 'modern', font: 'editorial', color: '#8a3f1f', paper: 'white' };
 let D = JSON.parse(JSON.stringify(SAMPLE)), ST = Object.assign({}, STYLE0);
-try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.D) { D = Object.assign(D, s.D); ST = Object.assign(ST, s.ST || {}); } } catch (e) {}
 let saveTimer = 0;
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ D, ST })); } catch (e) { toast('Could not save in this browser. Download a backup.'); } }, 250); }
 
@@ -195,14 +219,48 @@ const COLORS = ['#8a3f1f', '#6b3fa0', '#1d5b86', '#2f6b4f', '#a4263f', '#2a241f'
 const PAPERS = { white: ['White', '#ffffff', '#1f1b16', '#5d554b', '#e4ddd2'], warm: ['Warm paper', '#fbf6ec', '#2a241f', '#5c5248', '#e3d8c6'], dark: ['Dark', '#16131a', '#f1ecf7', '#b7aec4', '#352f3f'] };
 
 /* ---------- 3. page builder ---------- */
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const safeUrl = u => { u = String(u || '').trim(); if (!u) return ''; if (/^(https?:|mailto:|tel:)/i.test(u)) return u; if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u)) return 'https://' + u; return ''; };
+const validEmail = e => /^[^\s@<>"'`,;:\\()\[\]]+@[^\s@<>"'`,;:\\()\[\]]+\.[A-Za-z]{2,}$/.test(String(e || '').trim());
 const lines = t => String(t || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
-function hexMix(hex, withHex, pct) { const a = parseInt(hex.slice(1), 16), b = parseInt(withHex.slice(1), 16); const m = i => Math.round(((a >> i & 255) * (100 - pct) + (b >> i & 255) * pct) / 100); return '#' + [16, 8, 0].map(i => m(i).toString(16).padStart(2, '0')).join(''); }
-function onColor(hex) { const n = parseInt(hex.slice(1), 16), c = [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return (.2126 * c[0] + .7152 * c[1] + .0722 * c[2]) > .4 ? '#1a1612' : '#ffffff'; }
+
+/* Colors. The saved accent (ST.color) is never changed. Each paper gets a readable version of it:
+   text accent (headings, links, prices), fill (buttons and header bands) with a matching text color,
+   and a control border. Every pair is checked against WCAG contrast (4.5:1 text, 3:1 boundaries). */
+const rgbOf = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const hexOf = a => '#' + a.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+const mixHex = (a, b, pct) => { const x = rgbOf(a), y = rgbOf(b); return hexOf(x.map((v, i) => v * (100 - pct) / 100 + y[i] * pct / 100)); };
+const lumOf = h => rgbOf(h).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }).reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
+const contrastOf = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+// Move hex toward black or white in 1% steps until every [background, minimum] pair passes
+function ensure(hex, reqs, toward) { for (let p = 0; p <= 100; p++) { const c = p ? mixHex(hex, toward, p) : hex; if (reqs.every(([bg, min]) => contrastOf(c, bg) >= min)) return c; } return toward; }
+const hexOk = c => /^#[0-9a-f]{6}$/i.test(String(c || ''));
+function palette(color, paperKey) {
+  const P = own(PAPERS, paperKey) ? PAPERS[paperKey] : PAPERS.white, dark = paperKey === 'dark', raw = hexOk(color) ? String(color).toLowerCase() : STYLE0.color;
+  const paper = P[1], toward = dark ? '#ffffff' : '#000000', on = dark ? '#16131a' : '#ffffff';
+  const fill = ensure(raw, [[on, 4.5], [paper, 3]], toward);
+  const soft = mixHex(paper, fill, dark ? 16 : 10);
+  const acc = ensure(raw, [[paper, 4.5], [soft, 4.5]], toward);
+  const muted = ensure(P[3], [[paper, 4.5], [soft, 4.5]], toward);
+  const ctl = ensure(dark ? '#8d8599' : '#8a8178', [[paper, 3]], toward);
+  const moved = (a, b) => rgbOf(a).reduce((s, v, i) => s + Math.abs(v - rgbOf(b)[i]), 0) > 24;
+  return { paper, ink: P[2], muted, line: P[4], ctl, acc, fill, on, soft, raw, adjusted: moved(fill, raw) || moved(acc, raw) };
+}
+const palVars = p => `--paper:${p.paper};--ink:${p.ink};--muted:${p.muted};--line:${p.line};--ctl:${p.ctl};--acc:${p.acc};--fill:${p.fill};--on:${p.on};--soft:${p.soft}`;
+function colorNote(color, paperKey) {
+  const p = palette(color, paperKey);
+  return p.adjusted ? `On this paper your color is shown as ${p.fill} (buttons and bands) and ${p.acc} (headings and links) so text stays readable. Your saved color ${p.raw} is unchanged.` : 'This color is readable on this paper as chosen.';
+}
+
+/* Every user-controlled value is escaped for where it lands: esc() for HTML text and quoted attributes,
+   safeUrl()/validEmail() for links, lookups for fonts/layout/paper, hex check for colors, and
+   jsonForScript() for the form settings, which travel as inert JSON (never as script code). */
+const jsonForScript = o => JSON.stringify(o).replace(/[<>&\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 
 function resumeHtml(d) {
-  const contact = [d.email && `<a href="mailto:${esc(d.email)}">${esc(d.email)}</a>`, d.phone && `<span>${esc(d.phone)}</span>`, d.location && `<span>${esc(d.location)}</span>`,
-    d.website && safeUrl(d.website) && `<a href="${esc(safeUrl(d.website))}">${esc(d.website.replace(/^https?:\/\//, ''))}</a>`].filter(Boolean);
+  const site = safeUrl(d.website), mail = validEmail(d.email);
+  const contact = [d.email && (mail ? `<a href="mailto:${esc(d.email.trim())}">${esc(d.email)}</a>` : `<span>${esc(d.email)}</span>`), d.phone && `<span>${esc(d.phone)}</span>`, d.location && `<span>${esc(d.location)}</span>`,
+    d.website && (site ? `<a href="${esc(site)}">${esc(d.website.replace(/^https?:\/\//, ''))}</a>` : `<span>${esc(d.website)}</span>`)].filter(Boolean);
   const links = (d.links || []).filter(l => safeUrl(l.url)).map(l => `<li><a href="${esc(safeUrl(l.url))}">${esc(l.label || l.url)}</a></li>`).join('');
   const skills = String(d.skills || '').split(/[,\n]+/).map(x => x.trim()).filter(Boolean);
   const skillHtml = skills.length ? `<ul class="chips">${skills.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : '';
@@ -225,35 +283,136 @@ function resumeHtml(d) {
         ${links ? `<section class="only-main"><h3>Links</h3><ul class="plain inline">${links}</ul></section>` : ''}
       </div></div></section>`;
 }
-function hireHtml(d, withForm) {
+function hireHtml(d, opt) {
   const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}</div>`).join('');
-  const opts = lines(d.pollOptions);
+  const opts = lines(d.pollOptions), mail = validEmail(d.email), email = String(d.email || '').trim();
   const poll = opts.length ? `<fieldset class="poll"><legend>${esc(d.pollQuestion || 'What do you need?')}</legend><div class="pollopts">${opts.map((o, i) => `<label class="pill"><input type="radio" name="need" value="${esc(o)}"${i === 0 ? ' required' : ''}><span>${esc(o)}</span></label>`).join('')}</div></fieldset>` : '';
+  const emailMode = d.formMode === 'email';
+  const direct = mail ? `<p class="direct">${emailMode ? 'Prefer to email directly?' : 'Prefer email?'} Write to <a href="mailto:${esc(email)}">${esc(email)}</a> <button type="button" class="copy" data-copy="address">Copy address</button> <span class="copied" role="status"></span></p>` : '';
+  const fine = opt.preview ? '' : emailMode
+    ? `<p class="fine">This button prepares an email draft in your email app. You must press Send there yourself. This page cannot send the email or tell whether it was sent.</p>`
+    : `<p class="fine">Your message goes to a form service, which passes it on to me.</p>`;
+  const draftBox = emailMode && !opt.preview ? `<div id="draftBox" class="draft" hidden><label>Draft email (copy it if no email app opened)<textarea id="draftText" readonly rows="7"></textarea></label><button type="button" class="copy" data-copy="draft">Copy draft</button> <span class="copied" role="status"></span></div>` : '';
   return `<section class="hire no-print" id="hire">
     <div class="hire-in"><h2>Work with ${esc((d.name || 'me').split(' ')[0] || 'me')}</h2>${d.availability ? `<p class="avail"><span class="dot"></span>${esc(d.availability)}</p>` : ''}
     ${services ? `<div class="svcs">${services}</div>` : ''}
+    ${direct}
     <form id="hireForm" novalidate><h3>${esc(d.formTitle || 'Tell me about your project')}</h3>
-      <label>Your name<input name="name" type="text" required autocomplete="name"></label>
-      <label>Your email<input name="email" type="email" required autocomplete="email"></label>
+      ${opt.preview ? `<p class="demo-note" role="note"><b>Preview only.</b> This form is a demonstration. Nothing is sent, no email draft opens and nothing is saved.</p>` : ''}
+      <label>Your name<input name="name" type="text" required maxlength="120" autocomplete="name"></label>
+      <label>Your email<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
       ${poll}
-      <label>Details<textarea name="message" rows="4" placeholder="What are you working on, and by when?"></textarea></label>
+      <label>Details<textarea name="message" rows="4" maxlength="1500" placeholder="What are you working on, and by when?"></textarea></label>
       <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
       <button type="submit" class="cta">${esc(d.ctaLabel || 'Send')}</button>
-      <p class="msg" role="status" aria-live="polite"></p></form></div></section>`;
+      ${fine}<p class="msg" role="status" aria-live="polite"></p>${draftBox}</form></div></section>`;
 }
+
+/* The form script is written once, here, as ordinary code and copied into the page as text. Settings
+   reach it only through the JSON block, so no user text is ever part of the script itself. */
+function siteScript() {
+  var C = JSON.parse(document.getElementById('cfg').textContent);
+  var f = document.getElementById('hireForm');
+  if (!f) return;
+  var msg = f.querySelector('.msg'), btn = f.querySelector('.cta'), busy = false;
+  function say(t, kind) { msg.className = 'msg' + (kind ? ' ' + kind : ''); msg.textContent = t; }
+  function el(n) { return f.elements[n]; }
+  function val(n) { return el(n) ? el(n).value.trim() : ''; }
+  function bad(field, t) { if (field) { field.setAttribute('aria-invalid', 'true'); field.focus(); } say(t, 'err'); return null; }
+  f.addEventListener('input', function (e) { if (e.target && e.target.removeAttribute) e.target.removeAttribute('aria-invalid'); });
+  function copyText(text, done) {
+    function fallback() {
+      var t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(t); done(ok);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done(true); }, fallback); else fallback();
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-copy]') : null; if (!b) return;
+    var text = b.getAttribute('data-copy') === 'draft' ? ((document.getElementById('draftText') || {}).value || '') : C.email;
+    copyText(text, function (ok) { var s = b.parentNode.querySelector('.copied'); if (s) s.textContent = ok ? 'Copied.' : 'Could not copy. Select the text and copy it yourself.'; });
+  });
+  function readForm() {
+    var need = f.querySelector('input[name=need]:checked'), hasPoll = !!f.querySelector('input[name=need]');
+    if (!val('name')) return bad(el('name'), 'Please enter your name.');
+    if (!/^\S+@\S+\.\S+$/.test(val('email'))) return bad(el('email'), 'Please enter a valid email address so I can reply.');
+    if (hasPoll && !need) return bad(f.querySelector('input[name=need]'), 'Please pick one option.');
+    return { name: val('name'), email: val('email'), need: need ? need.value : '', message: val('message') };
+  }
+  // Decide what a form service reply means. Only an explicit acceptance counts as success.
+  function classify(mode, status, text) {
+    var b = null; try { b = JSON.parse(text); } catch (e) { b = null; }
+    var isObj = !!b && typeof b === 'object' && !Array.isArray(b);
+    function reasonOf(fallback) {
+      var r = '';
+      if (isObj) { if (Array.isArray(b.errors) && b.errors[0]) r = b.errors[0].message || ''; r = r || b.message || (typeof b.error === 'string' ? b.error : ''); }
+      return String(r || fallback).slice(0, 200);
+    }
+    if (mode === 'web3forms') {
+      if (status === 200 && isObj && b.success === true) return { ok: true };
+      if (isObj && b.success === false) return { ok: false, reason: reasonOf('The form service rejected the message.') };
+      if (status >= 400) return { ok: false, reason: reasonOf('The form service returned an error (' + status + ').') };
+      return { ok: null };
+    }
+    if (status < 200 || status >= 300) return { ok: false, reason: reasonOf('The form service returned an error (' + status + ').') };
+    if (!isObj) return { ok: null };
+    if (b.ok === false || b.error || (b.errors && (!Array.isArray(b.errors) || b.errors.length))) return { ok: false, reason: reasonOf('The form service rejected the message.') };
+    return { ok: true };
+  }
+  function note() { return C.email ? ' You can email ' + C.email + ' instead.' : ''; }
+  function finish(res) {
+    if (res.ok === true) { say('The form service accepted your message. ' + C.thanks, 'ok'); f.reset(); return; }
+    if (res.ok === false) { say('Your message was not accepted. ' + res.reason + ' Your details are still in the form.' + note(), 'err'); return; }
+    say((res.network ? 'No reply came back from the form service.' : 'The form service sent a reply this page could not read.') + ' Your message may not have been received, so please do not assume it was. Your details are still in the form.' + note(), 'err');
+  }
+  function send(d) {
+    busy = true; btn.disabled = true; say('Sending...', 'note');
+    var web3 = C.mode === 'web3forms';
+    var payload = web3 ? { access_key: C.endpoint, subject: 'Hire inquiry from ' + d.name, from_name: d.name, email: d.email, need: d.need, message: d.message } : d;
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : 0;
+    fetch(web3 ? 'https://api.web3forms.com/submit' : C.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.text().then(function (t) { return classify(C.mode, r.status, t); }); })
+      .catch(function () { return { ok: null, network: true }; })
+      .then(function (res) { clearTimeout(timer); busy = false; btn.disabled = false; finish(res); });
+  }
+  function draft(d) {
+    var subject = 'Hire inquiry from ' + d.name;
+    var body = 'Name: ' + d.name + '\nEmail: ' + d.email + (d.need ? '\nNeed: ' + d.need : '') + '\n\n' + d.message;
+    var box = document.getElementById('draftBox'), txt = document.getElementById('draftText');
+    if (txt) txt.value = 'To: ' + C.email + '\nSubject: ' + subject + '\n\n' + body;
+    if (box) box.hidden = false;
+    say('An email draft was prepared. Nothing has been sent. Press Send in your email app to deliver it. If no email app opened, copy the draft below and send it yourself.', 'note');
+    window.location.href = 'mailto:' + C.email + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) return;
+    if (el('botcheck') && el('botcheck').value) return;
+    var d = readForm(); if (!d) return;
+    if (C.demo) { say('Demonstration only. Nothing was sent, no email draft was opened and nothing was saved.', 'note'); return; }
+    if (C.mode === 'email') { if (!C.email) { say('No recipient address is set on this page, so no draft was made.', 'err'); return; } draft(d); return; }
+    if (!C.endpoint) { say('This form is not connected to a form service, so nothing was sent.', 'err'); return; }
+    send(d);
+  });
+}
+
 function buildSite(d, st, opt) {
   opt = opt || {};
-  const f = FONTS[st.font] || FONTS.editorial, p = PAPERS[st.paper] || PAPERS.white, a = /^#[0-9a-f]{6}$/i.test(st.color) ? st.color : '#8a3f1f';
-  const dark = st.paper === 'dark', acc = dark ? hexMix(a, '#ffffff', 35) : a, soft = hexMix(acc, p[1], dark ? 80 : 90), on = onColor(acc);
-  const fam = [...new Set([f[1], f[2]])].filter(x => x !== 'Georgia').map(x => x.replace(/ /g, '+')).map(x => `family=${x}:wght@400;600;700`).join('&');
-  const mailtoTo = JSON.stringify(d.email || '');
-  const cfg = JSON.stringify({ mode: d.formMode, endpoint: d.formEndpoint || '', email: d.email || '', thanks: d.thanks || 'Thank you.', name: d.name || '' });
+  const layout = LAYOUTS.some(l => l[0] === st.layout) ? st.layout : STYLE0.layout;
+  const fontKey = own(FONTS, st.font) ? st.font : STYLE0.font, f = FONTS[fontKey];
+  const paperKey = own(PAPERS, st.paper) ? st.paper : STYLE0.paper, dark = paperKey === 'dark';
+  const pal = palette(st.color, paperKey), print = palette(st.color, 'white');
+  const fam = [...new Set([f[1], f[2]])].filter(x => x !== 'Georgia').map(x => `family=${x.replace(/ /g, '+')}:wght@400;600;700`).join('&');
+  const cfg = jsonForScript({ mode: ['email', 'formspree', 'web3forms'].includes(d.formMode) ? d.formMode : 'email', endpoint: opt.preview ? '' : String(d.formEndpoint || '').trim(), email: validEmail(d.email) ? String(d.email).trim() : '', thanks: String(d.thanks || 'Thank you.'), demo: !!opt.preview });
   const css = `
-:root{--paper:${p[1]};--ink:${p[2]};--muted:${p[3]};--line:${p[4]};--acc:${acc};--on:${on};--soft:${soft};--fh:${f[3]};--fb:${f[4]}}
+:root{${palVars(pal)};--fh:${f[3]};--fb:${f[4]}}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:${dark ? '#0f0d12' : '#eceae6'};color:var(--ink);font:16px/1.55 var(--fb);-webkit-font-smoothing:antialiased}
 a{color:var(--acc)}
+:focus-visible{outline:3px solid var(--acc);outline-offset:3px}
 .topbar{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;gap:1rem}
-.topbar b{font-family:var(--fh)}.topbar a.go{background:var(--acc);color:var(--on);text-decoration:none;font-weight:700;border-radius:999px;padding:.45rem 1.1rem}
+.topbar b{font-family:var(--fh)}.topbar a.go{background:var(--fill);color:var(--on);text-decoration:none;font-weight:700;border-radius:999px;padding:.7rem 1.2rem;min-height:44px;display:inline-flex;align-items:center}
 .sheet{max-width:860px;margin:1.2rem auto;background:var(--paper);box-shadow:0 2px 22px rgba(0,0,0,.12);border-radius:6px}
 .resume{padding:2.4rem 2.6rem;font-size:15px}
 h1,h2,h3,h4{font-family:var(--fh);margin:0}h4{font-size:1.05em}
@@ -265,54 +424,78 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .bul{margin:.35rem 0 0;padding-left:1.1rem}.bul li{margin:.18rem 0}
 .chips,.plain{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.4rem}.plain{display:grid;gap:.25rem}.plain.inline{display:flex;gap:.4rem 1rem}
 .chips li{background:var(--soft);color:var(--ink);border-radius:999px;padding:.15rem .7rem;font-size:.9em}
-/* layouts */
 .tpl-classic .hd{border-bottom:3px solid var(--acc);padding-bottom:.9rem}.tpl-classic section h3{border-bottom:1px solid var(--line);padding-bottom:.25rem}
 .tpl-minimal .resume{padding:3rem 3rem}.tpl-minimal section h3{text-transform:none;letter-spacing:0;font-size:1rem;color:var(--muted);font-weight:600}.tpl-minimal .hd h1{font-weight:500}
-.tpl-bold .hd{background:var(--acc);color:var(--on);margin:-2.4rem -2.6rem 0;padding:2.2rem 2.6rem}.tpl-bold .headline,.tpl-bold .contact,.tpl-bold .contact a{color:var(--on);opacity:.92}
+.tpl-bold .hd{background:var(--fill);color:var(--on);margin:-2.4rem -2.6rem 0;padding:2.2rem 2.6rem}.tpl-bold .headline,.tpl-bold .contact,.tpl-bold .contact a{color:var(--on)}
 .tpl-compact .resume{font-size:13.5px;padding:1.8rem 2rem}.tpl-compact .hd h1{font-size:1.9rem}.tpl-compact section h3{margin-top:.9rem}.tpl-compact .job{margin-bottom:.6rem}
-.tpl-elegant .hd{text-align:center;border-top:1px solid var(--acc);border-bottom:1px solid var(--acc);padding:1.1rem 0;position:relative}.tpl-elegant .hd h1{font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:2rem}.tpl-elegant section h3{text-align:center;border-bottom:1px solid var(--line);padding-bottom:.3rem}
-.tpl-modern .resume{padding:0;display:grid}.tpl-modern .hd{background:var(--acc);color:var(--on);padding:2rem 2.4rem}.tpl-modern .hd .headline{color:var(--on);opacity:.92}.tpl-modern .only-main.contact,.tpl-modern .only-main{display:none}
+.tpl-elegant .hd{text-align:center;border-top:1px solid var(--acc);border-bottom:1px solid var(--acc);padding:1.1rem 0}.tpl-elegant .hd h1{font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:2rem}.tpl-elegant section h3{text-align:center;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.tpl-modern .resume{padding:0;display:grid}.tpl-modern .hd{background:var(--fill);color:var(--on);padding:2rem 2.4rem}.tpl-modern .hd .headline{color:var(--on)}
 .tpl-modern .cols{display:grid;grid-template-columns:30% 1fr;margin:0}.tpl-modern .side{background:var(--soft);padding:1.4rem 1.4rem 1.4rem 2.4rem}.tpl-modern .mn{padding:.4rem 2.4rem 2rem 1.8rem}
-.tpl-modern .only-side{display:block}.tpl-modern .side h3{margin-top:1.1rem}.tpl-modern .contact-stack{margin:0;font-size:.9em;word-break:break-word}.tpl-modern .contact-stack a{color:inherit}.tpl-modern .chips{display:grid}.tpl-modern .chips li{background:var(--paper)}
-.tpl-modern .contact.only-main{display:none}
+.tpl-modern .only-side{display:block}.tpl-modern .only-main{display:none}.tpl-modern .side h3{margin-top:1.1rem}.tpl-modern .contact-stack{margin:0;font-size:.9em;word-break:break-word}.tpl-modern .contact-stack a{color:inherit}.tpl-modern .chips{display:grid}.tpl-modern .chips li{background:var(--paper)}
 @media (max-width:640px){.resume{padding:1.6rem 1.2rem}.tpl-bold .hd{margin:-1.6rem -1.2rem 0;padding:1.6rem 1.2rem}.tpl-modern .resume{padding:0}.tpl-modern .cols{grid-template-columns:1fr}.tpl-modern .hd,.tpl-modern .side,.tpl-modern .mn{padding-left:1.2rem;padding-right:1.2rem}}
-/* hire section */
 .hire{max-width:860px;margin:1.2rem auto 3rem;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
 .hire-in{padding:2.2rem 2.6rem}@media (max-width:640px){.hire-in{padding:1.6rem 1.2rem}}
 .hire h2{font-size:1.8rem}.avail{display:inline-flex;align-items:center;gap:.5rem;background:var(--soft);padding:.25rem .8rem;border-radius:999px;margin:.6rem 0 0;font-size:.92em}.dot{width:9px;height:9px;border-radius:50%;background:#2f9e5b}
 .svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}
+.direct{margin:1rem 0 0;color:var(--muted)}.direct a{color:var(--acc)}
+.copy{font:inherit;font-weight:600;min-height:44px;padding:.4rem 1rem;border-radius:999px;border:1.5px solid var(--ctl);background:var(--paper);color:var(--acc);cursor:pointer;margin:.3rem .4rem .3rem 0}
+.copied{font-size:.9rem;color:var(--muted)}
 form{display:grid;gap:.9rem;margin-top:1.4rem;border-top:1px solid var(--line);padding-top:1.4rem}
 form label{display:grid;gap:.3rem;font-weight:600;font-size:.92rem}
-form input[type=text],form input[type=email],form textarea{font:inherit;font-weight:400;color:var(--ink);background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:.65rem .8rem;width:100%}
-form input:focus,form textarea:focus{outline:3px solid color-mix(in srgb,var(--acc) 35%,transparent);border-color:var(--acc)}
-fieldset.poll{border:0;padding:0;margin:0}.poll legend{font-weight:700;margin-bottom:.5rem;padding:0}.pollopts{display:flex;flex-wrap:wrap;gap:.5rem}
-.pill{display:block;position:relative;cursor:pointer}.pill input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}.pill span{display:block;border:1.5px solid var(--line);border-radius:999px;padding:.45rem 1rem;font-weight:600;font-size:.95rem}
-.pill input:checked+span{background:var(--acc);color:var(--on);border-color:var(--acc)}.pill input:focus-visible+span{outline:3px solid var(--acc);outline-offset:2px}
-.cta{font:inherit;font-weight:700;background:var(--acc);color:var(--on);border:0;border-radius:999px;padding:.8rem 1.6rem;cursor:pointer;justify-self:start}.cta[disabled]{opacity:.6}
-.msg{margin:0;font-weight:600}.msg.err{color:#c0392b}
+form input[type=text],form input[type=email],form textarea{font:inherit;font-weight:400;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.7rem .8rem;width:100%;min-height:48px}
+form textarea::placeholder{color:var(--muted);opacity:1}
+form input:focus,form textarea:focus{outline:3px solid var(--acc);outline-offset:2px}
+form [aria-invalid=true]{border-color:#c0392b}
+fieldset.poll{border:0;padding:0;margin:0}.poll legend{font-weight:700;margin-bottom:.5rem;padding:0}.pollopts{display:flex;flex-wrap:wrap;gap:.6rem}
+.pill{display:block;position:relative;cursor:pointer}.pill input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;width:100%;height:100%}.pill span{display:flex;align-items:center;min-height:44px;border:2px solid var(--ctl);border-radius:999px;padding:.4rem 1.1rem;font-weight:600;font-size:.95rem}
+.pill input:checked+span{background:var(--fill);color:var(--on);border-color:var(--fill)}.pill input:focus-visible+span{outline:3px solid var(--acc);outline-offset:3px}
+.cta{font:inherit;font-weight:700;background:var(--fill);color:var(--on);border:0;border-radius:999px;padding:.8rem 1.6rem;min-height:48px;cursor:pointer;justify-self:start}.cta[disabled]{opacity:.65;cursor:progress}
+.fine{margin:0;color:var(--muted);font-size:.9rem}
+.msg{margin:0;font-weight:600}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
+.demo-note{margin:0;padding:.7rem .9rem;border:2px dashed var(--ctl);border-radius:10px;background:var(--soft);color:var(--ink)}
+.draft{display:grid;gap:.4rem}.draft textarea{font:inherit;font-weight:400;width:100%;min-height:9rem;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.6rem}
 ::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
-@media print{body{background:#fff}.no-print,.topbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:none}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:10mm}}`;
-  const js = `
-(function(){var C=${cfg},f=document.getElementById('hireForm');if(!f)return;var m=f.querySelector('.msg');
-f.addEventListener('submit',function(e){e.preventDefault();m.className='msg';
-var v=function(n){var x=f.elements[n];return x?x.value.trim():''};var need=(f.querySelector('input[name=need]:checked')||{}).value||'';
-if(v('botcheck'))return;if(!v('name')||!/^\\S+@\\S+\\.\\S+$/.test(v('email'))||(f.querySelector('input[name=need]')&&!need)){m.className='msg err';m.textContent='Please add your name, a valid email and pick one option.';return}
-var body={name:v('name'),email:v('email'),need:need,message:v('message')};
-if(C.mode==='email'||!C.endpoint){var s='Hire inquiry from '+body.name;var t='Name: '+body.name+'\\nEmail: '+body.email+(need?'\\nNeed: '+need:'')+'\\n\\n'+body.message;location.href='mailto:'+C.email+'?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(t);m.textContent='Opening your email app. Press send there to finish.';return}
-var b=f.querySelector('button');b.disabled=true;m.textContent='Sending...';
-var url=C.mode==='web3forms'?'https://api.web3forms.com/submit':C.endpoint;var data=C.mode==='web3forms'?{access_key:C.endpoint,subject:'Hire inquiry from '+body.name,from_name:body.name,email:body.email,need:need,message:body.message}:body;
-fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(data)}).then(function(r){if(!r.ok)throw 0;m.textContent=C.thanks;f.reset()}).catch(function(){m.className='msg err';m.textContent='Could not send. Please email '+C.email+' instead.'}).then(function(){b.disabled=false})})})();`;
+@media print{:root{${palVars(print)}}body{background:#fff}.no-print,.topbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.job,.bul li{break-inside:avoid}section h3,.side h3,.hd{break-after:avoid}@page{margin:10mm}}`;
   const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
-    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d)}</main>`;
-  return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
+  const csp = opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'">` : '';
+  const script = opt.resumeOnly ? '' : `<script type="application/json" id="cfg">${cfg}</script><script>(${siteScript.toString()})();</script>`;
+  return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(d.name || 'Resume')}${d.headline ? ' | ' + esc(d.headline) : ''}</title><meta name="description" content="${esc(d.summary || d.headline || '')}">
 ${fam ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fam}&display=swap">` : ''}
-<style>${css}</style></head><body class="tpl-${esc(st.layout)}">${body}${opt.resumeOnly || opt.noScript ? '' : `<script>${js}<\/script>`}</body></html>`;
+<style>${css}</style></head><body class="tpl-${layout}">${body}${script}</body></html>`;
 }
+
+/* ---------- 3b. clean data on the way in (saved data and restored backups) ---------- */
+// Only known fields survive, each as text of a sane length, so a hand-edited or hostile backup cannot add
+// fields, change types or smuggle objects into the page. Missing fields fall back to the sample, as before.
+const FORM_MODES = ['email', 'formspree', 'web3forms'];
+function normData(x) {
+  x = x && typeof x === 'object' && !Array.isArray(x) ? x : {};
+  const o = {};
+  const strs = { name: 120, headline: 200, email: 254, phone: 60, location: 120, website: 300, summary: 2000, skills: 2000, availability: 200, ctaLabel: 60, formTitle: 200, pollQuestion: 200, pollOptions: 1500, formEndpoint: 300, thanks: 400 };
+  for (const k in strs) o[k] = own(x, k) ? (typeof x[k] === 'string' ? x[k].slice(0, strs[k]) : '') : SAMPLE[k];
+  o.formMode = own(x, 'formMode') && FORM_MODES.includes(x.formMode) ? x.formMode : SAMPLE.formMode;
+  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60 }, 20] };
+  for (const k in lists) {
+    const [shape, max] = lists[k];
+    o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
+  }
+  return o;
+}
+function normStyle(x) {
+  x = x && typeof x === 'object' ? x : {};
+  return { layout: LAYOUTS.some(l => l[0] === x.layout) ? x.layout : STYLE0.layout, font: own(FONTS, x.font) ? x.font : STYLE0.font,
+    color: hexOk(x.color) ? x.color.toLowerCase() : STYLE0.color, paper: own(PAPERS, x.paper) ? x.paper : STYLE0.paper };
+}
+try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && typeof saved === 'object' && saved.D) { D = normData(saved.D); ST = normStyle(saved.ST); } } catch (e) {}
 
 /* ---------- 4. editor panels ---------- */
 const F = (label, path, o) => { o = o || {}; const v = path.split('.').reduce((x, k) => x && x[k], D);
-  return `<label class="f">${label}${o.hint ? `<small>${o.hint}</small>` : ''}${o.area ? `<textarea data-f="${path}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}">${esc(v)}</textarea>` : `<input type="${o.type || 'text'}" data-f="${path}" value="${esc(v)}" placeholder="${esc(o.ph || '')}">`}</label>`; };
+  const desc = o.err ? ` aria-describedby="err-${o.err}"` : '';
+  const err = o.err ? `<span class="fielderr" id="err-${o.err}" data-err="${o.err}" role="alert" hidden></span>` : '';
+  return `<label class="f">${label}${o.hint ? `<small>${o.hint}</small>` : ''}${o.area ? `<textarea data-f="${path}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}"${desc}>${esc(v)}</textarea>` : `<input type="${o.type || 'text'}" data-f="${path}" value="${esc(v)}" placeholder="${esc(o.ph || '')}"${desc}>`}${err}</label>`; };
 const LF = (list, i, k, label, o) => { o = o || {}; const v = D[list][i][k];
   return `<label class="f">${label}${o.area ? `<textarea data-l="${list}" data-i="${i}" data-k="${k}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}">${esc(v)}</textarea>` : `<input type="text" data-l="${list}" data-i="${i}" data-k="${k}" value="${esc(v)}" placeholder="${esc(o.ph || '')}">`}</label>`; };
 const entry = (list, i, title, inner) => `<div class="entry"><div class="entry-head"><span>${esc(title || 'New')}</span><button type="button" class="btn btn-small btn-danger" data-rm="${list}:${i}" aria-label="Remove ${esc(title || 'entry')}">Remove</button></div>${inner}</div>`;
@@ -322,7 +505,7 @@ function renderPanel() {
   const card = (id, title, inner) => `<details class="card" data-card="${id}"${openCards[id] ? ' open' : ''}><summary>${title}</summary><div class="card-body">${inner}</div></details>`;
   $('#panel').innerHTML =
     card('about', '1. About you', F('Full name', 'name') + F('Headline', 'headline', { ph: 'What you do, in a few words' }) +
-      `<div class="row2">${F('Email', 'email', { type: 'email' })}${F('Phone (optional)', 'phone', { type: 'tel' })}</div><div class="row2">${F('Location', 'location')}${F('Website (optional)', 'website', { ph: 'yoursite.com' })}</div>` +
+      `<div class="row2">${F('Email', 'email', { type: 'email', err: 'email' })}${F('Phone (optional)', 'phone', { type: 'tel' })}</div><div class="row2">${F('Location', 'location')}${F('Website (optional)', 'website', { ph: 'yoursite.com' })}</div>` +
       F('Profile', 'summary', { area: true, rows: 4, hint: ' Two or three sentences on who you help and how.' })) +
     card('exp', '2. Experience', D.experience.map((e, i) => entry('experience', i, e.role || e.company,
       `<div class="row2">${LF('experience', i, 'role', 'Role')}${LF('experience', i, 'company', 'Company')}</div>${LF('experience', i, 'dates', 'Dates', { ph: '2020 to now' })}${LF('experience', i, 'bullets', 'What you did', { area: true, rows: 5, ph: 'One result per line, with numbers when you have them' })}`)).join('') +
@@ -335,18 +518,18 @@ function renderPanel() {
       `<div><b>Layout</b><div class="choices" style="margin-top:.5rem">${LAYOUTS.map(([k, n, d]) => `<button type="button" class="choice" data-st="layout" data-v="${k}" aria-pressed="${ST.layout === k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div></div>` +
       `<div><b>Fonts</b><div class="choices" style="margin-top:.5rem">${Object.entries(FONTS).map(([k, f]) => `<button type="button" class="choice" data-st="font" data-v="${k}" aria-pressed="${ST.font === k}"><b style="font-family:${f[3]}">${f[0]}</b><span>${f[1]}${f[1] !== f[2] ? ' + ' + f[2] : ''}</span></button>`).join('')}</div></div>` +
       `<div><b>Color</b><div class="swatches" style="margin-top:.5rem">${COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-st="color" data-v="${c}" aria-pressed="${ST.color.toLowerCase() === c}" aria-label="Color ${c}"></button>`).join('')}<label class="f" style="display:flex;align-items:center;gap:.5rem">Custom <input type="color" data-st-input="color" value="${esc(ST.color)}"></label></div></div>` +
-      `<div><b>Paper</b><div class="choices" style="margin-top:.5rem">${Object.entries(PAPERS).map(([k, p]) => `<button type="button" class="choice" data-st="paper" data-v="${k}" aria-pressed="${ST.paper === k}"><b>${p[0]}</b><span>${k === 'dark' ? 'Light text on dark' : 'Dark text'}</span></button>`).join('')}</div></div>`) +
+      `<div><b>Paper</b><div class="choices" style="margin-top:.5rem">${Object.entries(PAPERS).map(([k, p]) => `<button type="button" class="choice" data-st="paper" data-v="${k}" aria-pressed="${ST.paper === k}"><b>${p[0]}</b><span>${k === 'dark' ? 'Light text on dark' : 'Dark text'}</span></button>`).join('')}</div></div>` + `<p class="hint" id="colorNote" aria-live="polite">${esc(colorNote(ST.color, ST.paper))}</p>`) +
     card('hire', '6. Hire-me section',
       F('Availability note', 'availability', { ph: 'Taking new clients in January' }) +
       D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
       `<button type="button" class="btn" data-add="services">Add a service</button>` +
       F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) +
-      `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message after sending', 'thanks')) +
+      `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message shown once the form service accepts a message', 'thanks')) +
     card('send', '7. Where form messages go',
-      `<label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
-      (D.formMode === 'email' ? `<p class="hint">The visitor's email app opens with their message filled in, addressed to ${esc(D.email || 'your email')}. It works everywhere with nothing to sign up for. For messages that arrive without the visitor's email app, pick Formspree or Web3Forms.</p>`
-        : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.' })
-        : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.' }))) +
+      `<span class="fielderr" data-err="mode" role="alert" hidden></span><label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
+      (D.formMode === 'email' ? `<p class="hint"><b>What happens:</b> when a visitor presses the button, their own email app opens with a draft addressed to ${esc(D.email || 'your email address')}. <b>The visitor has to press Send themselves.</b> Opening a draft is not sending an email, and neither this page nor Folio can tell whether it was sent, so the page never says "sent". Your address is also shown on the page with a Copy button, and the draft appears in a box to copy, for visitors without an email app. You get a message only if the visitor sends it.</p>`
+        : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
+        : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('pub', '8. Publish and back up',
       `<ol class="steps"><li>Press <b>Download my site</b>. You get a file named <b>index.html</b>.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>` +
       `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>`);
@@ -358,7 +541,7 @@ function refresh() {
   clearTimeout(prevT);
   prevT = setTimeout(() => {
     const fr = $('#frame'); let y = 0; try { y = fr.contentWindow.scrollY; } catch (e) {}
-    fr.srcdoc = buildSite(D, ST, { resumeOnly: view === 'resume' });
+    fr.srcdoc = buildSite(D, ST, { resumeOnly: view === 'resume', preview: view !== 'resume' });
     fr.onload = () => { try { fr.contentWindow.scrollTo(0, y); } catch (e) {} };
   }, 200);
 }
@@ -367,9 +550,9 @@ function change() { save(); refresh(); }
 
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.dataset.f !== undefined) { const ks = t.dataset.f.split('.'); let o = D; while (ks.length > 1) o = o[ks.shift()]; o[ks[0]] = t.value; if (t.dataset.f === 'formMode') renderPanel(); change(); }
+  if (t.dataset.f !== undefined) { const ks = t.dataset.f.split('.'); let o = D; while (ks.length > 1) o = o[ks.shift()]; o[ks[0]] = t.value; if (t.dataset.f === 'formMode') renderPanel(); clearFieldError(t.dataset.f); change(); }
   else if (t.dataset.l) { D[t.dataset.l][+t.dataset.i][t.dataset.k] = t.value; change(); }
-  else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); change(); }
+  else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
 document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) openCards[c.dataset.card] = c.open; }, true);
@@ -377,15 +560,50 @@ document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
   else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '' }); renderPanel(); change(); }
-  else if (b.dataset.rm) { const [k, i] = b.dataset.rm.split(':'); const nm = (D[k][+i].role || D[k][+i].school || D[k][+i].label || D[k][+i].title || 'this entry'); if (confirm(`Remove "${nm}"?`)) { D[k].splice(+i, 1); renderPanel(); change(); } }
+  else if (b.dataset.rm) {
+    const [k, i] = b.dataset.rm.split(':'), rec = D[k][+i], nm = rec.role || rec.school || rec.label || rec.title || 'this entry';
+    confirmDialog({ title: 'Remove this entry?', message: `"${nm}" will be removed from your resume. This cannot be undone unless you have a backup.`, ok: 'Remove' }).then(yes => {
+      if (!yes || D[k][+i] !== rec) return;
+      D[k].splice(+i, 1); renderPanel(); change();
+      const next = document.querySelector(`[data-add="${k}"]`); if (next) next.focus();
+    });
+  }
   else if (b.dataset.seg) { document.body.dataset.show = b.dataset.seg; document.querySelectorAll('[data-seg]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (b.dataset.seg === 'preview') refresh(); }
   else if (b.dataset.view) { view = b.dataset.view; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); refresh(); }
 });
 
 /* ---------- 6. export and backup ---------- */
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+/* Checks that must pass before a site can be downloaded. Returns the first problem, or null. */
+const RESERVED_MAIL = /@(example\.(com|org|net)|test|invalid|localhost)$/i;
+function validateExport() {
+  const mail = String(D.email || '').trim(), ep = String(D.formEndpoint || '').trim();
+  if (D.formMode === 'email') {
+    if (!mail) return { field: 'email', card: 'about', msg: 'Add your email address. In email mode every draft is addressed to it.', mode: 'Email mode needs your email address (step 1).' };
+    if (!validEmail(mail)) return { field: 'email', card: 'about', msg: 'This does not look like an email address. Use the form name@yourdomain.com.', mode: 'Email mode needs a valid email address (step 1).' };
+    if (RESERVED_MAIL.test(mail)) return { field: 'email', card: 'about', msg: `${mail} is a sample address, so drafts would go nowhere. Enter your real email address.`, mode: 'Email mode needs your real email address (step 1).' };
+  } else if (D.formMode === 'formspree') {
+    if (!/^https:\/\/formspree\.io\/f\/[A-Za-z0-9]+$/.test(ep)) return { field: 'formEndpoint', card: 'send', msg: 'Paste the full Formspree address, like https://formspree.io/f/abcdwxyz.' };
+  } else if (D.formMode === 'web3forms') {
+    if (!/^[A-Za-z0-9-]{20,}$/.test(ep)) return { field: 'formEndpoint', card: 'send', msg: 'Paste your Web3Forms access key (a long code of letters, numbers and dashes).' };
+  }
+  return null;
+}
+function clearFieldError(field) {
+  document.querySelectorAll(`[data-err="${field}"]`).forEach(e => { e.hidden = true; e.textContent = ''; });
+  document.querySelectorAll(`[data-f="${field}"]`).forEach(i => i.removeAttribute('aria-invalid'));
+  if (field === 'email') document.querySelectorAll('[data-err="mode"]').forEach(e => { e.hidden = true; e.textContent = ''; });
+}
+function showFieldError(v) {
+  openCards[v.card] = true; if (v.mode) openCards.send = true; renderPanel();
+  const err = document.querySelector(`[data-err="${v.field}"]`), input = document.querySelector(`[data-f="${v.field}"]`);
+  if (err) { err.textContent = v.msg; err.hidden = false; }
+  if (v.mode) { const m = document.querySelector('[data-err="mode"]'); if (m) { m.textContent = v.mode; m.hidden = false; } }
+  if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
+  toast('The site was not downloaded. Fix the highlighted field first.');
+}
 $('#exportBtn').addEventListener('click', () => {
-  if (D.formMode !== 'email' && !String(D.formEndpoint).trim()) { toast('Add your Formspree address or Web3Forms key in step 7, or switch to the email option.'); openCards.send = true; renderPanel(); return; }
+  const problem = validateExport(); if (problem) { showFieldError(problem); return; }
   download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
 });
 $('#pdfBtn').addEventListener('click', () => {
@@ -394,16 +612,35 @@ $('#pdfBtn').addEventListener('click', () => {
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'backupBtn') download('folio-backup.json', JSON.stringify({ D, ST }, null, 2), 'application/json');
-  if (e.target.id === 'resetBtn' && confirm('Clear everything and start with a blank resume? Download a backup first if you want to keep this one.')) {
+  if (e.target.id === 'resetBtn') confirmDialog({ title: 'Start with a blank resume?', message: 'This clears your resume, services and form settings in Folio. Download a backup first if you want to keep this one.', ok: 'Clear everything' }).then(yes => {
+    if (!yes) return;
     D = Object.assign(JSON.parse(JSON.stringify(SAMPLE)), { name: '', headline: '', email: '', phone: '', location: '', website: '', summary: '', experience: [{ role: '', company: '', dates: '', bullets: '' }], education: [{ school: '', degree: '', dates: '' }], skills: '', links: [], services: [], availability: '', pollOptions: '' });
-    renderPanel(); change();
-  }
+    renderPanel(); change(); const rb = $('#resetBtn'); if (rb) rb.focus();
+  });
 });
-function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j.D) throw 0; D = Object.assign(JSON.parse(JSON.stringify(SAMPLE)), j.D); ST = Object.assign({}, STYLE0, j.ST || {}); renderPanel(); change(); toast('Backup restored.'); }).catch(() => toast('That file is not a Folio backup.')); }
+function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j || typeof j !== 'object' || !j.D || typeof j.D !== 'object') throw 0; D = normData(j.D); ST = normStyle(j.ST); renderPanel(); change(); toast('Backup restored.'); }).catch(() => toast('That file is not a Folio backup.')); }
+
+/* ---------- 6b. themed confirmation (replaces the browser's own confirm box) ---------- */
+// Opens as a modal (the page behind is inert and Tab stays inside), focuses Cancel first, closes on Escape or a click
+// outside, and puts focus back on the control that opened it unless the caller moves focus after a confirmed action.
+function confirmDialog(o) {
+  return new Promise(resolve => {
+    const d = $('#confirmDialog'), trigger = document.activeElement;
+    $('#cfTitle').textContent = o.title; $('#cfMsg').textContent = o.message; $('#cfOk').textContent = o.ok || 'Confirm';
+    const onBackdrop = e => { if (e.target === d) d.close('cancel'); };
+    d.addEventListener('close', () => { d.removeEventListener('click', onBackdrop); const yes = d.returnValue === 'ok'; if (!yes && trigger && trigger.isConnected) trigger.focus(); resolve(yes); }, { once: true });
+    d.addEventListener('click', onBackdrop);
+    d.returnValue = ''; d.showModal(); $('#cfCancel').focus();
+  });
+}
+$('#cfCancel').addEventListener('click', () => $('#confirmDialog').close('cancel'));
+$('#cfOk').addEventListener('click', () => $('#confirmDialog').close('ok'));
 
 /* ---------- 7. theme shared with the other tools, then start ---------- */
 (function sharedTheme() {
   let st = {}; try { st = (JSON.parse(localStorage.getItem('jst:v1:settings')) || {}).app || {}; } catch (e) {}
+  const setIcon = c => { const i = $('#favicon'); if (i) i.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${c}"/><path d="M10 6h8l5 5v14a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 9 25V7.5A1.5 1.5 0 0 1 10 6z" fill="#fff"/><path d="M18 6v5h5" fill="none" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 16h8M12 20h8M12 24h5" stroke="${c}" stroke-width="1.8" stroke-linecap="round"/></svg>`); };
+  if (st.theme === 'purple') { setIcon('#6b3fa0'); }
   if (st.theme === 'purple') { const P = { 'bg': '#f6f1fb', 'surface': '#fdfbff', 'surface-2': '#ece3f6', 'text': '#261d33', 'muted': '#594c6b', 'border': '#dacdea', 'accent': '#6b3fa0', 'accent-hover': '#552f82', 'accent-glow': '#8a5cc4', 'accent-text': '#6b3fa0', 'accent-soft': '#efe6fa', 'accent-line': '#d3bff0', 'tint': '#faf6fe', 'input-border': '#8a7aa0' }; for (const k in P) document.documentElement.style.setProperty('--' + k, P[k]); }
 })();
 $('#ver').textContent = 'Folio ' + APP_VERSION;
