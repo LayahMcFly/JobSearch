@@ -1,0 +1,652 @@
+{
+ "pass": 128,
+ "fail": 0,
+ "skipped": 1,
+ "results": [
+  {
+   "name": "  zero external requests",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no navigation, popup or mailto attempt",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  says it is a demonstration",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  CSP blocks fetch and images even if script code ran",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no draft box in preview",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  preview form is labelled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no native dialogs, no page errors",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  zero external requests",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no navigation, popup or mailto attempt",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  says it is a demonstration",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  CSP blocks fetch and images even if script code ran",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no draft box in preview",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  preview form is labelled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no native dialogs, no page errors",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  zero external requests",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no navigation, popup or mailto attempt",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  says it is a demonstration",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  CSP blocks fetch and images even if script code ran",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no draft box in preview",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  preview form is labelled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no native dialogs, no page errors",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  test setup changed the config",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  zero requests leave the page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  accepted message, form cleared, button re-enabled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  accepted message, form cleared, button re-enabled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept, reason shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept, reason shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept, reason shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not reported as success, says it may not have arrived, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not reported as success, says it may not have arrived, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not reported as success, says it may not have arrived, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not success, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  times out, not success, details kept, button re-enabled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  one request for one click",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  honeypot filled: nothing is sent and no success shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  accepted message, form cleared, button re-enabled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept, reason shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept, reason shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept, reason shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rejected, says why, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not reported as success, says it may not have arrived, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not reported as success, says it may not have arrived, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not reported as success, says it may not have arrived, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  request body carried the entered details",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  not success, details kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  times out, not success, details kept, button re-enabled",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  one request for one click",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  honeypot filled: nothing is sent and no success shown",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  12 payloads x 4 builds: no script runs, no extra scripts/styles/images/handlers/frames, no unsafe link schemes, config parses",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  raw page source has no unescaped closing script tag inside the config",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no elements created, nothing executed",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  config value equals what was typed",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  file: only known fields kept, wrong types and extra keys dropped",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  file: style falls back to safe values",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  file: no prototype pollution, nothing executed, editor panel clean",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  file: site built from restored data is clean",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  storage: only known fields kept, wrong types and extra keys dropped",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  storage: style falls back to safe values",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  storage: no prototype pollution, nothing executed, editor panel clean",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  storage: site built from restored data is clean",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  missing: no download, visible error, field focused and marked invalid",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no @: no download, visible error, field focused and marked invalid",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  spaces: no download, visible error, field focused and marked invalid",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  angle brackets: no download, visible error, field focused and marked invalid",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no dot: no download, visible error, field focused and marked invalid",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  sample example.com: no download, visible error, field focused and marked invalid",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  valid address downloads index.html",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  recipient address is visible on the page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Copy address reports success",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  navigator.clipboard path",
+   "ok": null,
+   "note": "needs HTTPS; this test page is http, so the execCommand fallback was what ran"
+  },
+  {
+   "name": "  after pressing the button: says nothing was sent and the visitor must press Send",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  draft box shows recipient, subject and message",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  copy draft works",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  page explains the visitor sends it",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  formspree \"\" is blocked with an inline error",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  formspree \"http://formspree.io/f/ab\" is blocked with an inline error",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  formspree \"https://evil.com/f/abc\" is blocked with an inline error",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  formspree \"https://formspree.io/f/a\" is blocked with an inline error",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  formspree \"https://formspree.io/f/a\" downloads",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  web3forms \"short\" is blocked with an inline error",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  web3forms \"x\" y\" is blocked with an inline error",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  web3forms \"aaaaaaaa-bbbb-cccc-dddd-\" downloads",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  1575 measured foreground/background pairs (headings, buttons, links, input text and boundaries, focus color)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  rendering never rewrites the saved accent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  custom color shows a note explaining the adjustment",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  print re-themes dark paper to white with dark ink",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  opens a themed dialog (not native)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  dialog names the entry and has a role",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  focus starts on Cancel (the safe choice)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Tab never reaches the page behind (it may only go to the browser itself)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Escape closes, nothing removed, focus returns to the Remove button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  clicking outside cancels, nothing removed, focus returns",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Cancel button keeps the entry",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Remove removes exactly that entry and updates the preview",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  focus moves to the Add button after a removal",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  every remaining list can remove down to zero",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no native confirm() ever appeared, no page errors",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Escape keeps data and returns focus to Reset",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  confirming clears the resume and keeps focus on Reset",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no native confirm()",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  data saved by v1.0.0 loads unchanged (resume data and style)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  a backup file from v1.0.0 restores unchanged",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  new backups keep the same shape ({D, ST}) as v1.0.0",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  86 controls: every one at least 44px tall and wide",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  at least 8px between neighbouring controls",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  confirm dialog buttons are 44px and fit the screen",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no sideways scrolling in the editor",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  all 6 layouts x 2 paper sizes: multi-page, no lost text, no heading or job title stranded at a page bottom, white paper printed",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  edits and a new entry survive a reload",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  no page errors, no external requests while editing",
+   "ok": true,
+   "note": ""
+  }
+ ]
+}

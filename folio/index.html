@@ -140,7 +140,7 @@ dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card 
       <button type="button" class="btn btn-small" data-view="resume" aria-pressed="true">Resume</button>
       <button type="button" class="btn btn-small" data-view="site" aria-pressed="false">Whole site</button>
     </div>
-    <iframe id="frame" title="Live preview" sandbox="allow-same-origin allow-scripts allow-modals"></iframe>
+    <iframe id="frame" title="Live preview"></iframe>
   </div>
 </div>
 
@@ -460,7 +460,8 @@ fieldset.poll{border:0;padding:0;margin:0}.poll legend{font-weight:700;margin-bo
   const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
     `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
   const csp = opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'">` : '';
-  const script = opt.resumeOnly ? '' : `<script type="application/json" id="cfg">${cfg}</script><script>(${siteScript.toString()})();</script>`;
+  // The closing tags are written as <\/script> so this page's own HTML parser never sees a real closing tag inside this code.
+  const script = opt.resumeOnly ? '' : `<script type="application/json" id="cfg">${cfg}<\/script><script>(${siteScript.toString()})();<\/script>`;
   return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(d.name || 'Resume')}${d.headline ? ' | ' + esc(d.headline) : ''}</title><meta name="description" content="${esc(d.summary || d.headline || '')}">
 ${fam ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fam}&display=swap">` : ''}
@@ -480,7 +481,7 @@ function normData(x) {
   const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60 }, 20] };
   for (const k in lists) {
     const [shape, max] = lists[k];
-    o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
+    o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
   }
   return o;
 }
