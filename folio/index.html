@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f2ea">
+<title>Folio: Resume and Hire-Me Site Builder</title>
+<meta name="description" content="Build a resume, pick its style, fonts and colors, then publish a one-page site with a hire-me form.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=DM+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Inter:wght@400;600;700&family=Nunito:wght@400;700&family=Playfair+Display:wght@500;700&family=Poppins:wght@500;700&family=Source+Sans+3:wght@400;600&display=swap">
+<!--
+  Folio: build a resume, choose its style, fonts and colors, and publish a one-page site with a hire-me form
+  (like Ko-fi or Carrd, on your own address). One self-contained file; your work is saved in this browser.
+  It lives at /folio/ in the JobSearch repo as its own file. It never reads or changes Job Search.
+
+  Sections: 1 data and sample | 2 style choices | 3 page builder (buildSite) | 4 editor panels | 5 preview | 6 export and backup | 7 theme
+
+  Versions (Folio has its own notes, separate from Job Search and the hub):
+  v1.0.0 first release: resume editor, 6 layouts, 6 font pairs, colors and paper tone, live preview, Save as PDF,
+         one-page site export with services, a poll question and a hire-me form (Formspree, Web3Forms or email), backup and restore.
+-->
+<style>
+:root{
+  --bg:#f7f2ea;--surface:#fffdf9;--surface-2:#f0e8db;--text:#2a241f;--muted:#5c5248;--border:#d8ccbb;--input-border:#8f806c;--field:#fff;
+  --accent:#8a3f1f;--accent-hover:#6f3116;--accent-glow:#a5532c;--accent-text:#8a3f1f;--accent-soft:#f4e3d7;--accent-line:#e0c3ae;--tint:#fbf7f1;
+  --danger:#9b2c2c;--radius:12px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh}
+::selection{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
+:focus-visible{outline:3px solid var(--accent-text);outline-offset:2px}
+button,summary,.chip{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button:focus:not(:focus-visible){outline:none}
+h1,h2,h3{font-family:Georgia,"Times New Roman",serif;margin:0;line-height:1.2}
+.bar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--border);padding:.7rem 1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+.bar h1{font-size:1.5rem;margin-right:auto}
+.btn{min-height:44px;padding:.45rem 1.05rem;border-radius:999px;border:1.5px solid var(--input-border);background:linear-gradient(180deg,var(--surface),var(--surface-2));color:var(--text);font:inherit;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;text-decoration:none}
+@media (hover:hover){.btn:hover{background:linear-gradient(180deg,var(--tint),var(--accent-soft))}}
+.btn-primary{background:linear-gradient(135deg,var(--accent-glow),var(--accent) 55%,var(--accent-hover));border-color:var(--accent-hover);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.18);box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 30%,transparent)}
+.btn-small{min-height:36px;padding:.2rem .8rem;font-size:.92rem}
+.btn-danger{color:var(--danger);border-color:var(--danger)}
+.btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.layout{display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:1.2rem;padding:1rem;max-width:1400px;margin:0 auto}
+.panel{min-width:0}
+.preview-pane{position:sticky;top:76px;align-self:start;height:calc(100dvh - 92px);display:flex;flex-direction:column;gap:.6rem;min-width:0}
+.view-tabs{display:flex;gap:.4rem}
+.view-tabs .btn{flex:1}
+.view-tabs .btn[aria-pressed="true"]{background:linear-gradient(135deg,var(--accent-glow),var(--accent));color:#fff;border-color:var(--accent-hover)}
+#frame{flex:1;width:100%;border:1.5px solid var(--border);border-radius:var(--radius);background:#fff;min-height:420px}
+.seg{display:none;gap:.4rem;padding:.6rem 1rem 0}
+.seg .btn{flex:1}
+.seg .btn[aria-pressed="true"]{background:linear-gradient(135deg,var(--accent-glow),var(--accent));color:#fff;border-color:var(--accent-hover)}
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr;padding:.8rem}
+  .seg{display:flex}
+  .preview-pane{position:static;height:75dvh}
+  body[data-show="edit"] .preview-pane{display:none}
+  body[data-show="preview"] .panel{display:none}
+}
+details.card{border:1.5px solid var(--border);border-radius:var(--radius);background:linear-gradient(180deg,var(--surface),var(--tint));margin-bottom:.8rem;overflow:hidden}
+details.card>summary{list-style:none;cursor:pointer;padding:.85rem 1rem;font-family:Georgia,serif;font-weight:700;font-size:1.12rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::after{content:"";width:9px;height:9px;border-right:2.5px solid var(--accent);border-bottom:2.5px solid var(--accent);transform:rotate(45deg);transition:transform .15s;margin-right:.3rem}
+details.card[open]>summary::after{transform:rotate(-135deg)}
+.card-body{padding:0 1rem 1rem;display:grid;gap:.8rem}
+label.f{display:grid;gap:.25rem;font-weight:600;font-size:.92rem}
+label.f small{font-weight:400;color:var(--muted)}
+input[type=text],input[type=email],input[type=url],input[type=tel],textarea,select{width:100%;font:inherit;font-weight:400;color:var(--text);padding:.6rem .75rem;border-radius:10px;border:1.5px solid var(--input-border);background:linear-gradient(var(--field),var(--field)) padding-box;caret-color:var(--accent);transition:box-shadow .15s,border-color .15s}
+textarea{min-height:5.5rem;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+::placeholder{color:#8a7f72;opacity:1}
+.selwrap{position:relative}
+.selwrap select{appearance:none;-webkit-appearance:none;padding-right:2.4rem;cursor:pointer}
+.selwrap::after{content:"";position:absolute;right:1rem;top:50%;width:8px;height:8px;border-right:2.5px solid var(--accent);border-bottom:2.5px solid var(--accent);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.entry{border:1.5px dashed var(--accent-line);border-radius:10px;padding:.8rem;display:grid;gap:.7rem;background:var(--surface)}
+.entry-head{display:flex;justify-content:space-between;gap:.6rem;align-items:center;font-weight:700}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+@media (max-width:520px){.row2{grid-template-columns:1fr}}
+.choices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.6rem}
+.choice{position:relative;border:1.5px solid var(--border);border-radius:12px;padding:.7rem;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit;display:grid;gap:.15rem}
+.choice[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent);background:var(--accent-soft)}
+.choice b{font-size:.98rem}.choice span{font-size:.82rem;color:var(--muted)}
+.swatches{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
+.sw{width:44px;height:44px;border-radius:50%;border:3px solid var(--surface);box-shadow:0 0 0 1.5px var(--border);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--accent-text)}
+input[type=color]{width:52px;height:44px;padding:2px;border-radius:50%;border:1.5px solid var(--input-border);background:var(--surface);cursor:pointer}
+.hint{color:var(--muted);font-size:.88rem;margin:0}
+.steps{margin:0;padding-left:1.2rem;display:grid;gap:.45rem}
+.btnrow{display:flex;flex-wrap:wrap;gap:.6rem}
+.toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#2a241f;color:#fff;padding:.7rem 1.1rem;border-radius:12px;z-index:50;max-width:92vw;display:none}
+.toast.show{display:block}
+footer{text-align:center;color:var(--muted);font-size:.88rem;padding:1.5rem 1rem 2rem;display:flex;flex-direction:column;align-items:center;gap:.6rem}
+.notes-btn{min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent-text);font:inherit;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.notes-btn svg{width:18px;height:18px;margin-right:.45rem;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+dialog.notes-card{margin:auto;padding:0;border:1px solid var(--border);border-radius:16px;width:min(560px,94vw);max-height:min(80dvh,560px);background:var(--surface);color:var(--text);overflow:hidden}
+dialog.notes-card[open]{display:flex;flex-direction:column}
+dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:.8rem 1rem;background:var(--bg);border-bottom:1px solid var(--border)}
+.icon-btn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--text);font-size:1.5rem;cursor:pointer}
+.notes-scroll{overflow:auto;padding:.25rem 1rem 1rem}
+.notes-grid{display:grid;grid-template-columns:max-content 1fr;font-size:.95rem}
+.notes-grid>*{padding:.65rem .5rem;border-bottom:1px solid var(--border)}
+.notes-grid .nh{font-weight:700;border-bottom:2px solid var(--border)}.notes-grid .nv{font-weight:700;white-space:nowrap}
+</style>
+</head>
+<body data-show="edit">
+<div class="bar">
+  <h1>Folio</h1>
+  <button type="button" class="btn btn-small" id="pdfBtn">Save as PDF</button>
+  <button type="button" class="btn btn-primary btn-small" id="exportBtn">Download my site</button>
+</div>
+<div class="seg" role="group" aria-label="Show">
+  <button type="button" class="btn" data-seg="edit" aria-pressed="true">Edit</button>
+  <button type="button" class="btn" data-seg="preview" aria-pressed="false">Preview</button>
+</div>
+
+<div class="layout">
+  <div class="panel" id="panel"></div>
+  <div class="preview-pane">
+    <div class="view-tabs" role="group" aria-label="Preview of">
+      <button type="button" class="btn btn-small" data-view="resume" aria-pressed="true">Resume</button>
+      <button type="button" class="btn btn-small" data-view="site" aria-pressed="false">Whole site</button>
+    </div>
+    <iframe id="frame" title="Live preview"></iframe>
+  </div>
+</div>
+
+<footer>
+  <span id="ver"></span>
+  <button type="button" class="notes-btn" id="notesBtn" aria-haspopup="dialog">Folio release notes</button>
+  <a class="notes-btn" href="../hub/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>All tools (Hub)</a>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
+  <div class="panel-head"><h2 id="notesTitle">Folio release notes</h2><button type="button" class="icon-btn" id="notesClose" aria-label="Close Folio release notes">&times;</button></div>
+  <div class="notes-scroll"><div class="notes-grid" id="notesBody" role="table" aria-label="Folio release notes by version">
+    <div class="nh" role="columnheader">Version</div><div class="nh" role="columnheader">What is in it</div></div></div>
+</dialog>
+
+<script>
+'use strict';
+const APP_VERSION = 'v1.0.0';
+const RELEASES = [
+  ['v1.0.0', 'First release: resume editor, 6 layouts, 6 font pairs, colors and paper tone, live preview, Save as PDF, one-page site download with services, a poll question and a hire-me form (Formspree, Web3Forms or email), backup and restore.']
+];
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- 1. data and sample ---------- */
+const KEY = 'folio:v1';
+const SAMPLE = {
+  name: 'Jordan Rivera', headline: 'Freelance content writer and strategist', email: 'hello@example.com', phone: '', location: 'Valdosta, GA', website: '',
+  summary: 'I write clear, well-researched articles and brand copy for companies that want readers to act. Every piece starts with the reader\'s question and ends with a next step.',
+  experience: [
+    { role: 'Freelance Content Writer', company: 'Self-employed', dates: '2020 to now', bullets: 'Wrote 150+ SEO articles that held page-one rankings for client keywords\nBuilt brand voice guides for four B2B teams\nCut average turnaround from 6 days to 3 with a shared outline template' },
+    { role: 'Content Specialist', company: 'Example Co.', dates: '2017 to 2020', bullets: 'Managed a 40-post monthly calendar\nRaised newsletter clicks 28% by rewriting subject lines and calls to action' }
+  ],
+  education: [{ school: 'Example State University', degree: 'B.A. English', dates: '2013 to 2017' }],
+  skills: 'SEO writing, Brand voice, Editorial guidelines, Research, Interviewing, Copy editing',
+  links: [{ label: 'Portfolio', url: 'https://example.com/portfolio' }],
+  services: [
+    { title: 'SEO article', desc: '1,500 words, researched, with sources and an outline you approve first.', price: 'From $250' },
+    { title: 'Brand voice guide', desc: 'A short guide your whole team can write from.', price: 'From $900' }
+  ],
+  availability: 'Taking new clients in January', ctaLabel: 'Hire me', formTitle: 'Tell me about your project',
+  pollQuestion: 'What do you need help with?', pollOptions: 'Articles or blog posts\nWebsite copy\nBrand voice\nSomething else',
+  formMode: 'email', formEndpoint: '', thanks: 'Thank you. I will reply within two business days.'
+};
+const STYLE0 = { layout: 'modern', font: 'editorial', color: '#8a3f1f', paper: 'white' };
+let D = JSON.parse(JSON.stringify(SAMPLE)), ST = Object.assign({}, STYLE0);
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.D) { D = Object.assign(D, s.D); ST = Object.assign(ST, s.ST || {}); } } catch (e) {}
+let saveTimer = 0;
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ D, ST })); } catch (e) { toast('Could not save in this browser. Download a backup.'); } }, 250); }
+
+/* ---------- 2. style choices ---------- */
+const LAYOUTS = [
+  ['modern', 'Modern', 'Color sidebar with contact and skills'],
+  ['classic', 'Classic', 'One column, ruled headings'],
+  ['minimal', 'Minimal', 'Light and airy, no lines'],
+  ['bold', 'Bold', 'Full-width color header'],
+  ['compact', 'Compact', 'Dense, fits more on a page'],
+  ['elegant', 'Elegant', 'Centered header, fine rules']
+];
+const FONTS = {
+  editorial: ['Editorial', 'Playfair Display', 'Source Sans 3', "'Playfair Display',Georgia,serif", "'Source Sans 3',system-ui,sans-serif"],
+  clean: ['Clean', 'Inter', 'Inter', "Inter,system-ui,sans-serif", "Inter,system-ui,sans-serif"],
+  friendly: ['Friendly', 'Poppins', 'Nunito', "Poppins,system-ui,sans-serif", "Nunito,system-ui,sans-serif"],
+  classic: ['Classic', 'Georgia', 'Georgia', "Georgia,'Times New Roman',serif", "Georgia,'Times New Roman',serif"],
+  typewriter: ['Typewriter', 'IBM Plex Mono', 'IBM Plex Sans', "'IBM Plex Mono',ui-monospace,monospace", "'IBM Plex Sans',system-ui,sans-serif"],
+  warm: ['Warm serif', 'Fraunces', 'DM Sans', "Fraunces,Georgia,serif", "'DM Sans',system-ui,sans-serif"]
+};
+const COLORS = ['#8a3f1f', '#6b3fa0', '#1d5b86', '#2f6b4f', '#a4263f', '#2a241f', '#b06a00', '#0f766e'];
+const PAPERS = { white: ['White', '#ffffff', '#1f1b16', '#5d554b', '#e4ddd2'], warm: ['Warm paper', '#fbf6ec', '#2a241f', '#5c5248', '#e3d8c6'], dark: ['Dark', '#16131a', '#f1ecf7', '#b7aec4', '#352f3f'] };
+
+/* ---------- 3. page builder ---------- */
+const safeUrl = u => { u = String(u || '').trim(); if (!u) return ''; if (/^(https?:|mailto:|tel:)/i.test(u)) return u; if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(u)) return 'https://' + u; return ''; };
+const lines = t => String(t || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
+function hexMix(hex, withHex, pct) { const a = parseInt(hex.slice(1), 16), b = parseInt(withHex.slice(1), 16); const m = i => Math.round(((a >> i & 255) * (100 - pct) + (b >> i & 255) * pct) / 100); return '#' + [16, 8, 0].map(i => m(i).toString(16).padStart(2, '0')).join(''); }
+function onColor(hex) { const n = parseInt(hex.slice(1), 16), c = [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return (.2126 * c[0] + .7152 * c[1] + .0722 * c[2]) > .4 ? '#1a1612' : '#ffffff'; }
+
+function resumeHtml(d) {
+  const contact = [d.email && `<a href="mailto:${esc(d.email)}">${esc(d.email)}</a>`, d.phone && `<span>${esc(d.phone)}</span>`, d.location && `<span>${esc(d.location)}</span>`,
+    d.website && safeUrl(d.website) && `<a href="${esc(safeUrl(d.website))}">${esc(d.website.replace(/^https?:\/\//, ''))}</a>`].filter(Boolean);
+  const links = (d.links || []).filter(l => safeUrl(l.url)).map(l => `<li><a href="${esc(safeUrl(l.url))}">${esc(l.label || l.url)}</a></li>`).join('');
+  const skills = String(d.skills || '').split(/[,\n]+/).map(x => x.trim()).filter(Boolean);
+  const skillHtml = skills.length ? `<ul class="chips">${skills.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : '';
+  const exp = (d.experience || []).filter(e => e.role || e.company).map(e => `
+    <article class="job"><div class="job-top"><h4>${esc(e.role)}</h4><span class="dates">${esc(e.dates)}</span></div>
+    <div class="co">${esc(e.company)}</div>${lines(e.bullets).length ? `<ul class="bul">${lines(e.bullets).map(b => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}</article>`).join('');
+  const edu = (d.education || []).filter(e => e.school || e.degree).map(e => `
+    <article class="job"><div class="job-top"><h4>${esc(e.degree)}</h4><span class="dates">${esc(e.dates)}</span></div><div class="co">${esc(e.school)}</div></article>`).join('');
+  return `<section class="resume" id="resume">
+    <header class="hd"><h1>${esc(d.name || 'Your Name')}</h1>${d.headline ? `<p class="headline">${esc(d.headline)}</p>` : ''}
+      <p class="contact only-main">${contact.join('<i>·</i>')}</p></header>
+    <div class="cols">
+      <aside class="side"><div class="only-side"><h3>Contact</h3><p class="contact-stack">${contact.join('<br>')}</p></div>
+        ${skillHtml ? `<div class="only-side"><h3>Skills</h3>${skillHtml}</div>` : ''}${links ? `<div class="only-side"><h3>Links</h3><ul class="plain">${links}</ul></div>` : ''}</aside>
+      <div class="mn">
+        ${d.summary ? `<section><h3>Profile</h3><p>${esc(d.summary)}</p></section>` : ''}
+        ${exp ? `<section><h3>Experience</h3>${exp}</section>` : ''}
+        ${edu ? `<section><h3>Education</h3>${edu}</section>` : ''}
+        ${skillHtml ? `<section class="only-main"><h3>Skills</h3>${skillHtml}</section>` : ''}
+        ${links ? `<section class="only-main"><h3>Links</h3><ul class="plain inline">${links}</ul></section>` : ''}
+      </div></div></section>`;
+}
+function hireHtml(d, withForm) {
+  const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}</div>`).join('');
+  const opts = lines(d.pollOptions);
+  const poll = opts.length ? `<fieldset class="poll"><legend>${esc(d.pollQuestion || 'What do you need?')}</legend><div class="pollopts">${opts.map((o, i) => `<label class="pill"><input type="radio" name="need" value="${esc(o)}"${i === 0 ? ' required' : ''}><span>${esc(o)}</span></label>`).join('')}</div></fieldset>` : '';
+  return `<section class="hire no-print" id="hire">
+    <div class="hire-in"><h2>Work with ${esc((d.name || 'me').split(' ')[0] || 'me')}</h2>${d.availability ? `<p class="avail"><span class="dot"></span>${esc(d.availability)}</p>` : ''}
+    ${services ? `<div class="svcs">${services}</div>` : ''}
+    <form id="hireForm" novalidate><h3>${esc(d.formTitle || 'Tell me about your project')}</h3>
+      <label>Your name<input name="name" type="text" required autocomplete="name"></label>
+      <label>Your email<input name="email" type="email" required autocomplete="email"></label>
+      ${poll}
+      <label>Details<textarea name="message" rows="4" placeholder="What are you working on, and by when?"></textarea></label>
+      <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
+      <button type="submit" class="cta">${esc(d.ctaLabel || 'Send')}</button>
+      <p class="msg" role="status" aria-live="polite"></p></form></div></section>`;
+}
+function buildSite(d, st, opt) {
+  opt = opt || {};
+  const f = FONTS[st.font] || FONTS.editorial, p = PAPERS[st.paper] || PAPERS.white, a = /^#[0-9a-f]{6}$/i.test(st.color) ? st.color : '#8a3f1f';
+  const dark = st.paper === 'dark', acc = dark ? hexMix(a, '#ffffff', 35) : a, soft = hexMix(acc, p[1], dark ? 80 : 90), on = onColor(acc);
+  const fam = [...new Set([f[1], f[2]])].filter(x => x !== 'Georgia').map(x => x.replace(/ /g, '+')).map(x => `family=${x}:wght@400;600;700`).join('&');
+  const mailtoTo = JSON.stringify(d.email || '');
+  const cfg = JSON.stringify({ mode: d.formMode, endpoint: d.formEndpoint || '', email: d.email || '', thanks: d.thanks || 'Thank you.', name: d.name || '' });
+  const css = `
+:root{--paper:${p[1]};--ink:${p[2]};--muted:${p[3]};--line:${p[4]};--acc:${acc};--on:${on};--soft:${soft};--fh:${f[3]};--fb:${f[4]}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:${dark ? '#0f0d12' : '#eceae6'};color:var(--ink);font:16px/1.55 var(--fb);-webkit-font-smoothing:antialiased}
+a{color:var(--acc)}
+.topbar{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;gap:1rem}
+.topbar b{font-family:var(--fh)}.topbar a.go{background:var(--acc);color:var(--on);text-decoration:none;font-weight:700;border-radius:999px;padding:.45rem 1.1rem}
+.sheet{max-width:860px;margin:1.2rem auto;background:var(--paper);box-shadow:0 2px 22px rgba(0,0,0,.12);border-radius:6px}
+.resume{padding:2.4rem 2.6rem;font-size:15px}
+h1,h2,h3,h4{font-family:var(--fh);margin:0}h4{font-size:1.05em}
+.hd h1{font-size:2.3rem;line-height:1.1}.headline{margin:.35rem 0 0;color:var(--muted);font-size:1.08em}
+.contact{margin:.7rem 0 0;color:var(--muted);font-size:.92em}.contact i{margin:0 .5rem;font-style:normal;opacity:.6}.contact a{color:inherit}
+.cols{display:block;margin-top:1.3rem}.only-side{display:none}
+section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin:1.3rem 0 .55rem;font-family:var(--fb);font-weight:700}
+.job{margin-bottom:.95rem}.job-top{display:flex;justify-content:space-between;gap:.8rem;align-items:baseline;flex-wrap:wrap}.dates{color:var(--muted);font-size:.9em;white-space:nowrap}.co{color:var(--muted)}
+.bul{margin:.35rem 0 0;padding-left:1.1rem}.bul li{margin:.18rem 0}
+.chips,.plain{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:.4rem}.plain{display:grid;gap:.25rem}.plain.inline{display:flex;gap:.4rem 1rem}
+.chips li{background:var(--soft);color:var(--ink);border-radius:999px;padding:.15rem .7rem;font-size:.9em}
+/* layouts */
+.tpl-classic .hd{border-bottom:3px solid var(--acc);padding-bottom:.9rem}.tpl-classic section h3{border-bottom:1px solid var(--line);padding-bottom:.25rem}
+.tpl-minimal .resume{padding:3rem 3rem}.tpl-minimal section h3{text-transform:none;letter-spacing:0;font-size:1rem;color:var(--muted);font-weight:600}.tpl-minimal .hd h1{font-weight:500}
+.tpl-bold .hd{background:var(--acc);color:var(--on);margin:-2.4rem -2.6rem 0;padding:2.2rem 2.6rem}.tpl-bold .headline,.tpl-bold .contact,.tpl-bold .contact a{color:var(--on);opacity:.92}
+.tpl-compact .resume{font-size:13.5px;padding:1.8rem 2rem}.tpl-compact .hd h1{font-size:1.9rem}.tpl-compact section h3{margin-top:.9rem}.tpl-compact .job{margin-bottom:.6rem}
+.tpl-elegant .hd{text-align:center;border-top:1px solid var(--acc);border-bottom:1px solid var(--acc);padding:1.1rem 0;position:relative}.tpl-elegant .hd h1{font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:2rem}.tpl-elegant section h3{text-align:center;border-bottom:1px solid var(--line);padding-bottom:.3rem}
+.tpl-modern .resume{padding:0;display:grid}.tpl-modern .hd{background:var(--acc);color:var(--on);padding:2rem 2.4rem}.tpl-modern .hd .headline{color:var(--on);opacity:.92}.tpl-modern .only-main.contact,.tpl-modern .only-main{display:none}
+.tpl-modern .cols{display:grid;grid-template-columns:30% 1fr;margin:0}.tpl-modern .side{background:var(--soft);padding:1.4rem 1.4rem 1.4rem 2.4rem}.tpl-modern .mn{padding:.4rem 2.4rem 2rem 1.8rem}
+.tpl-modern .only-side{display:block}.tpl-modern .side h3{margin-top:1.1rem}.tpl-modern .contact-stack{margin:0;font-size:.9em;word-break:break-word}.tpl-modern .contact-stack a{color:inherit}.tpl-modern .chips{display:grid}.tpl-modern .chips li{background:var(--paper)}
+.tpl-modern .contact.only-main{display:none}
+@media (max-width:640px){.resume{padding:1.6rem 1.2rem}.tpl-bold .hd{margin:-1.6rem -1.2rem 0;padding:1.6rem 1.2rem}.tpl-modern .resume{padding:0}.tpl-modern .cols{grid-template-columns:1fr}.tpl-modern .hd,.tpl-modern .side,.tpl-modern .mn{padding-left:1.2rem;padding-right:1.2rem}}
+/* hire section */
+.hire{max-width:860px;margin:1.2rem auto 3rem;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
+.hire-in{padding:2.2rem 2.6rem}@media (max-width:640px){.hire-in{padding:1.6rem 1.2rem}}
+.hire h2{font-size:1.8rem}.avail{display:inline-flex;align-items:center;gap:.5rem;background:var(--soft);padding:.25rem .8rem;border-radius:999px;margin:.6rem 0 0;font-size:.92em}.dot{width:9px;height:9px;border-radius:50%;background:#2f9e5b}
+.svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}
+form{display:grid;gap:.9rem;margin-top:1.4rem;border-top:1px solid var(--line);padding-top:1.4rem}
+form label{display:grid;gap:.3rem;font-weight:600;font-size:.92rem}
+form input[type=text],form input[type=email],form textarea{font:inherit;font-weight:400;color:var(--ink);background:var(--paper);border:1.5px solid var(--line);border-radius:10px;padding:.65rem .8rem;width:100%}
+form input:focus,form textarea:focus{outline:3px solid color-mix(in srgb,var(--acc) 35%,transparent);border-color:var(--acc)}
+fieldset.poll{border:0;padding:0;margin:0}.poll legend{font-weight:700;margin-bottom:.5rem;padding:0}.pollopts{display:flex;flex-wrap:wrap;gap:.5rem}
+.pill{display:block;position:relative;cursor:pointer}.pill input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}.pill span{display:block;border:1.5px solid var(--line);border-radius:999px;padding:.45rem 1rem;font-weight:600;font-size:.95rem}
+.pill input:checked+span{background:var(--acc);color:var(--on);border-color:var(--acc)}.pill input:focus-visible+span{outline:3px solid var(--acc);outline-offset:2px}
+.cta{font:inherit;font-weight:700;background:var(--acc);color:var(--on);border:0;border-radius:999px;padding:.8rem 1.6rem;cursor:pointer;justify-self:start}.cta[disabled]{opacity:.6}
+.msg{margin:0;font-weight:600}.msg.err{color:#c0392b}
+::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
+@media print{body{background:#fff}.no-print,.topbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:none}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:10mm}}`;
+  const js = `
+(function(){var C=${cfg},f=document.getElementById('hireForm');if(!f)return;var m=f.querySelector('.msg');
+f.addEventListener('submit',function(e){e.preventDefault();m.className='msg';
+var v=function(n){var x=f.elements[n];return x?x.value.trim():''};var need=(f.querySelector('input[name=need]:checked')||{}).value||'';
+if(v('botcheck'))return;if(!v('name')||!/^\\S+@\\S+\\.\\S+$/.test(v('email'))||(f.querySelector('input[name=need]')&&!need)){m.className='msg err';m.textContent='Please add your name, a valid email and pick one option.';return}
+var body={name:v('name'),email:v('email'),need:need,message:v('message')};
+if(C.mode==='email'||!C.endpoint){var s='Hire inquiry from '+body.name;var t='Name: '+body.name+'\\nEmail: '+body.email+(need?'\\nNeed: '+need:'')+'\\n\\n'+body.message;location.href='mailto:'+C.email+'?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(t);m.textContent='Opening your email app. Press send there to finish.';return}
+var b=f.querySelector('button');b.disabled=true;m.textContent='Sending...';
+var url=C.mode==='web3forms'?'https://api.web3forms.com/submit':C.endpoint;var data=C.mode==='web3forms'?{access_key:C.endpoint,subject:'Hire inquiry from '+body.name,from_name:body.name,email:body.email,need:need,message:body.message}:body;
+fetch(url,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(data)}).then(function(r){if(!r.ok)throw 0;m.textContent=C.thanks;f.reset()}).catch(function(){m.className='msg err';m.textContent='Could not send. Please email '+C.email+' instead.'}).then(function(){b.disabled=false})})})();`;
+  const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
+    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d)}</main>`;
+  return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(d.name || 'Resume')}${d.headline ? ' | ' + esc(d.headline) : ''}</title><meta name="description" content="${esc(d.summary || d.headline || '')}">
+${fam ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fam}&display=swap">` : ''}
+<style>${css}</style></head><body class="tpl-${esc(st.layout)}">${body}${opt.resumeOnly || opt.noScript ? '' : `<script>${js}<\/script>`}</body></html>`;
+}
+
+/* ---------- 4. editor panels ---------- */
+const F = (label, path, o) => { o = o || {}; const v = path.split('.').reduce((x, k) => x && x[k], D);
+  return `<label class="f">${label}${o.hint ? `<small>${o.hint}</small>` : ''}${o.area ? `<textarea data-f="${path}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}">${esc(v)}</textarea>` : `<input type="${o.type || 'text'}" data-f="${path}" value="${esc(v)}" placeholder="${esc(o.ph || '')}">`}</label>`; };
+const LF = (list, i, k, label, o) => { o = o || {}; const v = D[list][i][k];
+  return `<label class="f">${label}${o.area ? `<textarea data-l="${list}" data-i="${i}" data-k="${k}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}">${esc(v)}</textarea>` : `<input type="text" data-l="${list}" data-i="${i}" data-k="${k}" value="${esc(v)}" placeholder="${esc(o.ph || '')}">`}</label>`; };
+const entry = (list, i, title, inner) => `<div class="entry"><div class="entry-head"><span>${esc(title || 'New')}</span><button type="button" class="btn btn-small btn-danger" data-rm="${list}:${i}" aria-label="Remove ${esc(title || 'entry')}">Remove</button></div>${inner}</div>`;
+let openCards = { about: true };
+function renderPanel() {
+  const keep = document.activeElement && document.activeElement.closest('#panel') ? null : null;
+  const card = (id, title, inner) => `<details class="card" data-card="${id}"${openCards[id] ? ' open' : ''}><summary>${title}</summary><div class="card-body">${inner}</div></details>`;
+  $('#panel').innerHTML =
+    card('about', '1. About you', F('Full name', 'name') + F('Headline', 'headline', { ph: 'What you do, in a few words' }) +
+      `<div class="row2">${F('Email', 'email', { type: 'email' })}${F('Phone (optional)', 'phone', { type: 'tel' })}</div><div class="row2">${F('Location', 'location')}${F('Website (optional)', 'website', { ph: 'yoursite.com' })}</div>` +
+      F('Profile', 'summary', { area: true, rows: 4, hint: ' Two or three sentences on who you help and how.' })) +
+    card('exp', '2. Experience', D.experience.map((e, i) => entry('experience', i, e.role || e.company,
+      `<div class="row2">${LF('experience', i, 'role', 'Role')}${LF('experience', i, 'company', 'Company')}</div>${LF('experience', i, 'dates', 'Dates', { ph: '2020 to now' })}${LF('experience', i, 'bullets', 'What you did', { area: true, rows: 5, ph: 'One result per line, with numbers when you have them' })}`)).join('') +
+      `<button type="button" class="btn" data-add="experience">Add a job</button>`) +
+    card('edu', '3. Education', D.education.map((e, i) => entry('education', i, e.school || e.degree,
+      `${LF('education', i, 'degree', 'Degree or course')}<div class="row2">${LF('education', i, 'school', 'School')}${LF('education', i, 'dates', 'Dates')}</div>`)).join('') + `<button type="button" class="btn" data-add="education">Add education</button>`) +
+    card('skills', '4. Skills and links', F('Skills', 'skills', { area: true, rows: 3, hint: ' Separate with commas.' }) +
+      D.links.map((l, i) => entry('links', i, l.label, `<div class="row2">${LF('links', i, 'label', 'Label')}${LF('links', i, 'url', 'Address')}</div>`)).join('') + `<button type="button" class="btn" data-add="links">Add a link</button>`) +
+    card('style', '5. Style, fonts and colors',
+      `<div><b>Layout</b><div class="choices" style="margin-top:.5rem">${LAYOUTS.map(([k, n, d]) => `<button type="button" class="choice" data-st="layout" data-v="${k}" aria-pressed="${ST.layout === k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div></div>` +
+      `<div><b>Fonts</b><div class="choices" style="margin-top:.5rem">${Object.entries(FONTS).map(([k, f]) => `<button type="button" class="choice" data-st="font" data-v="${k}" aria-pressed="${ST.font === k}"><b style="font-family:${f[3]}">${f[0]}</b><span>${f[1]}${f[1] !== f[2] ? ' + ' + f[2] : ''}</span></button>`).join('')}</div></div>` +
+      `<div><b>Color</b><div class="swatches" style="margin-top:.5rem">${COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-st="color" data-v="${c}" aria-pressed="${ST.color.toLowerCase() === c}" aria-label="Color ${c}"></button>`).join('')}<label class="f" style="display:flex;align-items:center;gap:.5rem">Custom <input type="color" data-st-input="color" value="${esc(ST.color)}"></label></div></div>` +
+      `<div><b>Paper</b><div class="choices" style="margin-top:.5rem">${Object.entries(PAPERS).map(([k, p]) => `<button type="button" class="choice" data-st="paper" data-v="${k}" aria-pressed="${ST.paper === k}"><b>${p[0]}</b><span>${k === 'dark' ? 'Light text on dark' : 'Dark text'}</span></button>`).join('')}</div></div>`) +
+    card('hire', '6. Hire-me section',
+      F('Availability note', 'availability', { ph: 'Taking new clients in January' }) +
+      D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
+      `<button type="button" class="btn" data-add="services">Add a service</button>` +
+      F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) +
+      `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message after sending', 'thanks')) +
+    card('send', '7. Where form messages go',
+      `<label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
+      (D.formMode === 'email' ? `<p class="hint">The visitor's email app opens with their message filled in, addressed to ${esc(D.email || 'your email')}. It works everywhere with nothing to sign up for. For messages that arrive without the visitor's email app, pick Formspree or Web3Forms.</p>`
+        : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.' })
+        : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.' }))) +
+    card('pub', '8. Publish and back up',
+      `<ol class="steps"><li>Press <b>Download my site</b>. You get a file named <b>index.html</b>.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>` +
+      `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>`);
+}
+
+/* ---------- 5. preview ---------- */
+let view = 'resume', prevT = 0;
+function refresh() {
+  clearTimeout(prevT);
+  prevT = setTimeout(() => {
+    const fr = $('#frame'); let y = 0; try { y = fr.contentWindow.scrollY; } catch (e) {}
+    fr.srcdoc = buildSite(D, ST, { resumeOnly: view === 'resume' });
+    fr.onload = () => { try { fr.contentWindow.scrollTo(0, y); } catch (e) {} };
+  }, 200);
+}
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3500); }
+function change() { save(); refresh(); }
+
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.f !== undefined) { const ks = t.dataset.f.split('.'); let o = D; while (ks.length > 1) o = o[ks.shift()]; o[ks[0]] = t.value; if (t.dataset.f === 'formMode') renderPanel(); change(); }
+  else if (t.dataset.l) { D[t.dataset.l][+t.dataset.i][t.dataset.k] = t.value; change(); }
+  else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); change(); }
+});
+document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
+document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) openCards[c.dataset.card] = c.open; }, true);
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
+  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '' }); renderPanel(); change(); }
+  else if (b.dataset.rm) { const [k, i] = b.dataset.rm.split(':'); const nm = (D[k][+i].role || D[k][+i].school || D[k][+i].label || D[k][+i].title || 'this entry'); if (confirm(`Remove "${nm}"?`)) { D[k].splice(+i, 1); renderPanel(); change(); } }
+  else if (b.dataset.seg) { document.body.dataset.show = b.dataset.seg; document.querySelectorAll('[data-seg]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (b.dataset.seg === 'preview') refresh(); }
+  else if (b.dataset.view) { view = b.dataset.view; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); refresh(); }
+});
+
+/* ---------- 6. export and backup ---------- */
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
+$('#exportBtn').addEventListener('click', () => {
+  if (D.formMode !== 'email' && !String(D.formEndpoint).trim()) { toast('Add your Formspree address or Web3Forms key in step 7, or switch to the email option.'); openCards.send = true; renderPanel(); return; }
+  download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
+});
+$('#pdfBtn').addEventListener('click', () => {
+  const fr = $('#frame'); const go = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Could not open print. Use your browser menu, then Print.'); } };
+  if (view !== 'resume') { view = 'resume'; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.view === 'resume'))); fr.srcdoc = buildSite(D, ST, { resumeOnly: true }); fr.onload = go; } else go();
+});
+document.addEventListener('click', e => {
+  if (e.target.id === 'backupBtn') download('folio-backup.json', JSON.stringify({ D, ST }, null, 2), 'application/json');
+  if (e.target.id === 'resetBtn' && confirm('Clear everything and start with a blank resume? Download a backup first if you want to keep this one.')) {
+    D = Object.assign(JSON.parse(JSON.stringify(SAMPLE)), { name: '', headline: '', email: '', phone: '', location: '', website: '', summary: '', experience: [{ role: '', company: '', dates: '', bullets: '' }], education: [{ school: '', degree: '', dates: '' }], skills: '', links: [], services: [], availability: '', pollOptions: '' });
+    renderPanel(); change();
+  }
+});
+function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j.D) throw 0; D = Object.assign(JSON.parse(JSON.stringify(SAMPLE)), j.D); ST = Object.assign({}, STYLE0, j.ST || {}); renderPanel(); change(); toast('Backup restored.'); }).catch(() => toast('That file is not a Folio backup.')); }
+
+/* ---------- 7. theme shared with the other tools, then start ---------- */
+(function sharedTheme() {
+  let st = {}; try { st = (JSON.parse(localStorage.getItem('jst:v1:settings')) || {}).app || {}; } catch (e) {}
+  if (st.theme === 'purple') { const P = { 'bg': '#f6f1fb', 'surface': '#fdfbff', 'surface-2': '#ece3f6', 'text': '#261d33', 'muted': '#594c6b', 'border': '#dacdea', 'accent': '#6b3fa0', 'accent-hover': '#552f82', 'accent-glow': '#8a5cc4', 'accent-text': '#6b3fa0', 'accent-soft': '#efe6fa', 'accent-line': '#d3bff0', 'tint': '#faf6fe', 'input-border': '#8a7aa0' }; for (const k in P) document.documentElement.style.setProperty('--' + k, P[k]); }
+})();
+$('#ver').textContent = 'Folio ' + APP_VERSION;
+$('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => `<div class="nv" role="cell">${esc(v)}</div><div role="cell">${esc(t)}</div>`).join(''));
+$('#notesBtn').addEventListener('click', () => $('#notesDialog').showModal());
+$('#notesClose').addEventListener('click', () => $('#notesDialog').close());
+$('#notesDialog').addEventListener('click', e => { if (e.target === $('#notesDialog')) $('#notesDialog').close(); });
+renderPanel(); refresh();
+</script>
+</body>
+</html>

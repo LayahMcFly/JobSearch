@@ -14,6 +14,7 @@
   'example' shows a dimmed sample card so you can see how a future tool will look.
 
   Hub versions (the hub has its own notes, separate from Job Search):
+  v1.1.0 adds the Folio card (resume builder and hire-me site) as a live tool.
   v1.0.0 first hub: Job Search Tracker card with its live version, example cards for future tools,
          shares the Job Search color theme and dark mode, release notes card in the footer.
 -->
@@ -110,8 +111,9 @@ dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
 
 <script>
 'use strict';
-const HUB_VERSION = 'v1.0.0';
+const HUB_VERSION = 'v1.1.0';
 const RELEASES = [
+  ['v1.1.0', 'Folio added as the second live tool: resume builder and hire-me site maker. The Resume and Cover Letters example card is replaced by it.'],
   ['v1.0.0', 'First hub: a Job Search Tracker card that shows its current version, example cards for future tools, the same color theme and dark mode as Job Search, and this release notes card. Job Search keeps its own release notes inside its app.']
 ];
 
@@ -126,9 +128,9 @@ const TOOLS = [
   { name: 'Job Search Tracker', status: 'live', icon: 'search', link: '../',
     blurb: 'Find openings from many job boards, track every application, and keep dismissed jobs out of sight.',
     tags: ['Live search', 'Tracker', 'Saved feed'], versionFrom: '../index.html' },
-  { name: 'Resume and Cover Letters', status: 'example', icon: 'file',
-    blurb: 'Tailor your resume to a saved opening and draft a cover letter in your own voice.',
-    tags: ['Resume', 'Cover letter'] },
+  { name: 'Folio', status: 'live', icon: 'file', link: '../folio/',
+    blurb: 'Build a resume, pick its layout, fonts and colors, then publish a one-page site with a hire-me form.',
+    tags: ['Resume', 'Styles', 'Hire-me site'], versionFrom: '../folio/index.html' },
   { name: 'Interview Prep', status: 'example', icon: 'chat',
     blurb: 'Practice questions for each job you applied to, with answer drafts you can edit.',
     tags: ['Practice', 'Answers'] },
