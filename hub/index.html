@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f2ea">
+<title>Job Spot Hub</title>
+<meta name="description" content="One home for the job search tools: Job Search Tracker today, more tools to come.">
+<!--
+  Job Spot Hub: the front door for every tool. One self-contained page, no build step.
+  It lives at /hub/ in the JobSearch repo. The Job Search Tracker keeps its own link and its own release notes.
+
+  To add a tool: add one object to TOOLS (name, blurb, link, status, tags). Status 'live' makes the card a link;
+  'example' shows a dimmed sample card so you can see how a future tool will look.
+
+  Hub versions (the hub has its own notes, separate from Job Search):
+  v1.0.0 first hub: Job Search Tracker card with its live version, example cards for future tools,
+         shares the Job Search color theme and dark mode, release notes card in the footer.
+-->
+<style>
+:root{
+  --bg:#f7f2ea;--surface:#fffdf9;--surface-2:#f0e8db;--text:#2a241f;--muted:#5c5248;--border:#d8ccbb;
+  --accent:#8a3f1f;--accent-hover:#6f3116;--accent-glow:#a5532c;--accent-text:#8a3f1f;--accent-soft:#f4e3d7;--accent-line:#e0c3ae;--tint:#fbf7f1;
+  --radius:16px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font:1.05rem/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh;display:flex;flex-direction:column}
+::selection{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
+::-moz-selection{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
+:focus-visible{outline:3px solid var(--accent-text);outline-offset:3px}
+button,a.card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button:focus:not(:focus-visible){outline:none}
+header,main,footer{width:min(1040px,100% - 2rem);margin-inline:auto}
+header{padding:2.2rem 0 .6rem}
+h1,h2{font-family:Georgia,"Times New Roman",serif;margin:0;line-height:1.15}
+h1{font-size:clamp(2rem,6vw,2.9rem)}
+.lede{margin:.6rem 0 0;color:var(--muted);max-width:42rem}
+main{flex:1;padding:1.4rem 0 1rem}
+.section-label{margin:1.6rem 0 .7rem;font-size:.85rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr))}
+.card{position:relative;display:flex;flex-direction:column;gap:.7rem;padding:1.2rem 1.2rem 1.1rem;border:1.5px solid var(--border);border-radius:var(--radius);
+  background:linear-gradient(180deg,var(--surface) 0%,var(--tint) 100%);color:inherit;text-decoration:none;
+  box-shadow:0 1px 2px rgba(60,40,20,.06),0 4px 14px color-mix(in srgb,var(--accent) 8%,transparent)}
+a.card{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+@media (hover:hover){a.card:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 22%,transparent)}}
+a.card:active{transform:translateY(0)}
+.card.example{border-style:dashed;background:transparent;box-shadow:none;opacity:.78}
+.icon{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent-glow),var(--accent) 60%,var(--accent-hover));color:#fff;box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 30%,transparent)}
+.example .icon{background:var(--accent-soft);color:var(--accent-text);box-shadow:none;border:1.5px dashed var(--accent-line)}
+.icon svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.card h2{font-size:1.35rem}
+.card p{margin:0;color:var(--muted);font-size:.98rem}
+.tags{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:auto;padding-top:.3rem}
+.tag{font-size:.78rem;padding:.15rem .6rem;border-radius:999px;border:1px solid var(--accent-line);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+.status{position:absolute;top:1rem;right:1rem;font-size:.76rem;font-weight:700;padding:.2rem .65rem;border-radius:999px;border:1.5px solid var(--accent-line);color:var(--accent-text);background:var(--surface)}
+.status.live{background:linear-gradient(135deg,var(--accent-glow),var(--accent));border-color:var(--accent-hover);color:#fff}
+.go{display:inline-flex;align-items:center;gap:.4rem;font-weight:700;color:var(--accent-text)}
+.go svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+@media (hover:hover){a.card:hover .go svg{transform:translateX(4px)}}
+footer{padding:1.5rem 0 2rem;text-align:center;color:var(--muted);font-size:.88rem}
+.notes-btn{margin-left:.6rem;min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent-text);font:inherit;font-weight:600;cursor:pointer}
+.notes-btn:hover{border-color:var(--accent)}
+dialog.notes-card{margin:auto;padding:0;border:1px solid var(--border);border-radius:16px;width:min(560px,94vw);max-height:min(80dvh,560px);background:var(--surface);color:var(--text);box-shadow:0 18px 50px rgba(40,25,10,.3);overflow:hidden}
+dialog.notes-card[open]{display:flex;flex-direction:column}
+dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.8rem 1rem;background:var(--bg);border-bottom:1px solid var(--border)}
+.panel-head h2{font-size:1.3rem}
+.icon-btn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--text);font-size:1.5rem;line-height:1;cursor:pointer}
+.notes-scroll{overflow:auto;padding:.25rem 1rem 1rem;--fade-t:0rem;--fade-b:0rem;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-t),#000 calc(100% - var(--fade-b)),transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 var(--fade-t),#000 calc(100% - var(--fade-b)),transparent 100%)}
+.notes-scroll.fade-t{--fade-t:1.8rem}.notes-scroll.fade-b{--fade-b:1.8rem}
+.notes-grid{display:grid;grid-template-columns:max-content 1fr;font-size:.95rem}
+.notes-grid>*{padding:.65rem .5rem;border-bottom:1px solid var(--border)}
+.notes-grid .nh{font-weight:700;border-bottom:2px solid var(--border)}
+.notes-grid .nv{font-weight:700;white-space:nowrap}
+.notes-grid .is-current{background:var(--tint)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Job Spot</h1>
+  <p class="lede">Every job tool in one place. Pick one to open it.</p>
+</header>
+
+<main>
+  <h2 class="section-label" id="liveLabel">Ready to use</h2>
+  <div class="grid" id="liveGrid" aria-labelledby="liveLabel"></div>
+  <h2 class="section-label" id="soonLabel">Coming next (examples)</h2>
+  <div class="grid" id="soonGrid" aria-labelledby="soonLabel"></div>
+</main>
+
+<footer>
+  <span id="hubVersion"></span><button type="button" class="notes-btn" id="notesBtn" aria-haspopup="dialog">Hub release notes</button>
+</footer>
+
+<dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
+  <div class="panel-head">
+    <h2 id="notesTitle">Hub release notes</h2>
+    <button type="button" class="icon-btn" id="notesClose" aria-label="Close hub release notes">&times;</button>
+  </div>
+  <div class="notes-scroll">
+    <div class="notes-grid" id="notesBody" role="table" aria-label="Hub release notes by version">
+      <div class="nh" role="columnheader">Version</div><div class="nh" role="columnheader">What is in it</div>
+    </div>
+  </div>
+</dialog>
+
+<script>
+'use strict';
+const HUB_VERSION = 'v1.0.0';
+const RELEASES = [
+  ['v1.0.0', 'First hub: a Job Search Tracker card that shows its current version, example cards for future tools, the same color theme and dark mode as Job Search, and this release notes card. Job Search keeps its own release notes inside its app.']
+];
+
+// One object per tool. status 'live' links to the tool, 'example' is a dimmed sample.
+const ICONS = {
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9 10h6M9 14h4"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
+};
+const TOOLS = [
+  { name: 'Job Search Tracker', status: 'live', icon: 'search', link: '../',
+    blurb: 'Find openings from many job boards, track every application, and keep dismissed jobs out of sight.',
+    tags: ['Live search', 'Tracker', 'Saved feed'], versionFrom: '../index.html' },
+  { name: 'Resume and Cover Letters', status: 'example', icon: 'file',
+    blurb: 'Tailor your resume to a saved opening and draft a cover letter in your own voice.',
+    tags: ['Resume', 'Cover letter'] },
+  { name: 'Interview Prep', status: 'example', icon: 'chat',
+    blurb: 'Practice questions for each job you applied to, with answer drafts you can edit.',
+    tags: ['Practice', 'Answers'] },
+  { name: 'Freelance Pitches', status: 'example', icon: 'mail',
+    blurb: 'Keep client leads and outreach emails in one list, apart from job applications.',
+    tags: ['Clients', 'Outreach'] }
+];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const svg = p => `<svg viewBox="0 0 24 24" aria-hidden="true">${p}</svg>`;
+
+function cardHtml(t) {
+  const live = t.status === 'live';
+  const inner = `
+    <span class="icon">${svg(ICONS[t.icon] || ICONS.search)}</span>
+    <span class="status${live ? ' live' : ''}">${live ? 'Live' : 'Example'}</span>
+    <h2>${esc(t.name)}</h2>
+    <p>${esc(t.blurb)}</p>
+    <div class="tags">${t.tags.map(x => `<span class="tag">${esc(x)}</span>`).join('')}</div>
+    ${live ? `<span class="go">Open <span data-ver></span>${svg('<path d="M5 12h14M13 6l6 6-6 6"/>')}</span>` : ''}`;
+  return live
+    ? `<a class="card" href="${esc(t.link)}" aria-label="Open ${esc(t.name)}">${inner}</a>`
+    : `<div class="card example" aria-label="${esc(t.name)}, example of a future tool">${inner}</div>`;
+}
+$('#liveGrid').innerHTML = TOOLS.filter(t => t.status === 'live').map(cardHtml).join('');
+$('#soonGrid').innerHTML = TOOLS.filter(t => t.status !== 'live').map(cardHtml).join('');
+
+// Show each live tool's current version by reading APP_VERSION from its page
+TOOLS.filter(t => t.status === 'live' && t.versionFrom).forEach((t, i) => {
+  fetch(t.versionFrom, { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(txt => {
+    const m = /const APP_VERSION = '(v[\d.]+)'/.exec(txt);
+    const el = document.querySelectorAll('#liveGrid [data-ver]')[i];
+    if (m && el) el.textContent = '(' + m[1] + ')';
+  }).catch(() => {});
+});
+
+// Shares the color theme and dark mode chosen in Job Search settings (same browser)
+const PURPLE = { 'bg':'#f6f1fb','surface':'#fdfbff','surface-2':'#ece3f6','text':'#261d33','muted':'#594c6b','border':'#dacdea','accent':'#6b3fa0','accent-hover':'#552f82','accent-glow':'#8a5cc4','accent-text':'#6b3fa0','accent-soft':'#efe6fa','accent-line':'#d3bff0','tint':'#faf6fe' };
+function hexToHsl(hex){const n=parseInt(hex.slice(1),16),r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255,max=Math.max(r,g,b),min=Math.min(r,g,b),l=(max+min)/2;let h=0,s=0;if(max!==min){const d=max-min;s=l>.5?d/(2-max-min):d/(max+min);h=max===r?(g-b)/d+(g<b?6:0):max===g?(b-r)/d+2:(r-g)/d+4;h*=60}return{h,s:s*100,l:l*100}}
+function hslToHex(h,s,l){s=Math.max(0,Math.min(100,s))/100;l=Math.max(0,Math.min(100,l))/100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1));return'#'+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('')}
+function lum(hex){const n=parseInt(hex.slice(1),16);return[n>>16&255,n>>8&255,n&255].map(v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)}).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0)}
+function fromColor(hex){const{h,s}=hexToHsl(hex);let{l}=hexToHsl(hex);const k=Math.min(1,s/45),sat=Math.min(s,70);l=Math.min(l,45);let a=hslToHex(h,sat,l);while(1.05/(lum(a)+.05)<4.6&&l>12){l-=1;a=hslToHex(h,sat,l)}
+  return{'bg':hslToHex(h,45*k,96),'surface':hslToHex(h,60*k,99.2),'surface-2':hslToHex(h,38*k,91.5),'text':hslToHex(h,28*k,13),'muted':hslToHex(h,14*k,35),'border':hslToHex(h,32*k,84),'accent':a,'accent-hover':hslToHex(h,sat,Math.max(8,l-8)),'accent-glow':hslToHex(h,sat,l+10),'accent-text':a,'accent-soft':hslToHex(h,62*k,94),'accent-line':hslToHex(h,50*k,81),'tint':hslToHex(h,50*k,97.8)}}
+function darkFrom(accent){const{h,s,l}=hexToHsl(accent),k=Math.min(1,s/45);
+  return{'bg':hslToHex(h,24*k,9),'surface':hslToHex(h,20*k,13),'surface-2':hslToHex(h,20*k,18),'text':hslToHex(h,25*k,93),'muted':hslToHex(h,14*k,72),'border':hslToHex(h,18*k,28),'accent':accent,'accent-hover':hslToHex(h,s,Math.max(8,l-7)),'accent-glow':hslToHex(h,s,l+10),'accent-text':hslToHex(h,Math.min(s,80),78),'accent-soft':hslToHex(h,34*k,20),'accent-line':hslToHex(h,32*k,38),'tint':hslToHex(h,20*k,15.5)}}
+(function applySharedTheme(){
+  let st = {};
+  try { st = (JSON.parse(localStorage.getItem('jst:v1:settings')) || {}).app || {}; } catch (e) {}
+  let tokens = st.theme === 'purple' ? PURPLE : st.theme === 'custom' && /^#[0-9a-f]{6}$/i.test(st.themeColor || '') ? fromColor(st.themeColor) : null;
+  const dark = st.mode === 'dark' || (st.mode === 'device' && matchMedia('(prefers-color-scheme: dark)').matches);
+  if (dark) tokens = darkFrom(tokens ? tokens.accent : '#8a3f1f');
+  if (tokens) for (const k in tokens) document.documentElement.style.setProperty('--' + k, tokens[k]);
+  const accent = (tokens || { accent: '#8a3f1f' }).accent;
+  const bg = (tokens || { bg: '#f7f2ea' }).bg;
+  $('meta[name="theme-color"]').setAttribute('content', bg);
+  const icon = document.createElement('link'); icon.rel = 'icon';
+  icon.href = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${accent}"/><path d="M9 17l5 5 9-11" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
+  document.head.appendChild(icon);
+})();
+
+// Footer + release notes card
+$('#hubVersion').textContent = 'Job Spot Hub ' + HUB_VERSION;
+$('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => { const c = v === HUB_VERSION ? ' is-current' : ''; return `<div class="nv${c}" role="cell">${esc(v)}</div><div class="${c.trim()}" role="cell">${esc(t)}</div>`; }).join(''));
+const dlg = $('#notesDialog'), box = dlg.querySelector('.notes-scroll');
+const fade = () => { const max = box.scrollHeight - box.clientHeight; box.classList.toggle('fade-t', box.scrollTop > 2); box.classList.toggle('fade-b', box.scrollTop < max - 2); };
+box.addEventListener('scroll', fade, { passive: true });
+$('#notesBtn').addEventListener('click', () => { dlg.showModal(); box.scrollTop = 0; fade(); });
+$('#notesClose').addEventListener('click', () => dlg.close());
+dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+</script>
+</body>
+</html>
