@@ -1,0 +1,317 @@
+{
+ "at": "2026-11-22T21:32:28.718Z",
+ "passed": 62,
+ "failed": 0,
+ "results": [
+  {
+   "name": "test setup: PUBLISH config patched in the test copy only",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "config in folio/index.html holds only a public site key (no secret-looking values)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "unconfigured: card says publishing is not connected, no Publish button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "unconfigured: viewer link shows \"not available\"",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "privacy: Turnstile is not contacted until the Publish card is opened",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "privacy: opening the Publish card loads the human check",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish: link has the form /folio/?id=<12 chars>",
+   "ok": true,
+   "note": "http://x.test/folio/?id=tKgbpRJkKbrK"
+  },
+  {
+   "name": "publish: Turnstile rendered with the public site key and action folio-publish",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish: request carried the Turnstile token and no Authorization header",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish: Turnstile SECRET is nowhere in the browser page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish: Publish button stays disabled until the consent box and the human check are both done",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish: edit key kept on this device only",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "copy link: clipboard text equals the link",
+   "ok": true,
+   "note": "SKIP clipboard-read unavailable"
+  },
+  {
+   "name": "copy link: says \"Link copied\" or explains failure",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: visitor in a fresh browser sees the published page, not the editor",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: visitor sent no Authorization header and no key",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: frame is sandboxed WITHOUT allow-same-origin",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: viewer page is noindex with a restrictive CSP",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: no editor controls and no way to edit",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: visitor has none of the owner's storage",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: no page errors",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "public API response has no edit key and no hash",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "ordinary backup has no page ID, no edit key, no publishing fields",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "card warns that backups do not include publishing access",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "recovery file: named folio-publishing-recovery.json with page ID + edit key + service + warning",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "recovery file: card carries a clear security warning",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "recovery file: contains no resume text",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore (device B): key checked with the service, in a header, not the URL",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore (device B): shows the same link and does not hold resume text yet",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore (device B): can load the published version into the editor",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "update (device B): PUT with Authorization header only, no key in URL or body",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "update: visitor reload shows the new headline immediately in this test (real timing unmeasured)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "update: no cache headers allow stale copies",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore rejects not json without contacting the service or saving anything",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore rejects wrong shape without contacting the service or saving anything",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore rejects malformed key without contacting the service or saving anything",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore rejects other service without contacting the service or saving anything",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore rejects huge without contacting the service or saving anything",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore with the WRONG key: service says no, nothing saved",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "restore: real key against someone else's / missing page ID fails the same way",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "edit attempts: missing key 401, wrong key 403, other page 403 (PUT and DELETE)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "edit attempts: page unchanged after all of those",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "oversized (>100 KB) → 413, malformed JSON → 400, wrong shape → 422, extra fields → 422",
+   "ok": true,
+   "note": "413,400,422,422"
+  },
+  {
+   "name": "rejected uploads created no pages",
+   "ok": true,
+   "note": "pages=1"
+  },
+  {
+   "name": "Folio's own cleaned output always passes the Worker's validation (drift check on messy data)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish, network down: honest message, no link shown, nothing stored, Turnstile reset",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish, Turnstile rejects token: says so, no page created",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish, D1 write quota: says a free daily limit was reached, how long to wait, no page created",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "update, non-JSON Cloudflare error (1027-style): \"cannot tell\", published snapshot not marked as updated",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "update failure message does not promise viewing or unpublishing still works",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "unpublish, service unreachable: says it cannot tell, page still managed, key kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "unpublish, D1 write quota: \"Your page is still published\", key kept",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "viewer, storage read failure: honest \"cannot be shown right now\", not \"page removed\"",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "viewer, invalid ID: no request is made",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "viewer, unknown ID: \"not available\"",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "unpublish: service confirmed, Folio forgot the key, link now 404",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "unpublish: visitor with the old link sees \"not available\"",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "after unpublish the old recovery file no longer works",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "rate limit: UI says too many attempts and when to retry; no second page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "hostile published data: no script ran in the viewer, parent storage untouched",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "phone width: buttons in the publishing card are at least 44px tall",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "phone width: no sideways scrolling",
+   "ok": true,
+   "note": ""
+  }
+ ]
+}

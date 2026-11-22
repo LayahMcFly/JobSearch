@@ -120,7 +120,18 @@ dialog.confirm-card{margin:auto;width:min(440px,92vw);padding:1.3rem;border:1px 
 dialog.confirm-card::backdrop{background:rgba(42,36,31,.5)}
 dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card p{margin:0 0 1.1rem;color:var(--muted)}
 .cf-actions{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
+
+/* published-page viewer (?id=...) */
+html.viewer body>*:not(#viewer):not(script){display:none!important}
+#viewer{position:fixed;inset:0;background:#fff}#viewFrame{display:block;width:100%;height:100%;border:0;background:#fff}#viewFrame[hidden],#viewMsg[hidden]{display:none}
+.view-msg{max-width:34rem;margin:22vh auto 0;padding:1.5rem;text-align:center;font:1.05rem/1.6 var(--font-body,system-ui,sans-serif);color:#2a241f}
+/* publishing card */
+.pubmsg{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-weight:600}.pubmsg.err{color:var(--danger);border-color:var(--danger)}.pubmsg.ok{color:#1b5e2e;border-color:#1b5e2e}
+.keybox{margin:1rem 0;padding:.9rem;border:1px dashed var(--border);border-radius:12px;background:var(--surface-2)}.keybox p{margin:.4rem 0 .7rem}
+.check{display:flex;gap:.8rem;align-items:flex-start;min-height:44px;padding:.5rem 0;cursor:pointer}.check input{flex:none;appearance:none;-webkit-appearance:none;display:grid;place-content:center;width:44px;height:44px;margin:0;border:1.5px solid var(--input-border);border-radius:12px;background:var(--surface);cursor:pointer}.check input::before{content:'';width:1.2rem;height:1.2rem;border-radius:5px;background:var(--accent);transform:scale(0);transition:transform .12s}.check input:checked::before{transform:scale(1)}.check input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}.check span{align-self:center}
+input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 0}
 </style>
+<script>if (new URLSearchParams(location.search).has('id')) document.documentElement.classList.add('viewer');</script>
 </head>
 <body data-show="edit">
 <div class="bar">
@@ -151,6 +162,8 @@ dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card 
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<div id="viewer" hidden><p id="viewMsg" class="view-msg" role="status"></p><iframe id="viewFrame" title="Published page" hidden sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></div>
+
 <dialog id="confirmDialog" class="confirm-card" role="alertdialog" aria-labelledby="cfTitle" aria-describedby="cfMsg">
   <h2 id="cfTitle"></h2>
   <p id="cfMsg"></p>
@@ -165,8 +178,9 @@ dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.1.0';
 const RELEASES = [
+  ['v1.1.0', 'Publish online: Publish, Copy link, View page, Update and Unpublish with a generated page ID. Viewing needs no account. A separate private edit key, kept out of links and backups, controls updates. Publishing recovery file for other devices.'],
   ['v1.0.1', 'Safer and clearer: the Whole site preview is now a demonstration that cannot send anything; form results are read from each service\'s reply and never claim an email was sent; all text is escaped for where it lands (fixes a thank-you message that could break the page); email mode needs a valid recipient and shows a Copy address option; readable colors on every paper; themed confirmation boxes; larger touch targets; a Folio favicon.'],
   ['v1.0.0', 'First release: resume editor, 6 layouts, 6 font pairs, colors and paper tone, live preview, Save as PDF, one-page site download with services, a poll question and a hire-me form (Formspree, Web3Forms or email), backup and restore.']
 ];
@@ -175,6 +189,11 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 
 /* ---------- 1. data and sample ---------- */
 const KEY = 'folio:v1';
+/* Publishing connection. Both values are public. Fill them in after the publishing service exists (folio/worker/SETUP.md).
+   api = the service's address with no trailing slash. siteKey = the Turnstile widget's SITE key. The Turnstile SECRET key
+   must never be put in this file: it belongs only in the Worker's secret settings. */
+const PUBLISH = { api: 'https://folio-pages.princesslayah404.workers.dev', siteKey: '0x4AAAAAAGNs6F3KjNe5u_CH' };
+const VIEWER = new URLSearchParams(location.search).has('id');
 const SAMPLE = {
   name: 'Jordan Rivera', headline: 'Freelance content writer and strategist', email: 'hello@example.com', phone: '', location: 'Valdosta, GA', website: '',
   summary: 'I write clear, well-researched articles and brand copy for companies that want readers to act. Every piece starts with the reader\'s question and ends with a next step.',
@@ -459,7 +478,7 @@ fieldset.poll{border:0;padding:0;margin:0}.poll legend{font-weight:700;margin-bo
 .job,.bul li{break-inside:avoid}section h3,.side h3,.hd{break-after:avoid}@page{margin:10mm}}`;
   const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
     `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
-  const csp = opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'">` : '';
+  const csp = opt.viewer ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://formspree.io https://api.web3forms.com; form-action 'none'; base-uri 'none'"><meta name="robots" content="noindex,nofollow">` : opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'">` : '';
   // The closing tags are written as <\/script> so this page's own HTML parser never sees a real closing tag inside this code.
   const script = opt.resumeOnly ? '' : `<script type="application/json" id="cfg">${cfg}<\/script><script>(${siteScript.toString()})();<\/script>`;
   return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -490,7 +509,7 @@ function normStyle(x) {
   return { layout: LAYOUTS.some(l => l[0] === x.layout) ? x.layout : STYLE0.layout, font: own(FONTS, x.font) ? x.font : STYLE0.font,
     color: hexOk(x.color) ? x.color.toLowerCase() : STYLE0.color, paper: own(PAPERS, x.paper) ? x.paper : STYLE0.paper };
 }
-try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && typeof saved === 'object' && saved.D) { D = normData(saved.D); ST = normStyle(saved.ST); } } catch (e) {}
+if (!VIEWER) try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && typeof saved === 'object' && saved.D) { D = normData(saved.D); ST = normStyle(saved.ST); } } catch (e) {}
 
 /* ---------- 4. editor panels ---------- */
 const F = (label, path, o) => { o = o || {}; const v = path.split('.').reduce((x, k) => x && x[k], D);
@@ -531,9 +550,12 @@ function renderPanel() {
       (D.formMode === 'email' ? `<p class="hint"><b>What happens:</b> when a visitor presses the button, their own email app opens with a draft addressed to ${esc(D.email || 'your email address')}. <b>The visitor has to press Send themselves.</b> Opening a draft is not sending an email, and neither this page nor Folio can tell whether it was sent, so the page never says "sent". Your address is also shown on the page with a Copy button, and the draft appears in a box to copy, for visitors without an email app. You get a message only if the visitor sends it.</p>`
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
-    card('pub', '8. Publish and back up',
+    card('online', '8. Publish online', onlineBody()) +
+    card('pub', '9. Download your site and back up',
       `<ol class="steps"><li>Press <b>Download my site</b>. You get a file named <b>index.html</b>.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>` +
-      `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>`);
+      `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>` +
+      `<p class="hint">Backups hold your resume and style only. They never include publishing access (see step 8).</p>`);
+  if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); }
 }
 
 /* ---------- 5. preview ---------- */
@@ -547,7 +569,7 @@ function refresh() {
   }, 200);
 }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3500); }
-function change() { save(); refresh(); }
+function change() { save(); refresh(); if (typeof updatePubStatus === 'function') updatePubStatus(); }
 
 document.addEventListener('input', e => {
   const t = e.target;
@@ -556,7 +578,7 @@ document.addEventListener('input', e => {
   else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
-document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) openCards[c.dataset.card] = c.open; }, true);
+document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); } }, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
@@ -637,6 +659,163 @@ function confirmDialog(o) {
 $('#cfCancel').addEventListener('click', () => $('#confirmDialog').close('cancel'));
 $('#cfOk').addEventListener('click', () => $('#confirmDialog').close('ok'));
 
+/* ---------- 6c. publishing: Publish, Copy link, View page, Update, Unpublish ---------- */
+// The page's public ID is in the share link and only lets people VIEW. A separate private edit key is returned once,
+// when the page is first published. It is kept only in this browser (key 'folio:v1:pub') and in the recovery file the
+// owner saves. It is never in a URL, never in the ordinary backup, never in the published data, and it is sent only in an
+// Authorization header. The Turnstile secret never appears in this file: only the public site key does.
+const PUBKEY = 'folio:v1:pub', ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/, KEY_RE = /^[A-Za-z0-9_-]{43}$/;
+let PUB = null, pubMsg = null, pubBusy = false, pubConsent = false, tsToken = '', tsWidget = null, tsLoading = null;
+try { const p = JSON.parse(localStorage.getItem(PUBKEY) || 'null'); if (p && ID_RE.test(p.id) && KEY_RE.test(p.key) && p.api === PUBLISH.api) PUB = { id: p.id, key: p.key, api: p.api, at: Number(p.at) || 0, snap: String(p.snap || ''), saved: !!p.saved }; } catch (e) {}
+const savePub = () => { try { if (PUB) localStorage.setItem(PUBKEY, JSON.stringify(PUB)); else localStorage.removeItem(PUBKEY); } catch (e) {} };
+const snapNow = () => JSON.stringify({ D: normData(D), ST: normStyle(ST) });
+const pubLink = id => { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('id', id); return u.toString(); };
+const waitText = s => s >= 7200 ? 'about ' + Math.round(s / 3600) + ' hours' : s >= 120 ? 'about ' + Math.round(s / 60) + ' minutes' : 'a minute';
+
+async function pubApi(method, path, o) {
+  o = o || {}; const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const headers = {}; if (o.body !== undefined) headers['Content-Type'] = 'application/json'; if (o.key) headers.Authorization = 'Bearer ' + o.key;
+    const r = await fetch(PUBLISH.api + path, { method, headers, body: o.body === undefined ? undefined : JSON.stringify(o.body), signal: ctl.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+    const text = await r.text(); let j = null; try { j = JSON.parse(text); } catch (e) { j = null; }
+    return { status: r.status, json: j && typeof j === 'object' && !Array.isArray(j) ? j : null };
+  } catch (e) { return { status: 0, json: null }; } finally { clearTimeout(timer); }
+}
+/* One honest sentence per failure. Nothing here claims success, and each says what state things are in. */
+function failText(res, what) {
+  const j = res.json || {}, e = j.error, wait = j.retryAfterSeconds ? ' Try again in ' + waitText(j.retryAfterSeconds) + '.' : '';
+  const state = { publish: 'No page was created.', update: 'Your published page was not changed.', unpublish: 'Your page is still published.', check: '', load: '' }[what];
+  if (res.status === 0 || !e) return 'No clear answer came back from the publishing service. It may be offline, or Cloudflare may be limiting it because a free daily limit was reached. Folio cannot tell whether ' + ({ publish: 'a page was created', update: 'the change was saved', unpublish: 'the page was removed', check: 'the key is right', load: 'the page exists' }[what]) + '. Open your link to check, then try again later.';
+  switch (e) {
+    case 'rate_limited': return 'Too many attempts from this connection.' + wait + ' ' + state;
+    case 'busy': return 'Publishing is at its daily limit for everyone today.' + wait + ' ' + state;
+    case 'verification_failed': case 'verification_required': return 'The human check did not pass or has expired. Complete it again and retry. ' + state;
+    case 'verification_unavailable': return 'The human check service could not be reached, so nothing was published. Try again later. ' + state;
+    case 'publishing_paused': return 'Publishing is paused right now. ' + state;
+    case 'daily_limit': return 'The publishing service reached a free daily limit on Cloudflare (' + (j.which === 'read' ? 'reads' : 'writes') + ').' + wait + ' ' + state;
+    case 'storage_unavailable': return 'The publishing storage is unavailable right now. ' + state;
+    case 'too_large': return 'Your page is too large to publish (limit 100 KB). ' + state;
+    case 'invalid_data': return 'The service rejected the page contents' + (j.detail ? ' (' + String(j.detail).slice(0, 120) + ')' : '') + '. ' + state;
+    case 'edit_key_required': case 'forbidden': return 'The edit key does not match this page, or the page no longer exists. ' + state;
+    case 'origin_not_allowed': return 'The publishing service does not accept requests from this website address. ' + state;
+    default: return 'The publishing service returned an error (' + res.status + '). ' + state;
+  }
+}
+function setPubMsg(kind, text) { pubMsg = text ? { kind, text } : null; const el = $('#pubLive'); if (el) el.innerHTML = pubMsgHtml(); }
+const pubMsgHtml = () => pubMsg ? `<p class="pubmsg ${pubMsg.kind}" role="${pubMsg.kind === 'err' ? 'alert' : 'status'}">${esc(pubMsg.text)}</p>` : '';
+function updatePubStatus() { const el = $('#pubDirty'); if (el && PUB) el.textContent = PUB.snap === snapNow() ? 'The published page matches what is in Folio.' : 'You have changes that are not published yet. Press Update published page.'; }
+function setPubBusy(b) { pubBusy = b; document.querySelectorAll('[data-pub]').forEach(x => { x.disabled = b || (x.dataset.pub === 'publish' && !(tsToken && pubConsent)); }); }
+function refreshPubButtons() { const b = document.querySelector('[data-pub=publish]'); if (b) b.disabled = pubBusy || !(tsToken && pubConsent); }
+
+function onlineBody() {
+  if (!PUBLISH.api) return `<p class="hint"><b>Publishing is not connected yet.</b> It needs a small service that the owner of this Folio site sets up once. Until then, use Download my site in the next step.</p>`;
+  const live = `<div id="pubLive" aria-live="polite">${pubMsgHtml()}</div>`;
+  if (PUB) {
+    const link = pubLink(PUB.id);
+    return `<p class="hint">Your page is live. Anyone with the link can view it. They cannot change it, and the link does not contain your edit key.</p>` +
+      `<label class="f">Share link<input type="text" readonly id="pubLink" value="${esc(link)}"></label>` +
+      `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="copy">Copy link</button><a class="btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">View page</a></div>` +
+      `<p class="hint" id="pubDirty"></p>` +
+      `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="update">Update published page</button><button type="button" class="btn btn-danger" data-pub="unpublish">Unpublish</button></div>` + live +
+      `<div class="keybox"><b>Publishing recovery file</b><p class="hint">This file holds your private edit key. Anyone who has it can change or remove your page, so store it like a password. Do not share it, email it, or upload it to a public place such as GitHub. Without it, you cannot update or unpublish this page after you clear this browser or switch devices. Your normal backup does not include it.${PUB.saved ? '' : ' <b>You have not saved it yet.</b>'}</p><div class="btnrow"><button type="button" class="btn" data-pub="saveKey">Save recovery file</button></div></div>` +
+      `<div class="btnrow"><button type="button" class="btn" data-pub="loadCopy">Load the published version into Folio</button><button type="button" class="btn" data-pub="forget">Stop managing this page here</button></div>` +
+      `<p class="hint">After an update or unpublish, Folio shows what the service confirmed. Folio does not cache pages. If a page you just changed still looks old, wait a little and reload it. Copies that other people saved, and anything search engines or web archives stored, cannot be removed by Folio.</p>`;
+  }
+  return `<p class="hint"><b>What happens:</b> Folio saves a copy of your resume page online and gives you a link like <b>…/folio/?id=Ab3dE5gH7jKm</b>. Anyone with the link can view the page, with no account. Only you can update or unpublish it, using a private edit key that Folio gives you once.</p>` +
+    `<label class="check"><input type="checkbox" id="pubConsent"${pubConsent ? ' checked' : ''}><span>I understand that everything on my page, including the email address and phone number I entered, becomes public. The hiring form works as set in step 7.</span></label>` +
+    (PUBLISH.siteKey ? `<div id="tsBox" class="tsbox" aria-label="Human check"></div>` : `<p class="pubmsg err">Publishing is not fully set up: the human-check site key is missing.</p>`) +
+    `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="publish" disabled>Publish</button></div>` + live +
+    `<div class="keybox"><b>Already published from another device?</b><p class="hint">Choose the recovery file you saved. Folio checks the key with the service before it trusts it.</p><label class="btn" style="cursor:pointer">Restore publishing access<input type="file" id="pubRestoreFile" accept="application/json" hidden></label></div>`;
+}
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve();
+  return tsLoading || (tsLoading = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; s.async = true; s.onload = () => res(); s.onerror = () => { tsLoading = null; rej(new Error('load')); }; document.head.appendChild(s); }));
+}
+async function mountTurnstile() {
+  const box = $('#tsBox'); if (!box || PUB || !PUBLISH.siteKey || box.dataset.mounting) return; box.dataset.mounting = '1'; tsToken = ''; tsWidget = null; // loads Turnstile only once the Publish card is opened
+  try {
+    await loadTurnstile(); await new Promise(r => window.turnstile.ready(r)); const again = $('#tsBox'); if (!again || again !== box) return;
+    tsWidget = window.turnstile.render(box, { sitekey: PUBLISH.siteKey, action: 'folio-publish', callback: t => { tsToken = t; refreshPubButtons(); }, 'expired-callback': () => { tsToken = ''; refreshPubButtons(); }, 'error-callback': () => { tsToken = ''; refreshPubButtons(); setPubMsg('err', 'The human check could not run. Check your connection and reload Folio.'); } });
+  } catch (e) { setPubMsg('err', 'The human check could not load, so publishing is unavailable right now. Check your connection and try again.'); }
+}
+function resetTurnstile() { tsToken = ''; try { if (tsWidget !== null && window.turnstile) window.turnstile.reset(tsWidget); } catch (e) {} refreshPubButtons(); }
+
+async function doPublish() {
+  if (pubBusy) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
+  if (!pubConsent) { setPubMsg('err', 'Tick the box to confirm you understand your page becomes public.'); return; }
+  if (!tsToken) { setPubMsg('err', 'Complete the human check first.'); return; }
+  setPubBusy(true); setPubMsg('note', 'Publishing…'); const snap = snapNow(), token = tsToken;
+  const res = await pubApi('POST', '/api/pages', { body: { data: JSON.parse(snap), turnstile: token } }); tsToken = '';
+  if (res.status === 201 && res.json && ID_RE.test(String(res.json.id)) && KEY_RE.test(String(res.json.editKey))) {
+    PUB = { id: res.json.id, key: res.json.editKey, api: PUBLISH.api, at: Date.now(), snap, saved: false }; savePub(); pubConsent = false;
+    setPubMsg('ok', 'Published. Copy your link, and save your recovery file now. It is the only way to update or unpublish from another device.'); setPubBusy(false); renderPanel(); const k = document.querySelector('[data-pub=saveKey]'); if (k) k.focus(); return;
+  }
+  setPubMsg('err', failText(res, 'publish')); setPubBusy(false); resetTurnstile();
+}
+async function doUpdate() {
+  if (pubBusy || !PUB) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
+  setPubBusy(true); setPubMsg('note', 'Updating…'); const snap = snapNow();
+  const res = await pubApi('PUT', '/api/pages/' + PUB.id, { key: PUB.key, body: { data: JSON.parse(snap) } });
+  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = snap; savePub(); setPubMsg('ok', 'The service confirmed the update. Open your link to see what visitors get. If it still looks old, wait a little and reload.'); updatePubStatus(); }
+  else setPubMsg('err', failText(res, 'update'));
+  setPubBusy(false);
+}
+async function doUnpublish() {
+  if (pubBusy || !PUB) return;
+  const yes = await confirmDialog({ title: 'Unpublish this page?', message: 'Visitors who open the link will see "This page is not available". Copies other people saved cannot be removed. You can publish again later, but the new page gets a new link.', ok: 'Unpublish' }); if (!yes) return;
+  setPubBusy(true); setPubMsg('note', 'Unpublishing…');
+  const res = await pubApi('DELETE', '/api/pages/' + PUB.id, { key: PUB.key });
+  if (res.status === 200 && res.json && res.json.deleted === true) { PUB = null; savePub(); setPubBusy(false); setPubMsg('ok', 'The service confirmed the page was removed. Its link now shows "This page is not available". Folio forgot the edit key.'); renderPanel(); const b = document.querySelector('[data-pub=publish]'); if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest' }); return; }
+  setPubMsg('err', failText(res, 'unpublish')); setPubBusy(false);
+}
+function saveRecovery() {
+  if (!PUB) return;
+  download('folio-publishing-recovery.json', JSON.stringify({ folioPublishing: 1, warning: 'Private. Anyone with this file can change or remove the page. Never share it or upload it anywhere public.', service: PUB.api, pageId: PUB.id, editKey: PUB.key, link: pubLink(PUB.id), savedAt: new Date().toISOString() }, null, 2), 'application/json');
+  PUB.saved = true; savePub(); setPubMsg('ok', 'Recovery file downloaded. Keep it private, like a password.'); renderPanel();
+}
+async function restoreRecovery(file) {
+  if (!file || pubBusy) return;
+  if (file.size > 4000) { setPubMsg('err', 'That does not look like a Folio recovery file (it is too large).'); return; }
+  let j; try { j = JSON.parse(await file.text()); } catch (e) { j = null; }
+  if (!j || typeof j !== 'object' || j.folioPublishing !== 1 || !ID_RE.test(String(j.pageId)) || !KEY_RE.test(String(j.editKey))) { setPubMsg('err', 'That does not look like a Folio recovery file. Nothing was changed.'); return; }
+  if (j.service !== PUBLISH.api) { setPubMsg('err', 'This recovery file is for a different publishing service. Nothing was changed.'); return; }
+  setPubBusy(true); setPubMsg('note', 'Checking the key with the service…');
+  const res = await pubApi('POST', '/api/pages/' + j.pageId + '/check', { key: j.editKey });
+  if (res.status === 200 && res.json && res.json.ok === true) { PUB = { id: j.pageId, key: j.editKey, api: PUBLISH.api, at: Date.now(), snap: '', saved: true }; savePub(); setPubBusy(false); setPubMsg('ok', 'Publishing access restored on this device. Folio does not have your resume text yet if this is a new device. Use "Load the published version into Folio", then edit and update.'); renderPanel(); return; }
+  setPubMsg('err', failText(res, 'check') || 'The key was not accepted.'); setPubBusy(false);
+}
+async function loadPublished() {
+  if (pubBusy || !PUB) return;
+  const yes = await confirmDialog({ title: 'Replace what is in Folio?', message: 'Folio will load the published version of your page into the editor. What is in Folio now will be replaced. Download a backup first if you want to keep it.', ok: 'Replace' }); if (!yes) return;
+  setPubBusy(true); const res = await pubApi('GET', '/api/pages/' + PUB.id);
+  if (res.status === 200 && res.json && res.json.data && res.json.data.D && res.json.data.ST) { D = normData(res.json.data.D); ST = normStyle(res.json.data.ST); PUB.snap = snapNow(); savePub(); save(); setPubBusy(false); setPubMsg('ok', 'Loaded the published version into Folio.'); renderPanel(); refresh(); return; }
+  setPubMsg('err', failText(res, 'load')); setPubBusy(false);
+}
+function copyPubLink() {
+  const el = $('#pubLink'); if (!el) return; const done = ok => setPubMsg(ok ? 'ok' : 'err', ok ? 'Link copied.' : 'Could not copy. Select the link and copy it yourself.');
+  const fallback = () => { el.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} done(ok); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(el.value).then(() => done(true), fallback); else fallback();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest ? e.target.closest('[data-pub]') : null; if (!b || b.disabled) return; const a = b.dataset.pub;
+  if (a === 'publish') doPublish(); else if (a === 'update') doUpdate(); else if (a === 'unpublish') doUnpublish(); else if (a === 'copy') copyPubLink(); else if (a === 'saveKey') saveRecovery(); else if (a === 'loadCopy') loadPublished();
+  else if (a === 'forget') confirmDialog({ title: 'Stop managing this page here?', message: 'The page stays public. This browser forgets its edit key, so unless you saved the recovery file you will not be able to update or unpublish it.', ok: 'Forget it' }).then(yes => { if (yes) { PUB = null; savePub(); setPubMsg('', ''); renderPanel(); } });
+});
+document.addEventListener('change', e => { if (e.target.id === 'pubConsent') { pubConsent = e.target.checked; refreshPubButtons(); if (pubConsent) setPubMsg('', ''); } if (e.target.id === 'pubRestoreFile') { restoreRecovery(e.target.files[0]); e.target.value = ''; } });
+
+/* The page a visitor sees at ?id=… : no editor, no storage access. The published data is cleaned again here, then shown
+   in a frame without same-origin access, so even a bug in the cleaning could not reach this site's saved data. */
+async function startViewer() {
+  const id = new URLSearchParams(location.search).get('id') || '', box = $('#viewer'), msg = $('#viewMsg'), fr = $('#viewFrame');
+  const say = t => { msg.textContent = t; msg.hidden = false; fr.hidden = true; }; box.hidden = false; document.title = 'Page'; const gone = "This page is not available. The link may be wrong, or the page was unpublished.";
+  if (!PUBLISH.api || !ID_RE.test(id)) return say(gone);
+  say('Loading…'); const res = await pubApi('GET', '/api/pages/' + id);
+  if (res.status === 404) return say(gone);
+  if (res.status !== 200 || !res.json || !res.json.data || !res.json.data.D || !res.json.data.ST) return say(res.json && res.json.error === 'daily_limit' ? 'This page cannot be shown right now because the service reached a free daily limit. Please try again later.' : 'This page cannot be loaded right now. Please try again in a little while.');
+  const d = normData(res.json.data.D), s = normStyle(res.json.data.ST); document.title = d.name || 'Page';
+  fr.title = (d.name || 'Published') + ' resume page'; fr.srcdoc = buildSite(d, s, { viewer: true }); fr.hidden = false; msg.hidden = true;
+}
+
 /* ---------- 7. theme shared with the other tools, then start ---------- */
 (function sharedTheme() {
   let st = {}; try { st = (JSON.parse(localStorage.getItem('jst:v1:settings')) || {}).app || {}; } catch (e) {}
@@ -649,7 +828,7 @@ $('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => `<div c
 $('#notesBtn').addEventListener('click', () => $('#notesDialog').showModal());
 $('#notesClose').addEventListener('click', () => $('#notesDialog').close());
 $('#notesDialog').addEventListener('click', e => { if (e.target === $('#notesDialog')) $('#notesDialog').close(); });
-renderPanel(); refresh();
+if (VIEWER) startViewer(); else { renderPanel(); refresh(); }
 </script>
 </body>
 </html>
