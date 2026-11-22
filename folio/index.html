@@ -37,6 +37,7 @@ button:focus:not(:focus-visible){outline:none}
 h1,h2,h3{font-family:Georgia,"Times New Roman",serif;margin:0;line-height:1.2}
 .bar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--border);padding:.7rem 1rem;display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
 .bar h1{font-size:1.5rem;margin-right:auto}
+.dl{position:relative}.dlmenu{position:absolute;right:0;top:calc(100% + .5rem);z-index:30;display:grid;gap:.5rem;min-width:230px;padding:.6rem;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 36px rgba(40,25,10,.22)}.dlmenu[hidden]{display:none}.dlmenu .btn{width:100%;justify-content:center}
 .btn{min-height:44px;padding:.45rem 1.05rem;border-radius:999px;border:1.5px solid var(--input-border);background:linear-gradient(180deg,var(--surface),var(--surface-2));color:var(--text);font:inherit;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;text-decoration:none}
 @media (hover:hover){.btn:hover{background:linear-gradient(180deg,var(--tint),var(--accent-soft))}}
 .btn-primary{background:linear-gradient(135deg,var(--accent-glow),var(--accent) 55%,var(--accent-hover));border-color:var(--accent-hover);color:#fff;text-shadow:0 1px 1px rgba(0,0,0,.18);box-shadow:0 2px 8px color-mix(in srgb,var(--accent) 30%,transparent)}
@@ -146,8 +147,8 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 <body data-show="edit">
 <div class="bar">
   <h1>Folio</h1>
-  <button type="button" class="btn btn-small" id="pdfBtn">Download resume PDF</button>
-  <button type="button" class="btn btn-primary btn-small" id="exportBtn">Download my site</button>
+  <div class="dl"><button type="button" class="btn btn-primary btn-small" id="dlBtn" aria-expanded="false" aria-controls="dlMenu">Download <span aria-hidden="true">&#9662;</span></button>
+    <div class="dlmenu" id="dlMenu" hidden><button type="button" class="btn" id="pdfBtn">Download resume PDF</button><button type="button" class="btn" id="exportBtn">Download my site</button></div></div>
 </div>
 <div class="seg" role="group" aria-label="Show">
   <button type="button" class="btn" data-seg="edit" aria-pressed="true">Edit</button>
@@ -196,8 +197,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.10';
+const APP_VERSION = 'v1.1.11';
 const RELEASES = [
+  ['v1.1.11', 'The two download buttons now live under one Download button at the top. Open it to choose Download resume PDF or Download my site.'],
   ['v1.1.10', 'The PDF button now reads Download resume PDF. It asks whether to include the paper color, and warns that painted backgrounds use much more ink when printed. Plain white is the default choice.'],
   ['v1.1.9', 'The Style section now shows a small preview on each choice: layouts drawn in your chosen color and paper, fonts shown as Aa (heading and text font), and paper tones with a sample Aa. You can compare styles without switching to the preview.'],
   ['v1.1.8', 'The resume sheet now has a paper look (a faint grain and soft edge shading) on screen, in the preview and on your published site. It is removed when you print or save as PDF. The Hire me section now looks and works like a Google Form: question cards, a round-button choice question, red required markers, Submit and Clear form, and a Your response has been recorded page with Submit another response.'],
@@ -686,6 +688,11 @@ $('#exportBtn').addEventListener('click', () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
   download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
 });
+function setDl(open, focusBtn) { const b = $('#dlBtn'), m = $('#dlMenu'); m.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) $('#pdfBtn').focus(); else if (focusBtn) b.focus(); }
+$('#dlBtn').addEventListener('click', () => setDl($('#dlMenu').hidden));
+$('#dlMenu').addEventListener('click', e => { if (e.target.closest('button')) setDl(false, false); });
+document.addEventListener('click', e => { if (!$('#dlMenu').hidden && !e.target.closest('.dl')) setDl(false, false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#dlMenu').hidden) { e.preventDefault(); setDl(false, true); } });
 function askPaperForPdf() {
   return new Promise(resolve => {
     const d = $('#pdfDialog'), trigger = document.activeElement;

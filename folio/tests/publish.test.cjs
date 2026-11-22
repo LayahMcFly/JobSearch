@@ -199,6 +199,14 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- one Download menu ---- */
+  { const P = await editor(); const vis = async sel => P.evaluate(s => { const e = document.querySelector(s); return !!e && e.getClientRects().length > 0; }, sel);
+    eq('download menu: PDF and site buttons are tucked under one Download button', !(await vis('#pdfBtn')) && !(await vis('#exportBtn')) && (await vis('#dlBtn')));
+    await P.click('#dlBtn'); eq('download menu: opens with both choices and reports expanded', (await vis('#pdfBtn')) && (await vis('#exportBtn')) && (await P.getAttribute('#dlBtn', 'aria-expanded')) === 'true');
+    await P.keyboard.press('Escape'); eq('download menu: Escape closes it and returns focus to Download', !(await vis('#pdfBtn')) && (await P.evaluate(() => document.activeElement.id)) === 'dlBtn');
+    await P.click('#dlBtn'); await P.click('h1'); eq('download menu: a tap outside closes it', !(await vis('#pdfBtn')));
+    await P.click('#dlBtn'); await P.click('#pdfBtn'); eq('download menu: PDF choice asks about paper color first', await P.evaluate(() => document.getElementById('pdfDialog').open) && !(await vis('#exportBtn'))); await P.keyboard.press('Escape'); await P.ctx.close(); }
+
   /* ---- paper look (resume sheet) and Google-Forms-style hire section ---- */
   { const P = await editor(); await P.waitForTimeout(300);
     const html = await P.evaluate(() => buildSite(D, ST, {}));
