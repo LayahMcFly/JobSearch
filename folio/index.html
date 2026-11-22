@@ -665,7 +665,7 @@ $('#cfOk').addEventListener('click', () => $('#confirmDialog').close('ok'));
 // owner saves. It is never in a URL, never in the ordinary backup, never in the published data, and it is sent only in an
 // Authorization header. The Turnstile secret never appears in this file: only the public site key does.
 const PUBKEY = 'folio:v1:pub', ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/, KEY_RE = /^[A-Za-z0-9_-]{43}$/;
-let PUB = null, pubMsg = null, pubBusy = false, pubConsent = false, tsToken = '', tsWidget = null, tsLoading = null;
+let tsFailed = false, PUB = null, pubMsg = null, pubBusy = false, pubConsent = false, tsToken = '', tsWidget = null, tsLoading = null;
 try { const p = JSON.parse(localStorage.getItem(PUBKEY) || 'null'); if (p && ID_RE.test(p.id) && KEY_RE.test(p.key) && p.api === PUBLISH.api) PUB = { id: p.id, key: p.key, api: p.api, at: Number(p.at) || 0, snap: String(p.snap || ''), saved: !!p.saved }; } catch (e) {}
 const savePub = () => { try { if (PUB) localStorage.setItem(PUBKEY, JSON.stringify(PUB)); else localStorage.removeItem(PUBKEY); } catch (e) {} };
 const snapNow = () => JSON.stringify({ D: normData(D), ST: normStyle(ST) });
@@ -704,8 +704,9 @@ function failText(res, what) {
 function setPubMsg(kind, text) { pubMsg = text ? { kind, text } : null; const el = $('#pubLive'); if (el) el.innerHTML = pubMsgHtml(); }
 const pubMsgHtml = () => pubMsg ? `<p class="pubmsg ${pubMsg.kind}" role="${pubMsg.kind === 'err' ? 'alert' : 'status'}">${esc(pubMsg.text)}</p>` : '';
 function updatePubStatus() { const el = $('#pubDirty'); if (el && PUB) el.textContent = PUB.snap === snapNow() ? 'The published page matches what is in Folio.' : 'You have changes that are not published yet. Press Update published page.'; }
-function setPubBusy(b) { pubBusy = b; document.querySelectorAll('[data-pub]').forEach(x => { x.disabled = b || (x.dataset.pub === 'publish' && !(tsToken && pubConsent)); }); }
-function refreshPubButtons() { const b = document.querySelector('[data-pub=publish]'); if (b) b.disabled = pubBusy || !(tsToken && pubConsent); }
+function setPubBusy(b) { pubBusy = b; document.querySelectorAll('[data-pub]').forEach(x => { x.disabled = b; }); }
+/* The Publish button is never greyed out for a missing step: pressing it says what is missing. This shows where the human check stands. */
+function refreshPubButtons() { const el = $('#tsState'); if (!el) return; el.textContent = tsToken ? 'Human check complete.' : tsFailed ? 'The human check did not run. See the message below.' : 'Waiting for the human check to finish. It can take a few seconds.'; }
 
 function onlineBody() {
   if (!PUBLISH.api) return `<p class="hint"><b>Publishing is not connected yet.</b> It needs a small service that the owner of this Folio site sets up once. Until then, use Download my site in the next step.</p>`;
@@ -723,8 +724,8 @@ function onlineBody() {
   }
   return `<p class="hint"><b>What happens:</b> Folio saves a copy of your resume page online and gives you a link like <b>…/folio/?id=Ab3dE5gH7jKm</b>. Anyone with the link can view the page, with no account. Only you can update or unpublish it, using a private edit key that Folio gives you once.</p>` +
     `<label class="check"><input type="checkbox" id="pubConsent"${pubConsent ? ' checked' : ''}><span>I understand that everything on my page, including the email address and phone number I entered, becomes public. The hiring form works as set in step 7.</span></label>` +
-    (PUBLISH.siteKey ? `<div id="tsBox" class="tsbox" aria-label="Human check"></div>` : `<p class="pubmsg err">Publishing is not fully set up: the human-check site key is missing.</p>`) +
-    `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="publish" disabled>Publish</button></div>` + live +
+    (PUBLISH.siteKey ? `<div id="tsBox" class="tsbox" aria-label="Human check"></div><p class="hint" id="tsState" role="status"></p>` : `<p class="pubmsg err">Publishing is not fully set up: the human-check site key is missing.</p>`) +
+    `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="publish">Publish</button></div>` + live +
     `<div class="keybox"><b>Already published from another device?</b><p class="hint">Choose the recovery file you saved. Folio checks the key with the service before it trusts it.</p><label class="btn" style="cursor:pointer">Restore publishing access<input type="file" id="pubRestoreFile" accept="application/json" hidden></label></div>`;
 }
 function loadTurnstile() {
@@ -735,15 +736,15 @@ async function mountTurnstile() {
   const box = $('#tsBox'); if (!box || PUB || !PUBLISH.siteKey || box.dataset.mounting) return; box.dataset.mounting = '1'; tsToken = ''; tsWidget = null; // loads Turnstile only once the Publish card is opened
   try {
     await loadTurnstile(); await new Promise(r => window.turnstile.ready(r)); const again = $('#tsBox'); if (!again || again !== box) return;
-    tsWidget = window.turnstile.render(box, { sitekey: PUBLISH.siteKey, action: 'folio-publish', callback: t => { tsToken = t; refreshPubButtons(); }, 'expired-callback': () => { tsToken = ''; refreshPubButtons(); }, 'error-callback': () => { tsToken = ''; refreshPubButtons(); setPubMsg('err', 'The human check could not run. Check your connection and reload Folio.'); } });
-  } catch (e) { setPubMsg('err', 'The human check could not load, so publishing is unavailable right now. Check your connection and try again.'); }
+    tsWidget = window.turnstile.render(box, { sitekey: PUBLISH.siteKey, action: 'folio-publish', callback: t => { tsToken = t; tsFailed = false; refreshPubButtons(); setPubMsg('', ''); }, 'expired-callback': () => { tsToken = ''; refreshPubButtons(); }, 'error-callback': code => { tsToken = ''; tsFailed = true; refreshPubButtons(); setPubMsg('err', 'The human check could not run' + (code ? ' (code ' + String(code).slice(0, 12) + ')' : '') + '. Check your connection and reload Folio. If this keeps happening, the site key or its allowed website address in Turnstile may be wrong.'); } });
+  } catch (e) { tsFailed = true; refreshPubButtons(); setPubMsg('err', 'The human check could not load, so publishing is unavailable right now. Check your connection (or an ad blocker that blocks challenges.cloudflare.com) and try again.'); }
 }
 function resetTurnstile() { tsToken = ''; try { if (tsWidget !== null && window.turnstile) window.turnstile.reset(tsWidget); } catch (e) {} refreshPubButtons(); }
 
 async function doPublish() {
   if (pubBusy) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
-  if (!pubConsent) { setPubMsg('err', 'Tick the box to confirm you understand your page becomes public.'); return; }
-  if (!tsToken) { setPubMsg('err', 'Complete the human check first.'); return; }
+  if (!pubConsent) { setPubMsg('err', 'Tick the box above to confirm you understand your page becomes public, then press Publish again.'); return; }
+  if (!tsToken) { setPubMsg('err', tsFailed ? 'The human check did not run, so nothing was published. See the message above.' : 'The human check has not finished yet. Wait for it to show as complete, then press Publish again.'); return; }
   setPubBusy(true); setPubMsg('note', 'Publishing…'); const snap = snapNow(), token = tsToken;
   const res = await pubApi('POST', '/api/pages', { body: { data: JSON.parse(snap), turnstile: token } }); tsToken = '';
   if (res.status === 201 && res.json && ID_RE.test(String(res.json.id)) && KEY_RE.test(String(res.json.editKey))) {
