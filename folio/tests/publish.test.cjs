@@ -199,6 +199,22 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- paper look (resume sheet) and Google-Forms-style hire section ---- */
+  { const P = await editor(); await P.waitForTimeout(300);
+    const html = await P.evaluate(() => buildSite(D, ST, {}));
+    const pg = await P.ctx.newPage(); await pg.setContent(html); await pg.waitForTimeout(200);
+    const r = await pg.evaluate(() => { const sh = document.querySelector('.sheet'), cs = getComputedStyle(sh, '::after'); return { grain: cs.backgroundImage.includes('svg'), pe: cs.pointerEvents, pos: getComputedStyle(sh).position }; });
+    eq('paper look: resume sheet has a grain overlay that never blocks clicks', r.grain && r.pe === 'none' && r.pos === 'relative');
+    await pg.emulateMedia({ media: 'print' }); eq('paper look: overlay is off when printing', await pg.evaluate(() => getComputedStyle(document.querySelector('.sheet'), '::after').display) === 'none');
+    await pg.emulateMedia({ media: 'screen' });
+    const gf = await pg.evaluate(() => ({ cards: document.querySelectorAll('#hireForm .q').length, radios: document.querySelectorAll('#hireForm input[type=radio]').length, clear: !!document.querySelector('#hireForm .clear'), req: document.querySelectorAll('#hireForm .req').length }));
+    eq('form looks like a Google Form: question cards, radio choices, required markers, Clear form', gf.cards >= 4 && gf.radios >= 2 && gf.clear && gf.req >= 3, JSON.stringify(gf));
+    await pg.click('.cta'); eq('form: empty submit marks the first question as required', await pg.evaluate(() => document.querySelector('[name=name]').closest('.q').classList.contains('bad') && !document.querySelector('[name=name]').closest('.q').querySelector('.qerr').hidden));
+    await pg.fill('[name=name]', 'A'); eq('form: typing clears the required message', await pg.evaluate(() => document.querySelector('[name=name]').closest('.q').querySelector('.qerr').hidden));
+    await pg.click('.clear'); eq('form: Clear form empties the answers', await pg.inputValue('[name=name]') === '');
+    await P.evaluate(() => { ST.paper = 'dark'; change(); }); const dk = await P.evaluate(() => buildSite(D, ST, {})); eq('paper look: dark paper uses a light-on-dark grain', /mix-blend-mode:screen/.test(dk));
+    await pg.close(); await P.ctx.close(); }
+
   /* ---- layout of the new card ---- */
   const M = await editor({ viewport: { width: 390, height: 800 }, hasTouch: true }); await fill(M); await verify(M);
   const small = await M.evaluate(() => [...document.querySelectorAll('[data-card=online] button, [data-card=online] .btn, [data-card=online] input[type=checkbox], [data-card=online] label.btn')].filter(e => e.offsetParent).map(e => { const r = e.getBoundingClientRect(); return Math.round(r.height) < 44 && !e.closest('label.check') ? e.textContent.trim().slice(0, 20) : null; }).filter(Boolean));
