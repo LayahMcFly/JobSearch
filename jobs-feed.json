@@ -1,7 +1,7 @@
 {
  "app": "job-search-tracker",
  "feedFormat": 1,
- "generatedAt": "2026-11-21T19:21:42.618Z",
+ "generatedAt": "2026-11-22T01:22:43.523Z",
  "sources": [
   {
    "name": "Remotive: all categories",
@@ -16,7 +16,7 @@
    "status": "ok",
    "count": 100,
    "fetched": 100,
-   "ms": 260
+   "ms": 290
   },
   {
    "name": "RSS: We Work Remotely: Customer Support",
@@ -24,7 +24,7 @@
    "status": "ok",
    "count": 80,
    "fetched": 85,
-   "ms": 766
+   "ms": 294
   },
   {
    "name": "RSS: We Work Remotely: All Jobs",
@@ -32,15 +32,15 @@
    "status": "ok",
    "count": 99,
    "fetched": 100,
-   "ms": 651
+   "ms": 382
   },
   {
    "name": "RSS: We Work Remotely: Sales and Marketing",
    "type": "rss",
    "status": "ok",
    "count": 200,
-   "fetched": 214,
-   "ms": 749
+   "fetched": 215,
+   "ms": 506
   },
   {
    "name": "RSS: We Work Remotely: All Other",
@@ -48,7 +48,7 @@
    "status": "ok",
    "count": 84,
    "fetched": 89,
-   "ms": 593
+   "ms": 263
   },
   {
    "name": "RSS: We Work Remotely: Programming",
@@ -56,7 +56,7 @@
    "status": "ok",
    "count": 21,
    "fetched": 25,
-   "ms": 174
+   "ms": 104
   },
   {
    "name": "RSS: We Work Remotely: Design",
@@ -64,7 +64,7 @@
    "status": "ok",
    "count": 24,
    "fetched": 28,
-   "ms": 196
+   "ms": 105
   }
  ],
  "jobs": [
@@ -1629,6 +1629,21 @@
    "firstSeenAt": "2026-11-21T19:21:42.618Z"
   },
   {
+   "id": "rss:we-work-remotely-all-jobs:https://weworkremotely.com/remote-jobs/thesis-federal-llc-b2b-closer-booked-calls-only-us-based-paid-two-week-trial",
+   "title": "B2B Closer, Booked Calls Only (US-based, paid two-week trial)",
+   "company": "Thesis Federal LLC",
+   "link": "https://weworkremotely.com/remote-jobs/thesis-federal-llc-b2b-closer-booked-calls-only-us-based-paid-two-week-trial",
+   "source": "We Work Remotely",
+   "sourceName": "RSS: We Work Remotely: All Jobs",
+   "location": "Anywhere in the World",
+   "remoteType": "Remote",
+   "payRange": "",
+   "datePosted": "2026-11-21",
+   "description": "Headquarters: Gainesville, Florida, USA\n\nURL: https://thesisfederal.com/\n\nWe are a small US firm that writes federal funding proposals for technology companies, for a fixed fee. We are looking for one US-based closer for booked calls. The role starts with a paid two-week trial.\n\nThe work\n\n• Our sales are written-first. A prospect replies to our email, receives a free one-page written plan, and picks a call time in writing. You take those booked calls, return calls from prospects who phoned us, and rebook missed calls. No cold dialing and no lists.\n\n• On each call you qualify, present our written fixed-fee offer (mid four figures to low five figures), confirm who signs, and ask for the decision. We send every agreement and payment link.\n\n• You send a short written report after each call, the same day.\n\n• Calls are in US business hours (Eastern Time). The work is remote.\n\nWho fits\n\n• You are based in the United States.\n\n• You have personally closed B2B service sales of US$5,000 or more with business owners or technical founders, on the phone.\n\n• Experience selling to companies that pursue federal, SBIR or defense work is a strong plus.\n\n• You are comfortable following a written call guide and firm rules: no promises about outcomes and no discounts.\n\n• You do not currently write or sell federal proposal, white paper, SBIR or capture services for anyone else.\n\nHow we screen and what we pay\n\n• Your written answers to the three questions below.\n\n• Finalists record a 3 to 5 minute drill on a short script we send. The drill is paid: US$40.\n\n• Every drill is scored on the same written scorecard.\n\n• The strongest candidates are offered a paid two-week trial: US$45 an hour, up to 10 hours a week, plus 15% of the fees we actually collect on deals you close. The exact terms are in a written agreement you see before you start.\n\n• The role after the trial depends on results. We do not promise a drill, a trial, a hire, or any number of hours, calls, deals or earnings. Call volume is modest today.\n\nPart-time to start; the best performer moves to more hours as booked calls grow.\n\nTo apply, email these three answers. Everything is in writing.\n\n• Describe one B2B service sale of US$5,000 or more that you personally closed: what the service was, the price, and who signed.\n\n• Your city and state, and the hours you could work each week between 9 am and 6 pm Eastern Time.\n\n• A prospect says, \"Send me something and I'll think about it.\" What do you say next? Use your own words.\n\nTo apply: https://weworkremotely.com/remote-jobs/thesis-federal-llc-b2b-closer-booked-calls-only-us-based-paid-two-week-trial",
+   "descriptionIsSnippet": false,
+   "firstSeenAt": "2026-11-22T01:22:43.523Z"
+  },
+  {
    "id": "rss:we-work-remotely-all-jobs:https://weworkremotely.com/remote-jobs/coinbase-chief-of-staff-cto",
    "title": "Chief of Staff, CTO",
    "company": "Coinbase",
@@ -2184,21 +2199,6 @@
    "firstSeenAt": "2026-11-21T19:21:42.618Z"
   },
   {
-   "id": "rss:we-work-remotely-all-jobs:https://weworkremotely.com/remote-jobs/bitwarden-channel-account-executive-latam",
-   "title": "Channel Account Executive - LATAM",
-   "company": "Bitwarden",
-   "link": "https://weworkremotely.com/remote-jobs/bitwarden-channel-account-executive-latam",
-   "source": "We Work Remotely",
-   "sourceName": "RSS: We Work Remotely: All Jobs",
-   "location": "Anywhere in the World",
-   "remoteType": "Remote",
-   "payRange": "",
-   "datePosted": "2026-11-21",
-   "description": "Headquarters: Remote, US\n\nBitwarden helps enterprises, developers, and individuals securely store and share sensitive data. We're open source, and our products cover password management, secrets management, and passwordless and passkey innovation. Founded in 2016 and headquartered in Santa Barbara, California, we're backed by a global community of security experts and enthusiasts.\n\nLATAM is a channel-first region for us. As channel manager, you'll build the partner ecosystem across Latin America, own a quota, and get resellers and MSPs selling Bitwarden on their own.\n\nWhat you'll do\n\n• Own a regional go-to-market plan for LATAM, with priority markets such as Brazil, Mexico, Colombia, Chile, and Argentina\n\n• Recruit and onboard regional resellers, MSPs, and local and boutique VARs, plus distributors where they're the right route to market\n\n• Build and maintain a partner plan that maps each partner's strengths (customer relationships, vertical focus, technical specialty) to target accounts\n\n• Manage lead flow both ways between partners and Bitwarden Sales, run deal registration, and keep sales leaders current on channel pipeline and forecast\n\n• Set financial goals with focus partners and drive them to hit those goals\n\n• Train partners in Spanish and Portuguese on Bitwarden products, positioning, and competitive displacement\n\n• Run joint marketing with partners and our marketing team: local events, campaigns, and co-selling motions\n\n• Join partner sales calls to provide product expertise and help close deals\n\n• Work through LATAM-specific deal mechanics with Finance and Legal, including local-currency pricing, invoicing and tax requirements, payment terms, and data residency questions (LGPD in Brazil, for example)\n\n• Run several channel initiatives at once across technical, professional services, and sales\n\nWhat you bring\n\n• 5-10 years in partner development, channel management, or sales, with a record of hitting quota\n\n• Existing relationships with LATAM resellers, MSPs, or distributors in security or IT\n\n• Fluent in Spanish or Portuguese and English.Experience with both global and boutique VARs, and with how channel works in the region: tiered distribution, local entities, and longer public-sector cycles\n\n• Comfort working remotely with minimal supervision across time zones, with regular travel in-region for partner meetings and events\n\n• A bachelor's degree in business, marketing, or a related field\n\n• A self-starter mindset and a bias toward solving problems yourself\n\nInterview process\n\n• Screening call with our recruiting manager\n\n• Hiring manager interview (head of channel sales)\n\n• Interview with our CSO\n\n• Interview with our head of sales enablement\n\n• Final interview with our CEO\n\n• Reference checks\n\nWhy Bitwarden\n\n• Mission. Our community loves us, and you'll bring better security to everyone from families to the world's largest organizations.\n\n• Market. You'll become an expert in two growing markets: security and open-source software.\n\n• Growth. You'll build channel, demand gen, and product-led growth experience in a fast-growing company.\n\n• Team. Work remotely with motivated people around the world, with in-person meetups.\n\nTo apply: https://weworkremotely.com/remote-jobs/bitwarden-channel-account-executive-latam",
-   "descriptionIsSnippet": false,
-   "firstSeenAt": "2026-11-21T19:21:42.618Z"
-  },
-  {
    "id": "rss:we-work-remotely-all-jobs:https://weworkremotely.com/remote-jobs/pagerduty-strategic-alliances-senior-manager",
    "title": "Strategic Alliances Senior Manager",
    "company": "PagerDuty",
@@ -2572,6 +2572,21 @@
    "description": "Headquarters: Canada (Remote)\n\nUpgrade helps customers move in the right direction with affordable and responsible financial products. Since 2017, we’ve helped over 7.5 million customers access over $42 billion in consumer credit. With a relentless focus on improving our customers' financial well-being, we build products that put more money in their pocket and support their journey toward a better financial future. We’re backed by some of the most prominent technology investors and were most recently valued at $7.3B.\n\nWe’re consistently recognized for our collaborative and inclusive culture. Most recently, we were named one of the World’s Top Fintech Companies by CNBC, Best Places to Work by Built In, Best Places to Work by the San Francisco Business Times, America’s Greatest Workplaces by Newsweek, Best Startup Employer by Forbes, and Healthiest Employers by Phoenix Business Journal.\n\nWe’re looking for new team members who get excited about designing and delivering new and better products. Come join us and help build a better financial future for millions of people.\n\nAbout the Role:\n\nOur QA-Core team exists so every engineering team at Upgrade can test their software quickly and trust the result. We are seeking a Senior QA Automation Engineer on the team to architect and build test automation infrastructure, tooling, and agentic solutions to increase engineering productivity. This is not a traditional product QA role - it’s a build role. You will work closely with our product teams to understand their automation requirements, design services from scratch, ship them to production clusters and own them.\n\nThis is a fully remote position open to candidates who are based in Canada. The base salary range for this position is between $150,000-$190,000 CAN. An individual’s actual base pay within this range will depend on a variety of factors, including job-related knowledge, skills, education, and experience.\n\nOur Core Technologies Include:\n\nJava, Python, Kubernetes, Selenium WebDriver, Playwright, TestNG, Maven, Git, Jenkins, ArgoCD, SQL, Grafana, SumoLogic, Docker, Gatling, Claude Code, MCP server\n\nWhat You’ll Do:\n\n•\nDesign and own automation framework for functional and performance testing.\n\n•\nBuild agents to automate existing QA/testing workflows and remove engineering friction.\n\n•\nBuild the applications and services that automation depends on, deploy them, and operate them in production environments.\n\n•\nTake prototypes all the way. Build demos in a timely manner, gather feedback from the teams who'd use it, and iterate through successive versions until it's hardened, monitored, and running with matured quality.\n\n•\nIdentify gap areas in existing frameworks and tools, and iterate toward solutions that close them.\n\nWhat We Look For:\n\n•\n5-7+ years building production software, with demonstrated depth across test infrastructure, test frameworks, and developer tooling, and working knowledge of platform engineering.\n\n•\nProven track record building agentic solutions and test automation frameworks from the ground up — designed, shipped, iterated on, and adopted as part of how other engineers work.\n\n•\nFluency with agentic coding tools as part of your daily workflow: ability to orchestrate multiple agents to execute, review agent-generated PRs.\n\n•\nHands-on experience with micro-services, Kubernetes and managing deployment lifecycle\n\n•\nAbility to take an ambiguous problem statement to a scoped, defensible solution independently.\n\nWhat We Offer You:\n\n•\nCompetitive salary and stock option plan\n\n•\nPaid coverage of medical, dental and vision insurance\n\n•\nFlexible PTO\n\n•\nOpportunities for professional growth and development\n\n•\nPaid parental leave\n\n• Health & wellness initiatives\n\nEnvironmental & Working Conditions\n\nWork is performed indoors in a fast-paced environment that requires the ability to manage multiple priorities and meet established workflows, schedules, and service expectations.\n\nEmployees regularly input, retrieve, and exchange information accurately using digital systems and applications to support operational and customer service objectives.\n\nThe role requires the ability to receive and exchange information with customers, peers, supervisors, and cross-functional partners through available communication channels, which may include meetings, email, phone, and digital collaboration tools, and may involve real-time, verbal, or in-person exchanges depending on business need.\n\nJob duties may involve managing a high volume of inbound and/or outbound customer interactions and work activities using telecommunications and computer systems. The role requires the ability to read, analyze, and interpret information displayed on computer screens and remain in a working posture for extended periods, consistent with the demands of the position.\n\nWork may be performed in a contact center, office, or remote environment, depending on business needs and the nature of the role. Onsite work environments may include shared workspace\n\n[Cut at 5000 characters. Open the job link for the full posting.]",
    "descriptionIsSnippet": false,
    "firstSeenAt": "2026-11-21T11:13:31.058Z"
+  },
+  {
+   "id": "rss:we-work-remotely-sales-and-marketing:https://weworkremotely.com/remote-jobs/bitwarden-channel-account-executive-latam",
+   "title": "Channel Account Executive - LATAM",
+   "company": "Bitwarden",
+   "link": "https://weworkremotely.com/remote-jobs/bitwarden-channel-account-executive-latam",
+   "source": "We Work Remotely",
+   "sourceName": "RSS: We Work Remotely: Sales and Marketing",
+   "location": "Anywhere in the World",
+   "remoteType": "Remote",
+   "payRange": "",
+   "datePosted": "2026-11-21",
+   "description": "Headquarters: Remote, US\n\nBitwarden helps enterprises, developers, and individuals securely store and share sensitive data. We're open source, and our products cover password management, secrets management, and passwordless and passkey innovation. Founded in 2016 and headquartered in Santa Barbara, California, we're backed by a global community of security experts and enthusiasts.\n\nLATAM is a channel-first region for us. As channel manager, you'll build the partner ecosystem across Latin America, own a quota, and get resellers and MSPs selling Bitwarden on their own.\n\nWhat you'll do\n\n• Own a regional go-to-market plan for LATAM, with priority markets such as Brazil, Mexico, Colombia, Chile, and Argentina\n\n• Recruit and onboard regional resellers, MSPs, and local and boutique VARs, plus distributors where they're the right route to market\n\n• Build and maintain a partner plan that maps each partner's strengths (customer relationships, vertical focus, technical specialty) to target accounts\n\n• Manage lead flow both ways between partners and Bitwarden Sales, run deal registration, and keep sales leaders current on channel pipeline and forecast\n\n• Set financial goals with focus partners and drive them to hit those goals\n\n• Train partners in Spanish and Portuguese on Bitwarden products, positioning, and competitive displacement\n\n• Run joint marketing with partners and our marketing team: local events, campaigns, and co-selling motions\n\n• Join partner sales calls to provide product expertise and help close deals\n\n• Work through LATAM-specific deal mechanics with Finance and Legal, including local-currency pricing, invoicing and tax requirements, payment terms, and data residency questions (LGPD in Brazil, for example)\n\n• Run several channel initiatives at once across technical, professional services, and sales\n\nWhat you bring\n\n• 5-10 years in partner development, channel management, or sales, with a record of hitting quota\n\n• Existing relationships with LATAM resellers, MSPs, or distributors in security or IT\n\n• Fluent in Spanish or Portuguese and English.Experience with both global and boutique VARs, and with how channel works in the region: tiered distribution, local entities, and longer public-sector cycles\n\n• Comfort working remotely with minimal supervision across time zones, with regular travel in-region for partner meetings and events\n\n• A bachelor's degree in business, marketing, or a related field\n\n• A self-starter mindset and a bias toward solving problems yourself\n\nInterview process\n\n• Screening call with our recruiting manager\n\n• Hiring manager interview (head of channel sales)\n\n• Interview with our CSO\n\n• Interview with our head of sales enablement\n\n• Final interview with our CEO\n\n• Reference checks\n\nWhy Bitwarden\n\n• Mission. Our community loves us, and you'll bring better security to everyone from families to the world's largest organizations.\n\n• Market. You'll become an expert in two growing markets: security and open-source software.\n\n• Growth. You'll build channel, demand gen, and product-led growth experience in a fast-growing company.\n\n• Team. Work remotely with motivated people around the world, with in-person meetups.\n\nTo apply: https://weworkremotely.com/remote-jobs/bitwarden-channel-account-executive-latam",
+   "descriptionIsSnippet": false,
+   "firstSeenAt": "2026-11-22T01:22:43.523Z"
   },
   {
    "id": "rss:we-work-remotely-sales-and-marketing:https://weworkremotely.com/remote-jobs/gitlab-strategic-enterprise-account-executive-sydney-or-melbourne",
