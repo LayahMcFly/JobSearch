@@ -128,7 +128,7 @@ html.viewer body>*:not(#viewer):not(script){display:none!important}
 /* publishing card */
 .pubmsg{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-weight:600}.pubmsg.err{color:var(--danger);border-color:var(--danger)}.pubmsg.ok{color:#1b5e2e;border-color:#1b5e2e}
 .keybox{margin:1rem 0;padding:.9rem;border:1px dashed var(--border);border-radius:12px;background:var(--surface-2)}.keybox p{margin:.4rem 0 .7rem}
-.check{display:flex;gap:.8rem;align-items:flex-start;min-height:44px;padding:.5rem 0;cursor:pointer}.check input{flex:none;width:1.5rem;height:1.5rem;margin:.1rem 0 0;accent-color:var(--accent)}
+.check{display:flex;gap:.8rem;align-items:flex-start;min-height:44px;padding:.5rem 0;cursor:pointer}.check input{flex:none;appearance:none;-webkit-appearance:none;display:grid;place-content:center;width:44px;height:44px;margin:0;border:1.5px solid var(--input-border);border-radius:12px;background:var(--surface);cursor:pointer}.check input::before{content:'';width:1.2rem;height:1.2rem;border-radius:5px;background:var(--accent);transform:scale(0);transition:transform .12s}.check input:checked::before{transform:scale(1)}.check input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}.check span{align-self:center}
 input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 0}
 </style>
 <script>if (new URLSearchParams(location.search).has('id')) document.documentElement.classList.add('viewer');</script>
@@ -555,7 +555,7 @@ function renderPanel() {
       `<ol class="steps"><li>Press <b>Download my site</b>. You get a file named <b>index.html</b>.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>` +
       `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>` +
       `<p class="hint">Backups hold your resume and style only. They never include publishing access (see step 8).</p>`);
-  if (typeof mountTurnstile === 'function' && typeof PUB !== 'undefined') { mountTurnstile(); updatePubStatus(); refreshPubButtons(); }
+  if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); }
 }
 
 /* ---------- 5. preview ---------- */
@@ -578,7 +578,7 @@ document.addEventListener('input', e => {
   else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
-document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) openCards[c.dataset.card] = c.open; }, true);
+document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); } }, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
@@ -732,7 +732,7 @@ function loadTurnstile() {
   return tsLoading || (tsLoading = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'; s.async = true; s.onload = () => res(); s.onerror = () => { tsLoading = null; rej(new Error('load')); }; document.head.appendChild(s); }));
 }
 async function mountTurnstile() {
-  const box = $('#tsBox'); if (!box || PUB || !PUBLISH.siteKey) return; tsToken = ''; tsWidget = null;
+  const box = $('#tsBox'); if (!box || PUB || !PUBLISH.siteKey || box.dataset.mounting) return; box.dataset.mounting = '1'; tsToken = ''; tsWidget = null; // loads Turnstile only once the Publish card is opened
   try {
     await loadTurnstile(); await new Promise(r => window.turnstile.ready(r)); const again = $('#tsBox'); if (!again || again !== box) return;
     tsWidget = window.turnstile.render(box, { sitekey: PUBLISH.siteKey, action: 'folio-publish', callback: t => { tsToken = t; refreshPubButtons(); }, 'expired-callback': () => { tsToken = ''; refreshPubButtons(); }, 'error-callback': () => { tsToken = ''; refreshPubButtons(); setPubMsg('err', 'The human check could not run. Check your connection and reload Folio.'); } });
@@ -828,7 +828,7 @@ $('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => `<div c
 $('#notesBtn').addEventListener('click', () => $('#notesDialog').showModal());
 $('#notesClose').addEventListener('click', () => $('#notesDialog').close());
 $('#notesDialog').addEventListener('click', e => { if (e.target === $('#notesDialog')) $('#notesDialog').close(); });
-if (VIEWER) startViewer(); else { renderPanel(); refresh(); mountTurnstile(); }
+if (VIEWER) startViewer(); else { renderPanel(); refresh(); }
 </script>
 </body>
 </html>

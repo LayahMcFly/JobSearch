@@ -1,6 +1,6 @@
 {
- "at": "2026-11-22T21:16:44.428Z",
- "passed": 60,
+ "at": "2026-11-22T21:32:28.718Z",
+ "passed": 62,
  "failed": 0,
  "results": [
   {
@@ -24,9 +24,19 @@
    "note": ""
   },
   {
+   "name": "privacy: Turnstile is not contacted until the Publish card is opened",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "privacy: opening the Publish card loads the human check",
+   "ok": true,
+   "note": ""
+  },
+  {
    "name": "publish: link has the form /folio/?id=<12 chars>",
    "ok": true,
-   "note": "http://x.test/folio/?id=dcTs7yfR88Q3"
+   "note": "http://x.test/folio/?id=tKgbpRJkKbrK"
   },
   {
    "name": "publish: Turnstile rendered with the public site key and action folio-publish",

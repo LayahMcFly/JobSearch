@@ -65,6 +65,10 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     const t = await p.textContent('[data-card=online]'); eq('unconfigured: card says publishing is not connected, no Publish button', /not connected yet/.test(t) && !(await p.$('[data-pub=publish]')));
     await p.goto(HOME + '?id=AbCdEfGhJkMn'); await p.waitForTimeout(300); eq('unconfigured: viewer link shows "not available"', /not available/.test(await p.textContent('#viewMsg'))); await ctx.close(); }
 
+  { const ctx = await browser.newContext(); await wire(ctx); const p = await ctx.newPage(); const hits = []; p.on('request', r => { if (r.url().includes('challenges.cloudflare.com')) hits.push(r.url()); });
+    await p.goto(HOME); await p.waitForFunction('typeof D !== "undefined" && document.querySelector("#panel").children.length'); await p.waitForTimeout(600);
+    eq('privacy: Turnstile is not contacted until the Publish card is opened', hits.length === 0, hits.join());
+    await p.click('[data-card=online] summary'); await p.waitForTimeout(600); eq('privacy: opening the Publish card loads the human check', hits.length >= 1); await ctx.close(); }
   /* ---- publish, copy link, view ---- */
   const A = await editor(); const link = await publish(A);
   const post = seen.find(s => s.method === 'POST');
