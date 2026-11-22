@@ -178,8 +178,10 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.2';
 const RELEASES = [
+  ['v1.1.2', 'The Publish button can always be pressed. If the consent box or the human check is not done, a message says which. The human check shows its status and an error code if it cannot run.'],
+  ['v1.1.1', 'The human check (Turnstile) now loads only when you open the Publish online card, so Folio contacts no outside service while you edit. The consent checkbox is a full-size tap target.'],
   ['v1.1.0', 'Publish online: Publish, Copy link, View page, Update and Unpublish with a generated page ID. Viewing needs no account. A separate private edit key, kept out of links and backups, controls updates. Publishing recovery file for other devices.'],
   ['v1.0.1', 'Safer and clearer: the Whole site preview is now a demonstration that cannot send anything; form results are read from each service\'s reply and never claim an email was sent; all text is escaped for where it lands (fixes a thank-you message that could break the page); email mode needs a valid recipient and shows a Copy address option; readable colors on every paper; themed confirmation boxes; larger touch targets; a Folio favicon.'],
   ['v1.0.0', 'First release: resume editor, 6 layouts, 6 font pairs, colors and paper tone, live preview, Save as PDF, one-page site download with services, a poll question and a hire-me form (Formspree, Web3Forms or email), backup and restore.']

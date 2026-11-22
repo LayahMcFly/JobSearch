@@ -59,6 +59,8 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
   worker = (await import(pathToFileURL(path.join(__dirname, '..', 'worker', 'folio-pages.mjs')).href)).default;
   browser = await chromium.launch(); newEnv();
 
+  eq('footer: shows the current version and the release list starts with it', await (async () => { const ctx = await browser.newContext(); await wire(ctx); const p = await ctx.newPage(); await p.goto(HOME); await p.waitForFunction('typeof D !== "undefined"'); const r = await p.evaluate(() => [document.querySelector('#ver').textContent, APP_VERSION, RELEASES[0][0]]); await ctx.close(); return r[0] === 'Folio ' + r[1] && r[1] === r[2]; })());
+
   /* ---- not connected ---- */
   { const ctx = await browser.newContext(); await ctx.route('**/*', r => r.request().url().startsWith(HOME) ? r.fulfill({ body: RAW, contentType: 'text/html' }) : r.abort());
     const p = await ctx.newPage(); await p.goto(HOME); await p.evaluate(() => { openCards.online = true; renderPanel(); });
