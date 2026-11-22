@@ -121,6 +121,9 @@ dialog.confirm-card::backdrop{background:rgba(42,36,31,.5)}
 dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card p{margin:0 0 1.1rem;color:var(--muted)}
 .cf-actions{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
 
+.update-banner{position:fixed;top:.6rem;left:50%;transform:translateX(-50%);z-index:2000;width:min(34rem,calc(100% - 1.2rem));display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .7rem;padding:.75rem .9rem;border:1px solid var(--accent-line,var(--border));border-radius:16px;background:var(--surface);color:var(--text);box-shadow:0 8px 28px color-mix(in srgb,var(--accent) 30%,transparent)}
+.update-banner p{margin:0;flex:1 1 15rem}
+.update-banner[hidden]{display:none}
 /* published-page viewer (?id=...) */
 html.viewer body>*:not(#viewer):not(script){display:none!important}
 #viewer{position:fixed;inset:0;background:#fff}#viewFrame{display:block;width:100%;height:100%;border:0;background:#fff}#viewFrame[hidden],#viewMsg[hidden]{display:none}
@@ -162,6 +165,8 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<div id="updateBanner" class="update-banner" role="status" aria-live="polite" hidden></div>
+
 <div id="viewer" hidden><p id="viewMsg" class="view-msg" role="status"></p><iframe id="viewFrame" title="Published page" hidden sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></div>
 
 <dialog id="confirmDialog" class="confirm-card" role="alertdialog" aria-labelledby="cfTitle" aria-describedby="cfMsg">
@@ -178,8 +183,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.2';
+const APP_VERSION = 'v1.1.3';
 const RELEASES = [
+  ['v1.1.3', 'A banner at the top tells you when a newer version of Folio is published, with Update now and Later, the same as Job Search. Your resume and publishing access stay as they are.'],
   ['v1.1.2', 'The Publish button can always be pressed. If the consent box or the human check is not done, a message says which. The human check shows its status and an error code if it cannot run.'],
   ['v1.1.1', 'The human check (Turnstile) now loads only when you open the Publish online card, so Folio contacts no outside service while you edit. The consent checkbox is a full-size tap target.'],
   ['v1.1.0', 'Publish online: Publish, Copy link, View page, Update and Unpublish with a generated page ID. Viewing needs no account. A separate private edit key, kept out of links and backups, controls updates. Publishing recovery file for other devices.'],
@@ -832,6 +838,28 @@ $('#notesBtn').addEventListener('click', () => $('#notesDialog').showModal());
 $('#notesClose').addEventListener('click', () => $('#notesDialog').close());
 $('#notesDialog').addEventListener('click', e => { if (e.target === $('#notesDialog')) $('#notesDialog').close(); });
 if (VIEWER) startViewer(); else { renderPanel(); refresh(); }
+// --- New version notice: same behavior as Job Search. Reads the published page now and then; a newer APP_VERSION shows a banner that offers to reload.
+const versionParts = v => String(v).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+function isNewerVersion(a, b) { const x = versionParts(a), y = versionParts(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; }
+async function checkForUpdate() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const res = await fetch(location.origin + location.pathname + '?versioncheck=' + Date.now(), { cache: 'no-store', credentials: 'omit' });
+    if (!res.ok) return;
+    const m = (await res.text()).match(/const APP_VERSION = '(v[\d.]+)'/);
+    if (!m || !isNewerVersion(m[1], APP_VERSION)) return;
+    let skipped = ''; try { skipped = sessionStorage.getItem('folio.skipUpdate') || ''; } catch (e) { /* fine */ }
+    if (skipped === m[1]) return;
+    const box = document.querySelector('#updateBanner');
+    box.innerHTML = `<p><strong>A new version is out: ${m[1]}.</strong> You have ${APP_VERSION}. Your resume, style and publishing access stay as they are.</p><button type="button" class="btn btn-primary" id="updateNowBtn">Update now</button><button type="button" class="btn" id="updateLaterBtn">Later</button>`;
+    box.hidden = false;
+    document.querySelector('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + location.hash; });
+    document.querySelector('#updateLaterBtn').addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('folio.skipUpdate', m[1]); } catch (e) { /* fine */ } });
+  } catch (e) { /* offline or blocked: try again later */ }
+}
+function watchForUpdate() { if (VIEWER) return; checkForUpdate(); setInterval(checkForUpdate, 5 * 60 * 1000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); }); }
+watchForUpdate();
+
 </script>
 </body>
 </html>
