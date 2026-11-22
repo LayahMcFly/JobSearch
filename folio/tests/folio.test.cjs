@@ -288,7 +288,7 @@ async function inspectPage(p, label, expectScripts) {
     if (!OLD) return skip('  v1.0.0 data loads in this version', 'set FOLIO_OLD=/path/to/old/index.html to run');
     serve = OLD; const p = await editor(); await openAll(p); await p.fill('[data-f=name]', 'Old Data Name'); await p.click('[data-st=layout][data-v=bold]'); await p.click('.sw[data-v="#1d5b86"]'); await p.click('[data-add=services]'); await p.waitForTimeout(500);
     const dl = p.waitForEvent('download'); await p.click('#backupBtn'); const d = await dl; const bf = path.join(tmp, 'old-backup.json'); await d.saveAs(bf);
-    const canon = o => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v); const oldD = canon(JSON.parse(await p.evaluate(() => JSON.stringify(D))));
+    const canon = o => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([k, y]) => !(k === 'portfolio' && Array.isArray(y) && !y.length)).sort()) : v); const oldD = canon(JSON.parse(await p.evaluate(() => JSON.stringify(D))));
     serve = APP; await p.reload(); await p.waitForFunction('typeof D !== "undefined"'); await openAll(p); const nowD = canon(JSON.parse(await p.evaluate(() => JSON.stringify(D))));
     { const stNow = await p.evaluate(() => JSON.stringify(ST)); eq('  data saved by v1.0.0 loads unchanged (resume data and style)', nowD === oldD && /bold/.test(stNow) && /1d5b86/.test(stNow), nowD === oldD ? stNow : 'D differs: ' + oldD.slice(0, 60) + ' vs ' + nowD.slice(0, 60)); }
     await p.evaluate(() => { D.name = 'x'; refresh(); }); await p.setInputFiles('#restoreFile', bf); await p.waitForTimeout(500);

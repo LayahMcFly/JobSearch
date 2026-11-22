@@ -2,7 +2,7 @@
    Real Folio page in Chromium + the REAL Worker code + real SQLite standing in for D1 (see d1-shim.cjs).
    Turnstile (the widget script and siteverify) is SIMULATED. Nothing here touches Cloudflare. */
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), crypto = require('crypto'), { pathToFileURL } = require('url');
-const { makeD1, WRITE_LIMIT } = require('./d1-shim.cjs');
+const { makeD1, WRITE_LIMIT } = require('./d1-shim.cjs'), { makeR2 } = require('./r2-shim.cjs'), vm = require('vm');
 const results = []; const rec = (n, ok, note) => { results.push({ name: n, ok, note: note || '' }); console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || !note ? '' : '  :: ' + note)); };
 const eq = (n, c, note) => rec(n, !!c, note);
 const HOME = 'http://x.test/folio/', API = 'https://folio-pages.test', SECRET = 'SECRET-turnstile-value-9f3a', SITEKEY = 'TEST-SITEKEY';
@@ -17,7 +17,7 @@ globalThis.fetch = async (url, init) => { // Worker -> Turnstile siteverify (sim
   const tok = new URLSearchParams(String(init.body)).get('response'); const ok = tok !== 'bad-token';
   return new Response(JSON.stringify(ok ? { success: true, hostname: 'x.test', action: 'folio-publish' } : { success: false, 'error-codes': ['invalid-input-response'] }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
-const newEnv = x => { env = Object.assign({ DB: makeD1(), TURNSTILE_SECRET: SECRET, ALLOWED_ORIGIN: 'http://x.test', TURNSTILE_HOSTNAMES: 'x.test' }, x || {}); mode = {}; seen = []; };
+const newEnv = x => { env = Object.assign({ DB: makeD1(), MEDIA: makeR2(), TURNSTILE_SECRET: SECRET, ALLOWED_ORIGIN: 'http://x.test', TURNSTILE_HOSTNAMES: 'x.test' }, x || {}); mode = {}; seen = []; };
 async function wire(ctx) {
   const ip = '198.51.100.' + (ipN++);
   await ctx.route('**/*', async r => {
@@ -30,9 +30,10 @@ async function wire(ctx) {
       if (mode.network) return r.abort();
       if (mode.html) return r.fulfill({ status: 503, contentType: 'text/html', body: '<html>error code: 1027</html>' });
       const hdr = { 'CF-Connecting-IP': ip }; for (const k of ['origin', 'authorization', 'content-type']) if (h[k]) hdr[k] = h[k];
-      const res = await worker.fetch(new Request(u, { method: req.method(), headers: hdr, body: body || undefined }), env);
+      const buf = req.postDataBuffer(); if (buf && req.method() === 'PUT' && /\/media\//.test(u)) hdr['content-length'] = String(buf.length); // a real browser sends this itself
+      const res = await worker.fetch(new Request(u, { method: req.method(), headers: hdr, body: buf || undefined }), env);
       const out = {}; res.headers.forEach((v, k) => out[k] = v);
-      return r.fulfill({ status: res.status, headers: out, body: await res.text() });
+      return r.fulfill({ status: res.status, headers: out, body: Buffer.from(await res.arrayBuffer()) });
     }
     r.abort();
   });
@@ -198,6 +199,81 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     const hf = await vFrame(HV);
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
+
+  /* ---- portfolio files ---- */
+  { const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'folio-pf-'));
+    const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const wr = (n, b) => { const f = path.join(tmp, n); fs.writeFileSync(f, b); return f; };
+    const png = wr('work.png', PNG), mp4 = wr('demo.mp4', Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(500, 1)])), fake = wr('fake.png', Buffer.from('<svg onload=alert(1)>')), heic = wr('photo.heic', Buffer.alloc(50, 1)), huge = wr('huge.mp4', Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(15 * 1024 * 1024 + 10, 2)])), mov = wr('clip.mov', Buffer.alloc(50, 1));
+    const P = await editor(); await fill(P); await P.evaluate(() => { openCards.portfolio = true; renderPanel(); });
+    eq('portfolio: the card exists with an Add button and a themed file picker', await P.isVisible('[data-pf=pick]'));
+    await P.setInputFiles('#pfFile', [png, mp4]); await P.waitForFunction(() => D.portfolio.length === 2);
+    eq('portfolio: a real PNG and an MP4 are accepted, with an image thumbnail', await P.evaluate(() => D.portfolio.map(m => m.kind).join() === 'image,video' && !!document.querySelector('.pfthumb[src^="blob:"]')));
+    await P.setInputFiles('#pfFile', [fake, heic, huge, mov]); await P.waitForTimeout(500);
+    const m1 = await P.textContent('#pfMsg');
+    eq('portfolio: fake PNG, HEIC, a 16 MB video and .mov are refused, each with its own plain reason', await P.evaluate(() => D.portfolio.length) === 2 && /fake\.png/.test(m1) && /HEIC/.test(m1) && /huge\.mp4.*15 MB/.test(m1) && /\.mov/.test(m1), m1);
+    await P.fill('[data-l=portfolio][data-k=caption]', 'Brand guide'); await P.fill('[data-l=portfolio][data-k=alt] >> nth=0', 'A printed guide');
+    const view = await P.evaluate(() => buildSite(D, ST, { preview: true, mediaUrls: previewMedia() }));
+    eq('portfolio: gallery shows in the site preview with caption and description', /class="port no-print"/.test(view) && /Brand guide/.test(view) && /alt="A printed guide"/.test(view) && /<video[^>]+controls/.test(view) && /blob:/.test(view));
+    const dl = await P.evaluate(async () => buildSite(D, ST, { mediaUrls: await downloadMedia() }));
+    eq('portfolio: the downloaded site holds the files inside it (no outside links)', /src="data:image\/png;base64,/.test(dl) && /src="data:video\/mp4;base64,/.test(dl) && !/blob:/.test(dl));
+    eq('portfolio: the resume itself and the printed PDF never include the gallery', !/class="port/.test(await P.evaluate(() => buildSite(D, ST, { resumeOnly: true, mediaUrls: previewMedia() }))));
+    await P.reload(); await P.waitForFunction(() => typeof D !== 'undefined' && pfReady === true && mediaBlobs.size === 2);
+    eq('portfolio: files survive a reload (kept in this browser)', await P.evaluate(() => D.portfolio.length === 2 && pfMissing().length === 0));
+    for (let i = 0; i < 4; i++) { await P.setInputFiles('#pfFile', [png]); await P.waitForTimeout(150); }
+    await P.setInputFiles('#pfFile', [png]); await P.waitForTimeout(200); eq('portfolio: a 7th file gets a plain refusal', /Only 6 files fit/.test(await P.textContent('#pfMsg')) && await P.evaluate(() => D.portfolio.length) === 6);
+    await P.evaluate(() => { D.portfolio.splice(2); mediaPrune(); renderPanel(); }); await P.waitForTimeout(200);
+    // publish with files
+    await P.evaluate(() => { openCards.online = true; openCards.pub = true; openCards.portfolio = true; renderPanel(); });
+    newEnv(); const link = await publish(P); const id = new URL(link).searchParams.get('id');
+    eq('portfolio publish: files are uploaded after the page is saved and the message says so', env.MEDIA._files.size === 2 && /2 portfolio files uploaded/.test(await msg(P)), await msg(P));
+    const V = await P.ctx.newPage(); await V.goto(link); const vf = async () => { for (let i = 0; i < 40; i++) { const f = await vFrame(V); if (f && await f.$('img')) return f; await V.waitForTimeout(100); } return null; };
+    const f = await vf(); await V.waitForTimeout(400);
+    eq('portfolio viewer: the published page shows the picture from the service', !!f && await f.evaluate(() => { const i = document.querySelector('.pfi img'); return !!i && i.complete && i.naturalWidth === 1 && i.src.includes('/api/media/'); }));
+    const sand = await V.evaluate(() => document.querySelector('#viewFrame').getAttribute('sandbox')); eq('portfolio viewer: the page stays sandboxed (no same-origin)', !/allow-same-origin/.test(sand));
+    // update: remove one, add nothing -> deleted from storage
+    await P.evaluate(() => { const m = D.portfolio.pop(); mediaForget(m.id); renderPanel(); change(); }); await P.click('[data-pub=update]'); await P.waitForFunction(() => /confirmed the update/.test(document.querySelector('#pubLive').textContent), null, { timeout: 6000 });
+    eq('portfolio update: a file removed in Folio is deleted from the service', env.MEDIA._files.size === 1 && rows('media') === 1);
+    // update: add a file -> uploaded
+    await P.setInputFiles('#pfFile', [png]); await P.waitForFunction(() => D.portfolio.length === 2); await P.click('[data-pub=update]'); await P.waitForFunction(() => /1 portfolio file uploaded/.test(document.querySelector('#pubLive').textContent), null, { timeout: 6000 });
+    eq('portfolio update: a new file is uploaded and the page lists it', env.MEDIA._files.size === 2);
+    // load published on a fresh device copies the files
+    const P2 = await open(HOME); await P2.waitForFunction('typeof D !== "undefined"'); const rec = await P.evaluate(() => ({ pageId: PUB.id, key: PUB.key })); await P2.evaluate(r => { PUB = { id: r.pageId, key: r.key, api: PUBLISH.api, at: 1, snap: '', saved: true, up: [] }; savePub(); }, rec);
+    await P2.reload(); await P2.waitForFunction('typeof D !== "undefined"'); await P2.evaluate(() => { openCards.online = true; renderPanel(); });
+    await P2.evaluate(() => { loadPublished(); }); await P2.click('#cfOk'); await P2.waitForFunction(() => /Loaded the published version/.test(document.querySelector('#pubLive').textContent), null, { timeout: 8000 });
+    eq('portfolio: loading the published page on another device copies its files so nothing is lost on the next update', await P2.evaluate(() => D.portfolio.length === 2 && pfMissing().length === 0 && PUB.up.length === 2));
+    await P2.ctx.close();
+    // unpublish removes everything
+    await P.evaluate(() => { doUnpublish(); }); await P.click('#cfOk'); await P.waitForFunction(() => /removed/.test(document.querySelector('#pubLive').textContent), null, { timeout: 6000 });
+    eq('portfolio unpublish: every file is gone from the service', env.MEDIA._files.size === 0 && rows('media') === 0);
+    // service without file storage: blocked before anything is created
+    newEnv({ MEDIA: undefined }); await P.evaluate(() => { PUB = null; savePub(); renderPanel(); }); await verify(P); await P.click('[data-pub=publish]'); await P.waitForTimeout(800);
+    eq('portfolio: if the service cannot store files, publishing stops with a plain reason and creates nothing', /cannot store files yet/.test(await msg(P)) && rows('pages') === 0, await msg(P));
+    await P.ctx.close(); await V.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+
+  /* ---- Google Apps Script mode ---- */
+  { const code = (LIVE.match(/const GSCRIPT_CODE = `([\s\S]*?)`;/) || [])[1]; const src = code ? eval('`' + code + '`') : '';
+    const sent = []; const sandbox = { ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ t, setMimeType() { return this; } }) }, Session: { getEffectiveUser: () => ({ getEmail: () => 'me@gmail.com' }) }, MailApp: { sendEmail: o => sent.push(o) }, JSON, String };
+    vm.createContext(sandbox); vm.runInContext(src, sandbox);
+    const post = o => vm.runInContext('doPost', sandbox)({ postData: { contents: typeof o === 'string' ? o : JSON.stringify(o) } }).t;
+    eq('google script: sends one email to the account owner with the visitor as reply-to', JSON.parse(post({ name: 'Sam', email: 'sam@x.com', need: 'Blog', message: 'Hi' })).ok === true && sent.length === 1 && sent[0].to === 'me@gmail.com' && sent[0].replyTo === 'sam@x.com' && /Hi/.test(sent[0].body));
+    sent.length = 0; post({ name: 'Eve\r\nBcc: x@y.com', email: 'e@x.com', message: 'm' });
+    eq('google script: line breaks in the name cannot inject mail headers', sent.length === 1 && !/[\r\n]/.test(sent[0].subject));
+    sent.length = 0; eq('google script: missing name, bad email or bad JSON sends nothing and says so', [JSON.parse(post({ name: '', email: 'a@b.com' })).ok, JSON.parse(post({ name: 'a', email: 'nope' })).ok, JSON.parse(post('not json')).ok].every(v => v === false) && sent.length === 0);
+    const P = await editor(); await fill(P);
+    await P.evaluate(() => { D.formMode = 'gscript'; D.formEndpoint = ''; renderPanel(); openCards.send = true; renderPanel(); });
+    eq('google mode: the card shows the steps, the script and a Copy button', await P.isVisible('#gsCode') && await P.isVisible('#gsCopy') && /Web app URL/.test(await P.textContent('#panel')));
+    eq('google mode: a wrong address is stopped with a plain reason', await P.evaluate(() => { D.formEndpoint = 'https://example.com/exec'; const v = validateExport(); return !!v && /script\.google\.com/.test(v.msg); }));
+    const URL_ = 'https://script.google.com/macros/s/AKfycbxTEST123/exec'; await P.evaluate(u => { D.formEndpoint = u; }, URL_);
+    eq('google mode: the real address is accepted', await P.evaluate(() => validateExport() === null));
+    const html = await P.evaluate(() => buildSite(D, ST, {})); const posts = [];
+    const Q = await P.ctx.newPage(); await Q.route('https://script.google.com/**', async r => { posts.push({ ct: r.request().headers()['content-type'], body: r.request().postData() }); const bad = posts.length === 2; await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(bad ? { ok: false, error: 'Could not send' } : { ok: true }) }); });
+    await Q.setContent(html); await Q.fill('[name=name]', 'Sam'); await Q.fill('[name=email]', 'sam@x.com'); await Q.check('input[name=need]'); await Q.click('.cta'); await Q.waitForFunction(() => !document.getElementById('hireDone').hidden, null, { timeout: 4000 });
+    eq('google mode: the form sends plain text (no preflight), one request, and success shows the recorded page', posts.length === 1 && /^text\/plain/.test(posts[0].ct) && JSON.parse(posts[0].body).email === 'sam@x.com' && /Your response has been recorded/.test(await Q.textContent('#hireDone')));
+    await Q.click('.again'); await Q.fill('[name=name]', 'Sam'); await Q.fill('[name=email]', 'sam@x.com'); await Q.check('input[name=need]'); await Q.click('.cta'); await Q.waitForFunction(() => /not accepted/.test(document.querySelector('.msg').textContent), null, { timeout: 4000 });
+    eq('google mode: when the script reports a failure, the page says so and keeps the answers', await Q.evaluate(() => document.getElementById('hireDone').hidden && document.querySelector('[name=name]').value === 'Sam'));
+    const csp = (await P.evaluate(() => buildSite(D, ST, { viewer: true }))).match(/connect-src[^;]*/)[0]; eq('google mode: the published page may contact Google script addresses only for this', /script\.google\.com/.test(csp) && /script\.googleusercontent\.com/.test(csp));
+    await P.ctx.close(); }
 
   /* ---- one Download menu ---- */
   { const P = await editor(); const vis = async sel => P.evaluate(s => { const e = document.querySelector(s); return !!e && e.getClientRects().length > 0; }, sel);

@@ -89,6 +89,7 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .mini .h{left:0;right:0;top:0;height:16px;border-radius:0}.mini .sb{left:0;top:0;bottom:0;width:30%;border-radius:0}.mini .rule{height:2px;left:8%;right:8%}
 .aa{display:flex;align-items:baseline;justify-content:center;gap:.3rem;height:64px;border-radius:6px;border:1px solid var(--border);background:var(--mp,#fff);color:var(--mk,#2a241f);margin-bottom:.35rem;overflow:hidden}
 .aa em{font-style:normal;font-size:2rem;line-height:1;color:var(--mc,#8a3f1f)}.aa small{font-size:1.15rem;line-height:1}
+.pf .pfthumb{display:block;width:100%;max-height:200px;object-fit:contain;border-radius:8px;background:var(--surface-2,#0001);border:1px solid var(--border)}.pfthumb.miss{display:grid;place-items:center;min-height:90px;color:var(--muted);font-size:.9rem}.pfbtns{display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}.pf .entry-head small{font-weight:400;color:var(--muted)}
 .swatches{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center}
 .sw{width:44px;height:44px;border-radius:50%;border:3px solid var(--surface);box-shadow:0 0 0 1.5px var(--border);cursor:pointer;padding:0}
 .sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--accent-text)}
@@ -197,8 +198,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.11';
+const APP_VERSION = 'v1.2.0';
 const RELEASES = [
+  ['v1.2.0', 'Portfolio: add up to 6 images or videos (15 MB each) with captions and descriptions. They show in a gallery on your site, go inside the downloaded site, and upload when you publish online (publishing needs file storage turned on). New free way to get messages: Google Apps Script mode emails you directly from your own Google account, with copy-and-paste setup in section 7.'],
   ['v1.1.11', 'The two download buttons now live under one Download button at the top. Open it to choose Download resume PDF or Download my site.'],
   ['v1.1.10', 'The PDF button now reads Download resume PDF. It asks whether to include the paper color, and warns that painted backgrounds use much more ink when printed. Plain white is the default choice.'],
   ['v1.1.9', 'The Style section now shows a small preview on each choice: layouts drawn in your chosen color and paper, fonts shown as Aa (heading and text font), and paper tones with a sample Aa. You can compare styles without switching to the preview.'],
@@ -219,6 +221,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 
 /* ---------- 1. data and sample ---------- */
 const KEY = 'folio:v1';
+const ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/;
 /* Publishing connection. Both values are public. Fill them in after the publishing service exists (folio/worker/SETUP.md).
    api = the service's address with no trailing slash. siteKey = the Turnstile widget's SITE key. The Turnstile SECRET key
    must never be put in this file: it belongs only in the Worker's secret settings. */
@@ -240,8 +243,12 @@ const SAMPLE = {
   ],
   availability: 'Taking new clients in January', ctaLabel: 'Hire me', formTitle: 'Tell me about your project',
   pollQuestion: 'What do you need help with?', pollOptions: 'Articles or blog posts\nWebsite copy\nBrand voice\nSomething else',
-  formMode: 'email', formEndpoint: '', thanks: 'Thank you. I will reply within two business days.'
+  formMode: 'email', formEndpoint: '', thanks: 'Thank you. I will reply within two business days.',
+  portfolio: []
 };
+const MEDIA_MAX = 15 * 1024 * 1024, MEDIA_FILES = 6;
+const MEDIA_TYPES = { 'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image', 'video/mp4': 'video', 'video/webm': 'video' };
+const MEDIA_EXT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm' };
 const STYLE0 = { layout: 'modern', font: 'editorial', color: '#8a3f1f', paper: 'white' };
 let D = JSON.parse(JSON.stringify(SAMPLE)), ST = Object.assign({}, STYLE0);
 let saveTimer = 0;
@@ -331,6 +338,14 @@ function resumeHtml(d) {
         ${skillHtml ? `<section class="only-main"><h3>Skills</h3>${skillHtml}</section>` : ''}
         ${links ? `<section class="only-main"><h3>Links</h3><ul class="plain inline">${links}</ul></section>` : ''}
       </div></div></section>`;
+}
+function portfolioHtml(d, opt) {
+  const urls = opt.mediaUrls || {}, items = (d.portfolio || []).filter(m => urls[m.id]);
+  if (!items.length) return '';
+  const fig = m => m.kind === 'image'
+    ? `<img src="${esc(urls[m.id])}" alt="${esc(m.alt || m.caption || '')}" loading="lazy">`
+    : `<video src="${esc(urls[m.id])}" controls preload="metadata" playsinline aria-label="${esc(m.alt || m.caption || 'Video')}"></video>`;
+  return `<section class="port no-print" id="portfolio"><div class="port-in"><h2>Portfolio</h2><div class="pfgrid">${items.map(m => `<figure class="pfi">${fig(m)}${m.caption ? `<figcaption>${esc(m.caption)}</figcaption>` : ''}</figure>`).join('')}</div></div></section>`;
 }
 function hireHtml(d, opt) {
   const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}</div>`).join('');
@@ -427,7 +442,8 @@ function siteScript() {
     var payload = web3 ? { access_key: C.endpoint, subject: 'Hire inquiry from ' + d.name, from_name: d.name, email: d.email, need: d.need, message: d.message } : d;
     var ctl = window.AbortController ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, 20000) : 0;
-    fetch(web3 ? 'https://api.web3forms.com/submit' : C.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined })
+    var gs = C.mode === 'gscript'; // Google's script address answers a plain-text POST (no preflight); a JSON content type would be blocked
+    fetch(web3 ? 'https://api.web3forms.com/submit' : C.endpoint, { method: 'POST', headers: gs ? { 'Content-Type': 'text/plain;charset=utf-8' } : { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined })
       .then(function (r) { return r.text().then(function (t) { return classify(C.mode, r.status, t); }); })
       .catch(function () { return { ok: null, network: true }; })
       .then(function (res) { clearTimeout(timer); busy = false; btn.disabled = false; finish(res); });
@@ -460,7 +476,7 @@ function buildSite(d, st, opt) {
   const paperKey = own(PAPERS, st.paper) ? st.paper : STYLE0.paper, dark = paperKey === 'dark';
   const pal = palette(st.color, paperKey), print = palette(st.color, 'white');
   const fam = [...new Set([f[1], f[2]])].filter(x => x !== 'Georgia').map(x => `family=${x.replace(/ /g, '+')}:wght@400;600;700`).join('&');
-  const cfg = jsonForScript({ mode: ['email', 'formspree', 'web3forms'].includes(d.formMode) ? d.formMode : 'email', endpoint: opt.preview ? '' : String(d.formEndpoint || '').trim(), email: validEmail(d.email) ? String(d.email).trim() : '', thanks: String(d.thanks || 'Thank you.'), demo: !!opt.preview });
+  const cfg = jsonForScript({ mode: ['email', 'formspree', 'web3forms', 'gscript'].includes(d.formMode) ? d.formMode : 'email', endpoint: opt.preview ? '' : String(d.formEndpoint || '').trim(), email: validEmail(d.email) ? String(d.email).trim() : '', thanks: String(d.thanks || 'Thank you.'), demo: !!opt.preview });
   const css = `
 :root{${palVars(pal)};--fh:${f[3]};--fb:${f[4]}}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:${dark ? '#0f0d12' : '#eceae6'};color:var(--ink);font:16px/1.55 var(--fb);-webkit-font-smoothing:antialiased}
@@ -490,6 +506,9 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .tpl-modern .cols{display:grid;grid-template-columns:30% 1fr;margin:0}.tpl-modern .side{background:var(--soft);padding:1.4rem 1.4rem 1.4rem 2.4rem}.tpl-modern .mn{padding:.4rem 2.4rem 2rem 1.8rem}
 .tpl-modern .only-side{display:block}.tpl-modern .only-main{display:none}.tpl-modern .side h3{margin-top:1.1rem}.tpl-modern .contact-stack{margin:0;font-size:.9em;word-break:break-word}.tpl-modern .contact-stack a{color:inherit}.tpl-modern .chips{display:grid}.tpl-modern .chips li{background:var(--paper)}
 @media (max-width:640px){.resume{padding:1.6rem 1.2rem}.tpl-bold .hd{margin:-1.6rem -1.2rem 0;padding:1.6rem 1.2rem}.tpl-modern .resume{padding:0}.tpl-modern .cols{grid-template-columns:1fr}.tpl-modern .hd,.tpl-modern .side,.tpl-modern .mn{padding-left:1.2rem;padding-right:1.2rem}}
+.port{max-width:860px;margin:1.2rem auto;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}.port-in{padding:2.2rem 2.6rem}@media (max-width:640px){.port-in{padding:1.6rem 1.2rem}}
+.port h2{font-size:1.8rem;margin:0 0 1rem}.pfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1.1rem}.pfi{margin:0;display:grid;gap:.5rem;align-content:start}
+.pfi img,.pfi video{display:block;width:100%;height:auto;max-height:70vh;object-fit:contain;border-radius:8px;border:1px solid var(--line);background:var(--soft)}.pfi video{background:#000}.pfi figcaption{color:var(--muted);font-size:.95em}
 .hire{max-width:860px;margin:1.2rem auto 3rem;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
 .hire-in{padding:2.2rem 2.6rem}@media (max-width:640px){.hire-in{padding:1.6rem 1.2rem}}
 .hire h2{font-size:1.8rem}.avail{display:inline-flex;align-items:center;gap:.5rem;background:var(--soft);padding:.25rem .8rem;border-radius:999px;margin:.6rem 0 0;font-size:.92em}.dot{width:9px;height:9px;border-radius:50%;background:#2f9e5b}
@@ -526,8 +545,8 @@ fieldset.poll{min-width:0}.poll legend{font-weight:500;padding:0 .2rem;margin-le
 @media print{${opt.printPaper ? 'html,body{background:var(--paper)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.sheet{background:var(--paper)}' : ':root{' + palVars(print) + '}body{background:#fff}'}.no-print,.topbar{display:none!important}.sheet::after{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .job,.bul li{break-inside:avoid}section h3,.side h3,.hd{break-after:avoid}@page{margin:10mm}}`;
   const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
-    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
-  const csp = opt.viewer ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://formspree.io https://api.web3forms.com; form-action 'none'; base-uri 'none'"><meta name="robots" content="noindex,nofollow">` : opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'">` : '';
+    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : portfolioHtml(d, opt) + hireHtml(d, opt)}</main>`;
+  const csp = opt.viewer ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data: ${PUBLISH.api}; media-src ${PUBLISH.api}; connect-src https://formspree.io https://api.web3forms.com https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'"><meta name="robots" content="noindex,nofollow">` : opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data: blob:; media-src blob:; form-action 'none'; base-uri 'none'">` : '';
   // The closing tags are written as <\/script> so this page's own HTML parser never sees a real closing tag inside this code.
   const script = opt.resumeOnly ? '' : `<script type="application/json" id="cfg">${cfg}<\/script><script>(${siteScript.toString()})();<\/script>`;
   return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -539,7 +558,26 @@ ${fam ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="s
 /* ---------- 3b. clean data on the way in (saved data and restored backups) ---------- */
 // Only known fields survive, each as text of a sane length, so a hand-edited or hostile backup cannot add
 // fields, change types or smuggle objects into the page. Missing fields fall back to the sample, as before.
-const FORM_MODES = ['email', 'formspree', 'web3forms'];
+const FORM_MODES = ['email', 'formspree', 'web3forms', 'gscript'];
+/* The small Google script that emails you. It runs in your own Google account and sends the message to that same account. */
+const GSCRIPT_CODE = `function doPost(e) {
+  var out = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+  try {
+    var d = JSON.parse(e.postData.contents);
+    var clean = function (v, n) { return String(v || '').replace(/[\\r\\n]+/g, ' ').slice(0, n); };
+    var email = clean(d.email, 254), ok = /^\\S+@\\S+\\.\\S+$/.test(email);
+    if (!clean(d.name, 120) || !ok) return out({ ok: false, error: 'Missing name or email' });
+    MailApp.sendEmail({
+      to: Session.getEffectiveUser().getEmail(),
+      replyTo: email,
+      subject: 'Hire inquiry from ' + clean(d.name, 100),
+      body: 'Name: ' + clean(d.name, 120) + '\\nEmail: ' + email + '\\nNeed: ' + clean(d.need, 200) + '\\n\\n' + String(d.message || '').slice(0, 1500)
+    });
+    return out({ ok: true });
+  } catch (err) {
+    return out({ ok: false, error: 'Could not send' });
+  }
+}`;
 function normData(x) {
   x = x && typeof x === 'object' && !Array.isArray(x) ? x : {};
   const o = {};
@@ -550,6 +588,12 @@ function normData(x) {
   for (const k in lists) {
     const [shape, max] = lists[k];
     o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
+  }
+  const seen = new Set(); o.portfolio = [];
+  if (Array.isArray(x.portfolio)) for (const m of x.portfolio) {
+    if (!m || typeof m !== 'object' || Array.isArray(m) || typeof m.id !== 'string' || !ID_RE.test(m.id) || seen.has(m.id) || !own(MEDIA_TYPES, m.type) || MEDIA_TYPES[m.type] !== m.kind) continue;
+    const sz = Number(m.size); if (!Number.isInteger(sz) || sz < 1 || sz > MEDIA_MAX || o.portfolio.length >= MEDIA_FILES) continue;
+    seen.add(m.id); o.portfolio.push({ id: m.id, kind: m.kind, type: m.type, name: typeof m.name === 'string' ? m.name.slice(0, 120) : '', caption: typeof m.caption === 'string' ? m.caption.slice(0, 200) : '', alt: typeof m.alt === 'string' ? m.alt.slice(0, 200) : '', size: sz });
   }
   return o;
 }
@@ -593,6 +637,7 @@ function renderPanel() {
       `${LF('education', i, 'degree', 'Degree or course')}<div class="row2">${LF('education', i, 'school', 'School')}${LF('education', i, 'dates', 'Dates')}</div>`)).join('') + `<button type="button" class="btn" data-add="education">Add education</button>`) +
     card('skills', '4. Skills and links', F('Skills', 'skills', { area: true, rows: 3, hint: ' Separate with commas.' }) +
       D.links.map((l, i) => entry('links', i, l.label, `<div class="row2">${LF('links', i, 'label', 'Label')}${LF('links', i, 'url', 'Address')}</div>`)).join('') + `<button type="button" class="btn" data-add="links">Add a link</button>`) +
+    card('portfolio', '4b. Portfolio: images and videos', portfolioCardHtml()) +
     card('style', '5. Style, fonts and colors',
       `<div><b>Layout</b><div class="choices" style="margin-top:.5rem">${LAYOUTS.map(([k, n, d]) => `<button type="button" class="choice" data-st="layout" data-v="${k}" aria-pressed="${ST.layout === k}">${miniLayout(k)}<b>${n}</b><span>${d}</span></button>`).join('')}</div></div>` +
       `<div><b>Fonts</b><div class="choices" style="margin-top:.5rem">${Object.entries(FONTS).map(([k, f]) => `<button type="button" class="choice" data-st="font" data-v="${k}" aria-pressed="${ST.font === k}"><span class="aa" aria-hidden="true"><em style="font-family:${f[3]}">Aa</em><small style="font-family:${f[4]}">Aa</small></span><b style="font-family:${f[3]}">${f[0]}</b><span>${f[1]}${f[1] !== f[2] ? ' + ' + f[2] : ''}</span></button>`).join('')}</div><p class="hint" style="margin-top:.4rem">Large Aa is the heading font, small Aa is the text font. Folio loads no outside fonts while you edit, so a font your device lacks may show as a stand-in here. The preview, PDF and published page use the real one.</p></div>` +
@@ -605,8 +650,9 @@ function renderPanel() {
       F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) +
       `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message shown once the form service accepts a message', 'thanks')) +
     card('send', '7. Where form messages go',
-      `<span class="fielderr" data-err="mode" role="alert" hidden></span><label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
+      `<span class="fielderr" data-err="mode" role="alert" hidden></span><label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="gscript"${D.formMode === 'gscript' ? ' selected' : ''}>Google Apps Script (free, emails you from your own Google account)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
       (D.formMode === 'email' ? `<p class="hint"><b>What happens:</b> when a visitor presses the button, their own email app opens with a draft addressed to ${esc(D.email || 'your email address')}. <b>The visitor has to press Send themselves.</b> Opening a draft is not sending an email, and neither this page nor Folio can tell whether it was sent, so the page never says "sent". Your address is also shown on the page with a Copy button, and the draft appears in a box to copy, for visitors without an email app. You get a message only if the visitor sends it.</p>`
+        : D.formMode === 'gscript' ? `<ol class="steps"><li>Open <b>script.google.com</b> and sign in with the Google account that should get the emails. Press <b>New project</b>.</li><li>Delete everything in the editor, then paste the script below (press Copy script).</li><li>Press <b>Deploy</b>, then <b>New deployment</b>. Click the gear and choose <b>Web app</b>. Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>. Press <b>Deploy</b>.</li><li>Google asks you to allow it to send email for you. Press <b>Authorize access</b>, choose your account, then <b>Advanced</b>, then <b>Go to project (unsafe)</b>, then <b>Allow</b>. This is your own script, so that warning is normal.</li><li>Copy the <b>Web app URL</b> (it ends in /exec) and paste it below.</li></ol><label class="f">The script<textarea readonly rows="8" id="gsCode">${esc(GSCRIPT_CODE)}</textarea></label><div class="btnrow"><button type="button" class="btn" id="gsCopy">Copy script</button><span class="hint" id="gsCopied" role="status"></span></div>` + F('Web app URL', 'formEndpoint', { ph: 'https://script.google.com/macros/s/.../exec', hint: ' Messages arrive in your Gmail inbox. Free Google accounts can send about 100 of these a day.', err: 'formEndpoint' })
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('online', '8. Publish online', onlineBody()) +
@@ -623,7 +669,7 @@ function refresh() {
   clearTimeout(prevT);
   prevT = setTimeout(() => {
     const fr = $('#frame'); let y = 0; try { y = fr.contentWindow.scrollY; } catch (e) {}
-    fr.srcdoc = buildSite(D, ST, { resumeOnly: view === 'resume', preview: view !== 'resume' });
+    fr.srcdoc = buildSite(D, ST, { resumeOnly: view === 'resume', preview: view !== 'resume', mediaUrls: view === 'resume' ? {} : previewMedia() });
     fr.onload = () => { try { fr.contentWindow.scrollTo(0, y); } catch (e) {} };
   }, 200);
 }
@@ -666,6 +712,8 @@ function validateExport() {
     if (RESERVED_MAIL.test(mail)) return { field: 'email', card: 'about', msg: `${mail} is a sample address, so drafts would go nowhere. Enter your real email address.`, mode: 'Email mode needs your real email address (step 1).' };
   } else if (D.formMode === 'formspree') {
     if (!/^https:\/\/formspree\.io\/f\/[A-Za-z0-9]+$/.test(ep)) return { field: 'formEndpoint', card: 'send', msg: 'Paste the full Formspree address, like https://formspree.io/f/abcdwxyz.' };
+  } else if (D.formMode === 'gscript') {
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(ep)) return { field: 'formEndpoint', card: 'send', msg: 'Paste the full Web app URL from Google. It starts with https://script.google.com/macros/s/ and ends with /exec.' };
   } else if (D.formMode === 'web3forms') {
     if (!/^[A-Za-z0-9-]{20,}$/.test(ep)) return { field: 'formEndpoint', card: 'send', msg: 'Paste your Web3Forms access key (a long code of letters, numbers and dashes).' };
   }
@@ -684,9 +732,13 @@ function showFieldError(v) {
   if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
   toast('The site was not downloaded. Fix the highlighted field first.');
 }
-$('#exportBtn').addEventListener('click', () => {
+$('#exportBtn').addEventListener('click', async () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
-  download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
+  const have = D.portfolio.filter(m => mediaBlobs.has(m.id)), total = have.reduce((a, m) => a + m.size, 0);
+  if (total > 20971520 && !(await confirmDialog({ title: 'This site file will be large', message: `Your portfolio files make the site file about ${mbOf(Math.round(total * 1.34))}. GitHub accepts uploads through the browser only up to 25 MB per file, and a big file is slow to open. Publishing online has no such problem. Download anyway?`, ok: 'Download anyway' }))) return;
+  if (have.length) toast('Packing your portfolio files into the site…');
+  let urls = {}; try { urls = await downloadMedia(); } catch (e) { toast('Could not read one of your portfolio files, so the download was cancelled.'); return; }
+  download('index.html', buildSite(D, ST, { mediaUrls: urls }), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
 });
 function setDl(open, focusBtn) { const b = $('#dlBtn'), m = $('#dlMenu'); m.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) $('#pdfBtn').focus(); else if (focusBtn) b.focus(); }
 $('#dlBtn').addEventListener('click', () => setDl($('#dlMenu').hidden));
@@ -715,10 +767,10 @@ document.addEventListener('click', e => {
   if (e.target.id === 'resetBtn') confirmDialog({ title: 'Start with a blank resume?', message: 'This clears your resume, services and form settings in Folio. Download a backup first if you want to keep this one.', ok: 'Clear everything' }).then(yes => {
     if (!yes) return;
     D = Object.assign(JSON.parse(JSON.stringify(SAMPLE)), { name: '', headline: '', email: '', phone: '', location: '', website: '', summary: '', experience: [{ role: '', company: '', dates: '', bullets: '' }], education: [{ school: '', degree: '', dates: '' }], skills: '', links: [], services: [], availability: '', pollOptions: '' });
-    renderPanel(); change(); const rb = $('#resetBtn'); if (rb) rb.focus();
+    mediaPrune().then(() => { renderPanel(); change(); const rb = $('#resetBtn'); if (rb) rb.focus(); });
   });
 });
-function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j || typeof j !== 'object' || !j.D || typeof j.D !== 'object') throw 0; D = normData(j.D); ST = normStyle(j.ST); renderPanel(); change(); toast('Backup restored.'); }).catch(() => toast('That file is not a Folio backup.')); }
+function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j || typeof j !== 'object' || !j.D || typeof j.D !== 'object') throw 0; D = normData(j.D); ST = normStyle(j.ST); return mediaPrune().then(() => { renderPanel(); change(); toast(D.portfolio.length ? 'Backup restored. Portfolio captions came back, but the image and video files are not in backups, so add them again.' : 'Backup restored.'); }); }).catch(() => toast('That file is not a Folio backup.')); }
 
 /* ---------- 6b. themed confirmation (replaces the browser's own confirm box) ---------- */
 // Opens as a modal (the page behind is inert and Tab stays inside), focuses Cancel first, closes on Escape or a click
@@ -736,14 +788,96 @@ function confirmDialog(o) {
 $('#cfCancel').addEventListener('click', () => $('#confirmDialog').close('cancel'));
 $('#cfOk').addEventListener('click', () => $('#confirmDialog').close('ok'));
 
+/* ---------- 6d. portfolio files: images and videos kept in this browser ---------- */
+// Files are stored in the browser's IndexedDB (localStorage is far too small). They go into a downloaded site as data, and are uploaded
+// when you publish. Backups keep the captions but not the files. Nothing leaves this browser until you publish.
+const mediaBlobs = new Map(), mediaUrls = new Map(); let mediaDb = null, mediaOk = true, pfMsg = null, pfReady = false;
+const mbOf = n => (n / 1048576).toFixed(n >= 10485760 ? 0 : 1) + ' MB';
+function mediaSniff(type, b) {
+  const a = t => [...t].map(c => c.charCodeAt(0)), at = (o, arr) => b.length >= o + arr.length && arr.every((v, i) => b[o + i] === v);
+  switch (type) {
+    case 'image/jpeg': return at(0, [0xFF, 0xD8, 0xFF]);
+    case 'image/png': return at(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    case 'image/gif': return at(0, a('GIF87a')) || at(0, a('GIF89a'));
+    case 'image/webp': return at(0, a('RIFF')) && at(8, a('WEBP'));
+    case 'video/mp4': return at(4, a('ftyp')) && !at(8, a('qt  '));
+    case 'video/webm': return at(0, [0x1A, 0x45, 0xDF, 0xA3]);
+    default: return false;
+  }
+}
+function newMediaId() { const A = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz', r = new Uint8Array(12); crypto.getRandomValues(r); return Array.from(r, v => A[v % A.length]).join(''); }
+function mediaOpen() { return new Promise(res => { try { const q = indexedDB.open('folio-media', 1); q.onupgradeneeded = () => q.result.createObjectStore('files'); q.onsuccess = () => res(q.result); q.onerror = () => res(null); q.onblocked = () => res(null); } catch (e) { res(null); } }); }
+const mediaTx = (mode, fn) => new Promise(res => { if (!mediaDb) return res(null); try { const t = mediaDb.transaction('files', mode), r = fn(t.objectStore('files')); t.oncomplete = () => res(r ? r.result : true); t.onerror = t.onabort = () => res(null); } catch (e) { res(null); } });
+async function mediaPut(id, blob) { mediaBlobs.set(id, blob); const ok = await mediaTx('readwrite', st => st.put(blob, id)); if (!ok) mediaOk = false; return !!ok; }
+function mediaForget(id) { mediaBlobs.delete(id); const u = mediaUrls.get(id); if (u) { URL.revokeObjectURL(u); mediaUrls.delete(id); } return mediaTx('readwrite', st => st.delete(id)); }
+function mediaUrl(id) { if (!mediaBlobs.has(id)) return ''; if (!mediaUrls.has(id)) mediaUrls.set(id, URL.createObjectURL(mediaBlobs.get(id))); return mediaUrls.get(id); }
+/* Delete stored files that no portfolio entry uses any more (after a restore, a reset or loading a published page). */
+async function mediaPrune() { const keep = new Set(D.portfolio.map(m => m.id)); for (const id of [...mediaBlobs.keys()]) if (!keep.has(id)) await mediaForget(id); }
+async function mediaInit() {
+  mediaDb = await mediaOpen(); if (!mediaDb) mediaOk = false;
+  if (mediaDb) { await new Promise(res => { try { const t = mediaDb.transaction('files', 'readonly'), st = t.objectStore('files'), q = st.openCursor(); q.onsuccess = () => { const c = q.result; if (c) { mediaBlobs.set(String(c.key), c.value); c.continue(); } }; t.oncomplete = () => res(); t.onerror = t.onabort = () => res(); } catch (e) { res(); } }); }
+  pfReady = true; await mediaPrune(); if (typeof renderPanel === 'function' && !VIEWER) { renderPanel(); refresh(); }
+}
+const pfMissing = () => D.portfolio.filter(m => !mediaBlobs.has(m.id));
+const previewMedia = () => { const o = {}; for (const m of D.portfolio) { const u = mediaUrl(m.id); if (u) o[m.id] = u; } return o; };
+function readDataUrl(blob) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(r.error); r.readAsDataURL(blob); }); }
+async function downloadMedia() { const o = {}; for (const m of D.portfolio) if (mediaBlobs.has(m.id)) o[m.id] = await readDataUrl(mediaBlobs.get(m.id)); return o; }
+const pfSet = (kind, text) => { pfMsg = text ? { kind, text } : null; const el = $('#pfMsg'); if (el) { el.className = 'pubmsg ' + (pfMsg ? kind : ''); el.textContent = pfMsg ? pfMsg.text : ''; el.hidden = !pfMsg; } };
+
+function portfolioCardHtml() {
+  const n = D.portfolio.length, total = D.portfolio.reduce((a, m) => a + m.size, 0);
+  const items = D.portfolio.map((m, i) => {
+    const have = mediaBlobs.has(m.id), u = mediaUrl(m.id);
+    const thumb = !have ? `<div class="pfthumb miss">${pfReady ? 'File not on this device' : 'Loading…'}</div>` : m.kind === 'image' ? `<img class="pfthumb" src="${u}" alt="">` : `<video class="pfthumb" src="${u}#t=0.1" muted preload="metadata" playsinline aria-hidden="true" tabindex="-1"></video>`;
+    return `<div class="entry pf"><div class="entry-head"><span>${esc(m.name || (m.kind === 'image' ? 'Image' : 'Video'))} <small>${m.kind === 'image' ? 'Image' : 'Video'}, ${mbOf(m.size)}</small></span>
+      <span class="pfbtns"><button type="button" class="btn btn-small" data-pf="up:${i}" aria-label="Move ${esc(m.name || 'file')} earlier"${i === 0 ? ' disabled' : ''}>&#8593;</button><button type="button" class="btn btn-small" data-pf="down:${i}" aria-label="Move ${esc(m.name || 'file')} later"${i === n - 1 ? ' disabled' : ''}>&#8595;</button><button type="button" class="btn btn-small btn-danger" data-pf="rm:${i}" aria-label="Remove ${esc(m.name || 'file')}">Remove</button></span></div>
+      ${thumb}${LF('portfolio', i, 'caption', 'Caption (shown under it)', { ph: 'What this is' })}${LF('portfolio', i, 'alt', m.kind === 'image' ? 'Describe it for people who cannot see it' : 'Describe what the video shows', { ph: m.kind === 'image' ? 'For example: a printed brand guide on a desk' : 'For example: a two minute walkthrough of my process' })}</div>`;
+  }).join('');
+  return `<p class="hint">Show your work on your site: up to ${MEDIA_FILES} images or videos, each ${mbOf(MEDIA_MAX)} or smaller (JPEG, PNG, WebP, GIF, MP4 or WebM). Files stay in this browser. They are included in your downloaded site and uploaded when you publish online. Backups keep captions but not the files.</p>` +
+    items +
+    `<div class="btnrow"><button type="button" class="btn btn-primary" data-pf="pick"${n >= MEDIA_FILES ? ' disabled' : ''}>Add images or videos</button><input type="file" id="pfFile" multiple hidden accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"></div>` +
+    `<p class="hint">${n} of ${MEDIA_FILES} files${n ? ', ' + mbOf(total) + ' in total' : ''}.${n && total > 20971520 ? ' A site file this large may be too big to upload to GitHub through the browser (25 MB limit). Publishing online avoids that.' : ''}${mediaOk ? '' : ' This browser would not let Folio keep files, so they will be lost when you close this page.'}</p>` +
+    `<p class="pubmsg${pfMsg ? ' ' + pfMsg.kind : ''}" id="pfMsg" role="status"${pfMsg ? '' : ' hidden'}>${esc(pfMsg ? pfMsg.text : '')}</p>`;
+}
+async function addMediaFiles(files) {
+  const notes = []; let added = 0;
+  for (const f of files) {
+    if (D.portfolio.length >= MEDIA_FILES) { notes.push(`Only ${MEDIA_FILES} files fit. "${f.name}" was not added.`); continue; }
+    const ext = (f.name.split('.').pop() || '').toLowerCase(), type = own(MEDIA_TYPES, f.type) ? f.type : (!f.type || f.type === 'application/octet-stream') && own(MEDIA_EXT, ext) ? MEDIA_EXT[ext] : '';
+    if (!type) { notes.push(`"${f.name}" is not a supported type.${/^(heic|heif)$/.test(ext) ? ' iPhone HEIC photos need to be saved as JPEG first.' : /^(mov)$/.test(ext) ? ' iPhone .mov videos need to be exported as MP4 first.' : ' Use JPEG, PNG, WebP, GIF, MP4 or WebM.'}`); continue; }
+    if (f.size > MEDIA_MAX) { notes.push(`"${f.name}" is ${mbOf(f.size)}. The limit is ${mbOf(MEDIA_MAX)} per file.`); continue; }
+    if (f.size < 1) { notes.push(`"${f.name}" is empty.`); continue; }
+    let head; try { head = new Uint8Array(await f.slice(0, 16).arrayBuffer()); } catch (e) { notes.push(`"${f.name}" could not be read.`); continue; }
+    if (!mediaSniff(type, head)) { notes.push(`"${f.name}" does not look like a real ${type.split('/')[1].toUpperCase()} file, so it was not added.${type === 'video/mp4' ? ' (iPhone .mov files saved as MP4 by renaming do not work. Export them as MP4.)' : ''}`); continue; }
+    const id = newMediaId(); await mediaPut(id, f);
+    D.portfolio.push({ id, kind: MEDIA_TYPES[type], type, name: f.name.slice(0, 120), caption: '', alt: '', size: f.size }); added++;
+  }
+  pfSet(notes.length ? 'err' : 'ok', (added ? `Added ${added} file${added === 1 ? '' : 's'}.` : '') + (notes.length ? (added ? ' ' : '') + notes.join(' ') : ''));
+  openCards.portfolio = true; renderPanel(); change();
+}
+document.addEventListener('click', e => { if (e.target.id !== 'gsCopy') return; const ta = $('#gsCode'), say = t => { const o = $('#gsCopied'); if (o) o.textContent = t; }; const fall = () => { try { ta.focus(); ta.select(); say(document.execCommand('copy') ? 'Copied.' : 'Select the text and copy it yourself.'); } catch (x) { say('Select the text and copy it yourself.'); } }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(GSCRIPT_CODE).then(() => say('Copied.'), fall); else fall(); });
+document.addEventListener('change', e => { if (e.target.id === 'pfFile') { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) addMediaFiles(fs); } });
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-pf]'); if (!b || b.disabled) return;
+  const [act, i0] = b.dataset.pf.split(':'), i = +i0;
+  if (act === 'pick') { const f = $('#pfFile'); if (f) f.click(); }
+  else if (act === 'up' || act === 'down') { const j = act === 'up' ? i - 1 : i + 1; if (j < 0 || j >= D.portfolio.length) return; const t = D.portfolio[i]; D.portfolio[i] = D.portfolio[j]; D.portfolio[j] = t; renderPanel(); change(); const nb = document.querySelector(`[data-pf="${act}:${j}"]`) || document.querySelector(`[data-pf="${act === 'up' ? 'down' : 'up'}:${j}"]`); if (nb) nb.focus(); }
+  else if (act === 'rm') {
+    const m = D.portfolio[i]; if (!m) return;
+    confirmDialog({ title: 'Remove this file?', message: `"${m.name || 'This file'}" will be removed from your portfolio and deleted from this browser. If you have published, press Update published page to remove it from your online page.`, ok: 'Remove' }).then(async yes => {
+      if (!yes || D.portfolio[i] !== m) return; D.portfolio.splice(i, 1); await mediaForget(m.id); pfSet('', ''); renderPanel(); change(); const nx = document.querySelector('[data-pf=pick]'); if (nx) nx.focus();
+    });
+  }
+});
+
 /* ---------- 6c. publishing: Publish, Copy link, View page, Update, Unpublish ---------- */
 // The page's public ID is in the share link and only lets people VIEW. A separate private edit key is returned once,
 // when the page is first published. It is kept only in this browser (key 'folio:v1:pub') and in the recovery file the
 // owner saves. It is never in a URL, never in the ordinary backup, never in the published data, and it is sent only in an
 // Authorization header. The Turnstile secret never appears in this file: only the public site key does.
-const PUBKEY = 'folio:v1:pub', ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/, KEY_RE = /^[A-Za-z0-9_-]{43}$/;
+const PUBKEY = 'folio:v1:pub', KEY_RE = /^[A-Za-z0-9_-]{43}$/;
 let tsFailed = false, tsReason = '', PUB = null, pubMsg = null, pubBusy = false, pubConsent = false, tsToken = '', tsWidget = null, tsLoading = null;
-try { const p = JSON.parse(localStorage.getItem(PUBKEY) || 'null'); if (p && ID_RE.test(p.id) && KEY_RE.test(p.key) && p.api === PUBLISH.api) PUB = { id: p.id, key: p.key, api: p.api, at: Number(p.at) || 0, snap: String(p.snap || ''), saved: !!p.saved }; } catch (e) {}
+try { const p = JSON.parse(localStorage.getItem(PUBKEY) || 'null'); if (p && ID_RE.test(p.id) && KEY_RE.test(p.key) && p.api === PUBLISH.api) PUB = { id: p.id, key: p.key, api: p.api, at: Number(p.at) || 0, snap: String(p.snap || ''), saved: !!p.saved, up: Array.isArray(p.up) ? p.up.filter(x => ID_RE.test(String(x))) : [] }; } catch (e) {}
 const savePub = () => { try { if (PUB) localStorage.setItem(PUBKEY, JSON.stringify(PUB)); else localStorage.removeItem(PUBKEY); } catch (e) {} };
 const snapNow = () => JSON.stringify({ D: normData(D), ST: normStyle(ST) });
 const pubLink = id => { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('id', id); return u.toString(); };
@@ -838,23 +972,58 @@ function retryTurnstile() {
 }
 function resetTurnstile() { tsToken = ''; try { if (tsWidget !== null && window.turnstile) window.turnstile.reset(tsWidget); } catch (e) {} refreshPubButtons(); }
 
+/* Portfolio files go up one at a time after the page itself is saved, because the service only accepts files that the saved page lists. */
+function mediaFailText(res, name) {
+  const e = (res.json || {}).error, n = '"' + name + '"';
+  const why = { unsupported_type: 'is not a supported file type', file_too_large: 'is over 15 MB', page_media_full: 'would take the page over its file limit', media_storage_full: 'could not be stored because the free storage is full', media_unavailable: 'could not be stored because file storage is not set up yet', content_mismatch: 'does not match its file type', not_in_page: 'is not listed on the page', rate_limited: 'was held back because there were too many uploads this hour', forbidden: 'was refused because the edit key does not match' }[e];
+  return n + ' ' + (why || (res.status === 0 ? 'did not upload because no clear answer came back' : 'did not upload (error ' + res.status + ')'));
+}
+async function putMedia(m) {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 300000);
+  try {
+    const r = await fetch(PUBLISH.api + '/api/pages/' + PUB.id + '/media/' + m.id, { method: 'PUT', headers: { Authorization: 'Bearer ' + PUB.key, 'Content-Type': m.type }, body: mediaBlobs.get(m.id), signal: ctl.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+    const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) { j = null; }
+    return { status: r.status, json: j && typeof j === 'object' && !Array.isArray(j) ? j : null };
+  } catch (e) { return { status: 0, json: null }; } finally { clearTimeout(timer); }
+}
+async function uploadPortfolio() {
+  const ids = new Set(D.portfolio.map(m => m.id)); PUB.up = (PUB.up || []).filter(x => ids.has(x));
+  const todo = D.portfolio.filter(m => mediaBlobs.has(m.id) && !PUB.up.includes(m.id)), failed = [];
+  for (let i = 0; i < todo.length; i++) {
+    setPubMsg('note', 'Uploading file ' + (i + 1) + ' of ' + todo.length + ' (' + (todo[i].name || 'file') + ', ' + mbOf(todo[i].size) + ')… keep this page open.');
+    const r = await putMedia(todo[i]);
+    if (r.status === 200 && r.json && r.json.mid === todo[i].id) PUB.up.push(todo[i].id); else failed.push(mediaFailText(r, todo[i].name || 'file'));
+  }
+  savePub(); return { sent: todo.length - failed.length, failed };
+}
+/* Before anything is created or changed: files the service cannot take should stop the action with a plain reason. */
+async function portfolioPrecheck(isUpdate) {
+  const gone = pfMissing().filter(m => !(isUpdate && PUB && (PUB.up || []).includes(m.id)));
+  if (gone.length) return gone.length + ' portfolio file' + (gone.length === 1 ? ' is' : 's are') + ' not in this browser (' + gone.map(m => '"' + (m.name || 'file') + '"').join(', ') + '). Add them again or remove them in the Portfolio section. ' + (isUpdate ? 'Your published page was not changed.' : 'No page was created.');
+  if (D.portfolio.length) { const st = await pubApi('GET', '/api/status'); if (!st.json || st.json.media !== true) return 'Your portfolio has files, but the publishing service cannot store files yet (the owner of this Folio site has not turned on file storage). ' + (isUpdate ? 'Your published page was not changed. ' : 'No page was created. ') + 'Remove the portfolio files to publish without them.'; }
+  return '';
+}
+const pfDoneText = up => up.failed.length ? ' ' + up.failed.join('. ') + '. The page itself is live. Press Update published page to try those files again.' : up.sent ? ' ' + up.sent + ' portfolio file' + (up.sent === 1 ? '' : 's') + ' uploaded.' : '';
+
 async function doPublish() {
   if (pubBusy) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
   if (!pubConsent) { setPubMsg('err', 'Tick the box above to confirm you understand your page becomes public, then press Publish again.'); return; }
   if (!tsToken) { setPubMsg('err', tsFailed ? PUB_TS_HINT : 'The human check has not finished yet. Wait for it to show as complete, then press Publish again.'); return; }
-  setPubBusy(true); setPubMsg('note', 'Publishing…'); const snap = snapNow(), token = tsToken;
+  setPubBusy(true); setPubMsg('note', D.portfolio.length ? 'Checking your files…' : 'Publishing…'); const pre = await portfolioPrecheck(false); if (pre) { setPubMsg('err', pre); setPubBusy(false); return; }
+  setPubMsg('note', 'Publishing…'); const snap = snapNow(), token = tsToken;
   const res = await pubApi('POST', '/api/pages', { body: { data: JSON.parse(snap), turnstile: token } }); tsToken = '';
   if (res.status === 201 && res.json && ID_RE.test(String(res.json.id)) && KEY_RE.test(String(res.json.editKey))) {
-    PUB = { id: res.json.id, key: res.json.editKey, api: PUBLISH.api, at: Date.now(), snap, saved: false }; savePub(); pubConsent = false;
-    setPubMsg('ok', 'Published. Copy your link, and save your recovery file now. It is the only way to update or unpublish from another device.'); setPubBusy(false); renderPanel(); const k = document.querySelector('[data-pub=saveKey]'); if (k) k.focus(); return;
+    PUB = { id: res.json.id, key: res.json.editKey, api: PUBLISH.api, at: Date.now(), snap, saved: false, up: [] }; savePub(); pubConsent = false;
+    const up = await uploadPortfolio(); setPubMsg(up.failed.length ? 'err' : 'ok', 'Published. Copy your link, and save your recovery file now. It is the only way to update or unpublish from another device.' + pfDoneText(up)); setPubBusy(false); renderPanel(); const k = document.querySelector('[data-pub=saveKey]'); if (k) k.focus(); return;
   }
   setPubMsg('err', failText(res, 'publish')); setPubBusy(false); resetTurnstile();
 }
 async function doUpdate() {
   if (pubBusy || !PUB) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
-  setPubBusy(true); setPubMsg('note', 'Updating…'); const snap = snapNow();
+  setPubBusy(true); setPubMsg('note', D.portfolio.length ? 'Checking your files…' : 'Updating…'); const pre = await portfolioPrecheck(true); if (pre) { setPubMsg('err', pre); setPubBusy(false); return; }
+  setPubMsg('note', 'Updating…'); const snap = snapNow();
   const res = await pubApi('PUT', '/api/pages/' + PUB.id, { key: PUB.key, body: { data: JSON.parse(snap) } });
-  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = snap; savePub(); setPubMsg('ok', 'The service confirmed the update. Open your link to see what visitors get. If it still looks old, wait a little and reload.'); updatePubStatus(); }
+  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = snap; savePub(); const up = await uploadPortfolio(); setPubMsg(up.failed.length ? 'err' : 'ok', 'The service confirmed the update.' + pfDoneText(up) + (up.failed.length ? '' : ' Open your link to see what visitors get. If it still looks old, wait a little and reload.')); updatePubStatus(); }
   else setPubMsg('err', failText(res, 'update'));
   setPubBusy(false);
 }
@@ -879,14 +1048,16 @@ async function restoreRecovery(file) {
   if (j.service !== PUBLISH.api) { setPubMsg('err', 'This recovery file is for a different publishing service. Nothing was changed.'); return; }
   setPubBusy(true); setPubMsg('note', 'Checking the key with the service…');
   const res = await pubApi('POST', '/api/pages/' + j.pageId + '/check', { key: j.editKey });
-  if (res.status === 200 && res.json && res.json.ok === true) { PUB = { id: j.pageId, key: j.editKey, api: PUBLISH.api, at: Date.now(), snap: '', saved: true }; savePub(); setPubBusy(false); setPubMsg('ok', 'Publishing access restored on this device. Folio does not have your resume text yet if this is a new device. Use "Load the published version into Folio", then edit and update.'); renderPanel(); return; }
+  if (res.status === 200 && res.json && res.json.ok === true) { PUB = { id: j.pageId, key: j.editKey, api: PUBLISH.api, at: Date.now(), snap: '', saved: true, up: [] }; savePub(); setPubBusy(false); setPubMsg('ok', 'Publishing access restored on this device. Folio does not have your resume text yet if this is a new device. Use "Load the published version into Folio", then edit and update.'); renderPanel(); return; }
   setPubMsg('err', failText(res, 'check') || 'The key was not accepted.'); setPubBusy(false);
 }
 async function loadPublished() {
   if (pubBusy || !PUB) return;
   const yes = await confirmDialog({ title: 'Replace what is in Folio?', message: 'Folio will load the published version of your page into the editor. What is in Folio now will be replaced. Download a backup first if you want to keep it.', ok: 'Replace' }); if (!yes) return;
   setPubBusy(true); const res = await pubApi('GET', '/api/pages/' + PUB.id);
-  if (res.status === 200 && res.json && res.json.data && res.json.data.D && res.json.data.ST) { D = normData(res.json.data.D); ST = normStyle(res.json.data.ST); PUB.snap = snapNow(); savePub(); save(); setPubBusy(false); setPubMsg('ok', 'Loaded the published version into Folio.'); renderPanel(); refresh(); return; }
+  if (res.status === 200 && res.json && res.json.data && res.json.data.D && res.json.data.ST) { D = normData(res.json.data.D); ST = normStyle(res.json.data.ST); await mediaPrune(); const lost = [];
+    for (const m of D.portfolio) { if (mediaBlobs.has(m.id)) continue; setPubMsg('note', 'Copying portfolio file "' + (m.name || 'file') + '"…'); try { const r = await fetch(PUBLISH.api + '/api/media/' + PUB.id + '/' + m.id, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' }); if (!r.ok) throw 0; const b = await r.blob(); if (b.size !== m.size) throw 0; await mediaPut(m.id, new Blob([b], { type: m.type })); } catch (e) { lost.push(m.name || 'file'); } }
+    PUB.up = D.portfolio.filter(m => mediaBlobs.has(m.id)).map(m => m.id); PUB.snap = snapNow(); savePub(); save(); setPubBusy(false); setPubMsg(lost.length ? 'err' : 'ok', 'Loaded the published version into Folio.' + (lost.length ? ' These portfolio files could not be copied: ' + lost.map(x => '"' + x + '"').join(', ') + '. Add them again before you update.' : '')); renderPanel(); refresh(); return; }
   setPubMsg('err', failText(res, 'load')); setPubBusy(false);
 }
 function copyPubLink() {
@@ -911,7 +1082,7 @@ async function startViewer() {
   if (res.status === 404) return say(gone);
   if (res.status !== 200 || !res.json || !res.json.data || !res.json.data.D || !res.json.data.ST) return say(res.json && res.json.error === 'daily_limit' ? 'This page cannot be shown right now because the service reached a free daily limit. Please try again later.' : 'This page cannot be loaded right now. Please try again in a little while.');
   const d = normData(res.json.data.D), s = normStyle(res.json.data.ST); document.title = d.name || 'Page';
-  fr.title = (d.name || 'Published') + ' resume page'; fr.srcdoc = buildSite(d, s, { viewer: true }); fr.hidden = false; msg.hidden = true;
+  fr.title = (d.name || 'Published') + ' resume page'; const mu = {}; for (const m of d.portfolio) mu[m.id] = PUBLISH.api + '/api/media/' + id + '/' + m.id; fr.srcdoc = buildSite(d, s, { viewer: true, mediaUrls: mu }); fr.hidden = false; msg.hidden = true;
 }
 
 /* ---------- 7. theme shared with the other tools, then start ---------- */
@@ -926,7 +1097,7 @@ $('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => `<div c
 $('#notesBtn').addEventListener('click', () => $('#notesDialog').showModal());
 $('#notesClose').addEventListener('click', () => $('#notesDialog').close());
 $('#notesDialog').addEventListener('click', e => { if (e.target === $('#notesDialog')) $('#notesDialog').close(); });
-if (VIEWER) startViewer(); else { renderPanel(); refresh(); }
+if (VIEWER) startViewer(); else { renderPanel(); refresh(); mediaInit(); }
 // --- New version notice: same behavior as Job Search. Reads the published page now and then; a newer APP_VERSION shows a banner that offers to reload.
 const versionParts = v => String(v).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
 function isNewerVersion(a, b) { const x = versionParts(a), y = versionParts(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; }
