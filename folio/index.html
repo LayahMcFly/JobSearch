@@ -122,7 +122,7 @@ input[aria-invalid=true],textarea[aria-invalid=true]{border-color:var(--danger);
 .btn-danger-fill{background:var(--danger);border-color:var(--danger);color:#fff;text-shadow:none}
 @media (hover:hover){.btn-danger-fill:hover{background:#7d2020}}
 dialog.confirm-card{margin:auto;width:min(440px,92vw);padding:1.3rem;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:0 18px 50px rgba(40,25,10,.3)}
-dialog.confirm-card::backdrop{background:rgba(42,36,31,.5)}
+dialog.confirm-card .pdf-actions{flex-wrap:wrap}dialog.confirm-card::backdrop{background:rgba(42,36,31,.5)}
 dialog.confirm-card h2{font-size:1.3rem;margin-bottom:.5rem}dialog.confirm-card p{margin:0 0 1.1rem;color:var(--muted)}
 .cf-actions{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
 
@@ -146,7 +146,7 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 <body data-show="edit">
 <div class="bar">
   <h1>Folio</h1>
-  <button type="button" class="btn btn-small" id="pdfBtn">Save as PDF</button>
+  <button type="button" class="btn btn-small" id="pdfBtn">Download resume PDF</button>
   <button type="button" class="btn btn-primary btn-small" id="exportBtn">Download my site</button>
 </div>
 <div class="seg" role="group" aria-label="Show">
@@ -182,6 +182,12 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
   <div class="cf-actions"><button type="button" class="btn" id="cfCancel">Cancel</button><button type="button" class="btn btn-danger-fill" id="cfOk">Confirm</button></div>
 </dialog>
 
+<dialog id="pdfDialog" class="confirm-card" aria-labelledby="pdfTitle" aria-describedby="pdfMsg">
+  <h2 id="pdfTitle">Include the paper color in your PDF?</h2>
+  <p id="pdfMsg">Painted backgrounds cover the whole page, so they tend to use much more ink or toner if you print the PDF. Plain white saves ink and always reads well. Choose the paper color if you will only share the PDF on screen.</p>
+  <div class="cf-actions pdf-actions"><button type="button" class="btn" id="pdfCancel">Cancel</button><button type="button" class="btn" id="pdfWhite">Plain white (saves ink)</button><button type="button" class="btn btn-primary" id="pdfPaper">Include paper color</button></div>
+</dialog>
+
 <dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
   <div class="panel-head"><h2 id="notesTitle">Folio release notes</h2><button type="button" class="icon-btn" id="notesClose" aria-label="Close Folio release notes">&times;</button></div>
   <div class="notes-scroll"><div class="notes-grid" id="notesBody" role="table" aria-label="Folio release notes by version">
@@ -190,8 +196,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.9';
+const APP_VERSION = 'v1.1.10';
 const RELEASES = [
+  ['v1.1.10', 'The PDF button now reads Download resume PDF. It asks whether to include the paper color, and warns that painted backgrounds use much more ink when printed. Plain white is the default choice.'],
   ['v1.1.9', 'The Style section now shows a small preview on each choice: layouts drawn in your chosen color and paper, fonts shown as Aa (heading and text font), and paper tones with a sample Aa. You can compare styles without switching to the preview.'],
   ['v1.1.8', 'The resume sheet now has a paper look (a faint grain and soft edge shading) on screen, in the preview and on your published site. It is removed when you print or save as PDF. The Hire me section now looks and works like a Google Form: question cards, a round-button choice question, red required markers, Submit and Clear form, and a Your response has been recorded page with Submit another response.'],
   ['v1.1.7', 'If pressing Update now still shows the old version (the browser kept its saved copy), the banner now says so and offers Reload again, until the newest version is showing.'],
@@ -514,7 +521,7 @@ fieldset.poll{min-width:0}.poll legend{font-weight:500;padding:0 .2rem;margin-le
 .demo-note{margin:0;padding:.7rem .9rem;border:2px dashed var(--ctl);border-radius:10px;background:var(--soft);color:var(--ink)}
 .draft{display:grid;gap:.4rem}.draft textarea{font:inherit;font-weight:400;width:100%;min-height:9rem;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.6rem}
 ::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
-@media print{:root{${palVars(print)}}body{background:#fff}.no-print,.topbar{display:none!important}.sheet::after{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{${opt.printPaper ? 'html,body{background:var(--paper)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.sheet{background:var(--paper)}' : ':root{' + palVars(print) + '}body{background:#fff}'}.no-print,.topbar{display:none!important}.sheet::after{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .job,.bul li{break-inside:avoid}section h3,.side h3,.hd{break-after:avoid}@page{margin:10mm}}`;
   const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
     `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
@@ -679,9 +686,22 @@ $('#exportBtn').addEventListener('click', () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
   download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
 });
-$('#pdfBtn').addEventListener('click', () => {
-  const fr = $('#frame'); const go = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Could not open print. Use your browser menu, then Print.'); } };
-  if (view !== 'resume') { view = 'resume'; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.view === 'resume'))); fr.srcdoc = buildSite(D, ST, { resumeOnly: true }); fr.onload = go; } else go();
+function askPaperForPdf() {
+  return new Promise(resolve => {
+    const d = $('#pdfDialog'), trigger = document.activeElement;
+    const onBackdrop = e => { if (e.target === d) d.close('cancel'); };
+    d.addEventListener('close', () => { d.removeEventListener('click', onBackdrop); const v = d.returnValue; if (v !== 'white' && v !== 'paper' && trigger && trigger.isConnected) trigger.focus(); resolve(v === 'white' || v === 'paper' ? v : null); }, { once: true });
+    d.addEventListener('click', onBackdrop); d.returnValue = ''; d.showModal(); $('#pdfWhite').focus();
+  });
+}
+$('#pdfCancel').addEventListener('click', () => $('#pdfDialog').close('cancel'));
+$('#pdfWhite').addEventListener('click', () => $('#pdfDialog').close('white'));
+$('#pdfPaper').addEventListener('click', () => $('#pdfDialog').close('paper'));
+$('#pdfBtn').addEventListener('click', async () => {
+  const choice = await askPaperForPdf(); if (!choice) return;
+  const fr = $('#frame'); const go = () => { try { fr.contentWindow.focus(); fr.contentWindow.addEventListener('afterprint', () => refresh(), { once: true }); fr.contentWindow.print(); } catch (e) { toast('Could not open print. Use your browser menu, then Print.'); } };
+  view = 'resume'; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.view === 'resume')));
+  fr.onload = go; fr.srcdoc = buildSite(D, ST, { resumeOnly: true, printPaper: choice === 'paper' });
 });
 document.addEventListener('click', e => {
   if (e.target.id === 'backupBtn') download('folio-backup.json', JSON.stringify({ D, ST }, null, 2), 'application/json');
