@@ -185,8 +185,10 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.7';
+const APP_VERSION = 'v1.1.8';
 const RELEASES = [
+  ['v1.1.8', 'The live preview now looks like a sheet of paper: a faint paper grain, soft shaded edges and a lifted shadow. It only appears in the preview. Your downloaded site and printed PDF are unchanged.'],
+  ['v1.1.8', 'The resume sheet now has a paper look (a faint grain and soft edge shading) on screen, in the preview and on your published site. It is removed when you print or save as PDF. The Hire me section now looks and works like a Google Form: question cards, a round-button choice question, red required markers, Submit and Clear form, and a Your response has been recorded page with Submit another response.'],
   ['v1.1.7', 'If pressing Update now still shows the old version (the browser kept its saved copy), the banner now says so and offers Reload again, until the newest version is showing.'],
   ['v1.1.6', 'Fixes the human check never appearing on the Publish card. Folio was calling a Cloudflare function that refuses to run when the check script is added after the page loads, so the check could not start.'],
   ['v1.1.5', 'If the human check cannot load, Folio says whether the Cloudflare script was blocked or timed out, and a Try the human check again button retries without reloading the page.'],
@@ -319,7 +321,7 @@ function resumeHtml(d) {
 function hireHtml(d, opt) {
   const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}</div>`).join('');
   const opts = lines(d.pollOptions), mail = validEmail(d.email), email = String(d.email || '').trim();
-  const poll = opts.length ? `<fieldset class="poll"><legend>${esc(d.pollQuestion || 'What do you need?')}</legend><div class="pollopts">${opts.map((o, i) => `<label class="pill"><input type="radio" name="need" value="${esc(o)}"${i === 0 ? ' required' : ''}><span>${esc(o)}</span></label>`).join('')}</div></fieldset>` : '';
+  const poll = opts.length ? `<fieldset class="q poll"><legend>${esc(d.pollQuestion || 'What do you need?')}<i class="req" aria-hidden="true"> *</i></legend><div class="pollopts">${opts.map((o, i) => `<label class="pill"><input type="radio" name="need" value="${esc(o)}"${i === 0 ? ' required' : ''}><span class="dotr" aria-hidden="true"></span><span class="ot">${esc(o)}</span></label>`).join('')}</div><p class="qerr" hidden>This is a required question</p></fieldset>` : '';
   const emailMode = d.formMode === 'email';
   const direct = mail ? `<p class="direct">${emailMode ? 'Prefer to email directly?' : 'Prefer email?'} Write to <a href="mailto:${esc(email)}">${esc(email)}</a> <button type="button" class="copy" data-copy="address">Copy address</button> <span class="copied" role="status"></span></p>` : '';
   const fine = opt.preview ? '' : emailMode
@@ -330,15 +332,17 @@ function hireHtml(d, opt) {
     <div class="hire-in"><h2>Work with ${esc((d.name || 'me').split(' ')[0] || 'me')}</h2>${d.availability ? `<p class="avail"><span class="dot"></span>${esc(d.availability)}</p>` : ''}
     ${services ? `<div class="svcs">${services}</div>` : ''}
     ${direct}
-    <form id="hireForm" novalidate><h3>${esc(d.formTitle || 'Tell me about your project')}</h3>
-      ${opt.preview ? `<p class="demo-note" role="note"><b>Preview only.</b> This form is a demonstration. Nothing is sent, no email draft opens and nothing is saved.</p>` : ''}
-      <label>Your name<input name="name" type="text" required maxlength="120" autocomplete="name"></label>
-      <label>Your email<input name="email" type="email" required maxlength="254" autocomplete="email"></label>
+    <form id="hireForm" novalidate>
+      <div class="q head"><h3>${esc(d.formTitle || 'Tell me about your project')}</h3><p class="reqnote"><span class="req" aria-hidden="true">*</span> Indicates required question</p>
+      ${opt.preview ? `<p class="demo-note" role="note"><b>Preview only.</b> This form is a demonstration. Nothing is sent, no email draft opens and nothing is saved.</p>` : ''}</div>
+      <label class="q">Your name<i class="req" aria-hidden="true"> *</i><input name="name" type="text" required maxlength="120" autocomplete="name" placeholder="Your answer"><p class="qerr" hidden>This is a required question</p></label>
+      <label class="q">Your email<i class="req" aria-hidden="true"> *</i><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="Your answer"><p class="qerr" hidden>This is a required question</p></label>
       ${poll}
-      <label>Details<textarea name="message" rows="4" maxlength="1500" placeholder="What are you working on, and by when?"></textarea></label>
+      <label class="q">Details<textarea name="message" rows="4" maxlength="1500" placeholder="What are you working on, and by when?"></textarea></label>
       <input type="text" name="botcheck" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
-      <button type="submit" class="cta">${esc(d.ctaLabel || 'Send')}</button>
-      ${fine}<p class="msg" role="status" aria-live="polite"></p>${draftBox}</form></div></section>`;
+      <div class="actions"><button type="submit" class="cta">${esc(d.ctaLabel || 'Send')}</button><button type="reset" class="clear">Clear form</button></div>
+      ${fine}<p class="msg" role="status" aria-live="polite"></p>${draftBox}</form>
+    <div class="q done" id="hireDone" hidden><h3>${esc(d.formTitle || 'Tell me about your project')}</h3><p class="donemsg" role="status">Your response has been recorded.</p><p class="donethanks"></p><button type="button" class="again">Submit another response</button></div></div></section>`;
 }
 
 /* The form script is written once, here, as ordinary code and copied into the page as text. Settings
@@ -351,8 +355,12 @@ function siteScript() {
   function say(t, kind) { msg.className = 'msg' + (kind ? ' ' + kind : ''); msg.textContent = t; }
   function el(n) { return f.elements[n]; }
   function val(n) { return el(n) ? el(n).value.trim() : ''; }
-  function bad(field, t) { if (field) { field.setAttribute('aria-invalid', 'true'); field.focus(); } say(t, 'err'); return null; }
-  f.addEventListener('input', function (e) { if (e.target && e.target.removeAttribute) e.target.removeAttribute('aria-invalid'); });
+  function clearBad() { var c = f.querySelectorAll('.q.bad'); for (var i = 0; i < c.length; i++) { c[i].classList.remove('bad'); var e = c[i].querySelector('.qerr'); if (e) e.hidden = true; } }
+  function bad(field, t) { clearBad(); if (field) { field.setAttribute('aria-invalid', 'true'); var q = field.closest('.q'); if (q) { q.classList.add('bad'); var e = q.querySelector('.qerr'); if (e) e.hidden = false; } field.focus(); } say(t, 'err'); return null; }
+  f.addEventListener('input', function (e) { if (e.target && e.target.removeAttribute) e.target.removeAttribute('aria-invalid'); var q = e.target && e.target.closest ? e.target.closest('.q') : null; if (q) { q.classList.remove('bad'); var x = q.querySelector('.qerr'); if (x) x.hidden = true; } });
+  var done = document.getElementById('hireDone');
+  f.addEventListener('reset', function () { clearBad(); say('', ''); var b = f.querySelectorAll('[aria-invalid]'); for (var i = 0; i < b.length; i++) b[i].removeAttribute('aria-invalid'); });
+  if (done) done.querySelector('.again').addEventListener('click', function () { done.hidden = true; f.hidden = false; say('', ''); var n = el('name'); if (n) n.focus(); });
   function copyText(text, done) {
     function fallback() {
       var t = document.createElement('textarea'); t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
@@ -395,7 +403,7 @@ function siteScript() {
   }
   function note() { return C.email ? ' You can email ' + C.email + ' instead.' : ''; }
   function finish(res) {
-    if (res.ok === true) { say('The form service accepted your message. ' + C.thanks, 'ok'); f.reset(); return; }
+    if (res.ok === true) { say('The form service accepted your message. ' + C.thanks, 'ok'); f.reset(); say('The form service accepted your message. ' + C.thanks, 'ok'); if (done) { done.querySelector('.donethanks').textContent = C.thanks; f.hidden = true; done.hidden = false; done.scrollIntoView && done.scrollIntoView({ block: 'nearest' }); } return; }
     if (res.ok === false) { say('Your message was not accepted. ' + res.reason + ' Your details are still in the form.' + note(), 'err'); return; }
     say((res.network ? 'No reply came back from the form service.' : 'The form service sent a reply this page could not read.') + ' Your message may not have been received, so please do not assume it was. Your details are still in the form.' + note(), 'err');
   }
@@ -446,7 +454,9 @@ a{color:var(--acc)}
 :focus-visible{outline:3px solid var(--acc);outline-offset:3px}
 .topbar{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;gap:1rem}
 .topbar b{font-family:var(--fh)}.topbar a.go{background:var(--fill);color:var(--on);text-decoration:none;font-weight:700;border-radius:999px;padding:.7rem 1.2rem;min-height:44px;display:inline-flex;align-items:center}
-.sheet{max-width:860px;margin:1.2rem auto;background:var(--paper);box-shadow:0 2px 22px rgba(0,0,0,.12);border-radius:6px}
+.sheet{max-width:860px;margin:1.2rem auto;background:var(--paper);box-shadow:0 2px 22px rgba(0,0,0,.12);border-radius:6px;position:relative}
+/* Paper look for the resume sheet on screen: a faint grain and soft edge shading. It never blocks clicks and is removed for print and PDF. */
+.sheet::after{content:"";position:absolute;inset:0;border-radius:6px;pointer-events:none;mix-blend-mode:${dark ? 'screen' : 'multiply'};opacity:${dark ? '.2' : '.55'};background-image:radial-gradient(ellipse at 50% 40%,transparent 62%,rgba(120,90,50,${dark ? '0' : '.14'}) 100%),url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .35  0 0 0 0 .26  0 0 0 .2 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
 .resume{padding:2.4rem 2.6rem;font-size:15px}
 h1,h2,h3,h4{font-family:var(--fh);margin:0}h4{font-size:1.05em}
 .hd h1{font-size:2.3rem;line-height:1.1}.headline{margin:.35rem 0 0;color:var(--muted);font-size:1.08em}
@@ -473,22 +483,33 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .direct{margin:1rem 0 0;color:var(--muted)}.direct a{color:var(--acc)}
 .copy{font:inherit;font-weight:600;min-height:44px;padding:.4rem 1rem;border-radius:999px;border:1.5px solid var(--ctl);background:var(--paper);color:var(--acc);cursor:pointer;margin:.3rem .4rem .3rem 0}
 .copied{font-size:.9rem;color:var(--muted)}
-form{display:grid;gap:.9rem;margin-top:1.4rem;border-top:1px solid var(--line);padding-top:1.4rem}
-form label{display:grid;gap:.3rem;font-weight:600;font-size:.92rem}
-form input[type=text],form input[type=email],form textarea{font:inherit;font-weight:400;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.7rem .8rem;width:100%;min-height:48px}
-form textarea::placeholder{color:var(--muted);opacity:1}
+form[hidden],.q[hidden],.qerr[hidden],.draft[hidden]{display:none}
+form{display:grid;gap:.75rem;margin-top:1.4rem;padding:1rem;background:var(--soft);border-radius:10px}
+.q{display:block;background:var(--paper);border:1.5px solid var(--line);border-radius:8px;padding:1.1rem 1.2rem;margin:0;font-weight:500;font-size:1rem;position:relative}
+.q.head{border-top:10px solid var(--fill);padding-top:1rem}.q.head h3{margin:.2rem 0 .5rem;font-size:1.5rem}.reqnote{margin:.6rem 0 0;color:var(--muted);font-size:.88rem}
+.req{color:#c0392b;font-style:normal;font-weight:700}
+.q.bad{border-color:#c0392b}.qerr{margin:.5rem 0 0;color:${dark ? '#ff9b8f' : '#a32414'};font-size:.88rem;font-weight:600}.qerr::before{content:"! ";font-weight:800}
+form input[type=text],form input[type=email],form textarea{display:block;margin-top:.7rem;font:inherit;font-weight:400;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:6px;padding:.7rem .8rem;width:100%;min-height:48px}
+form textarea::placeholder,form input::placeholder{color:var(--muted);opacity:1}
 form input:focus,form textarea:focus{outline:3px solid var(--acc);outline-offset:2px}
 form [aria-invalid=true]{border-color:#c0392b}
-fieldset.poll{border:0;padding:0;margin:0}.poll legend{font-weight:700;margin-bottom:.5rem;padding:0}.pollopts{display:flex;flex-wrap:wrap;gap:.6rem}
-.pill{display:block;position:relative;cursor:pointer}.pill input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;width:100%;height:100%}.pill span{display:flex;align-items:center;min-height:44px;border:2px solid var(--ctl);border-radius:999px;padding:.4rem 1.1rem;font-weight:600;font-size:.95rem}
-.pill input:checked+span{background:var(--fill);color:var(--on);border-color:var(--fill)}.pill input:focus-visible+span{outline:3px solid var(--acc);outline-offset:3px}
-.cta{font:inherit;font-weight:700;background:var(--fill);color:var(--on);border:0;border-radius:999px;padding:.8rem 1.6rem;min-height:48px;cursor:pointer;justify-self:start}.cta[disabled]{opacity:.65;cursor:progress}
-.fine{margin:0;color:var(--muted);font-size:.9rem}
-.msg{margin:0;font-weight:600}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
+fieldset.poll{min-width:0}.poll legend{font-weight:500;padding:0 .2rem;margin-left:-.2rem;float:left;width:100%}.pollopts{clear:both;display:grid;gap:0;padding-top:.6rem}
+.pill{display:flex;align-items:center;gap:.8rem;position:relative;cursor:pointer;min-height:48px;padding:.2rem 0}.pill input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;width:100%;height:100%}
+.dotr{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--ctl);background:var(--paper);display:grid;place-items:center}
+.dotr::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--fill);transform:scale(0);transition:transform .12s}
+.pill input:checked~.dotr{border-color:var(--fill)}.pill input:checked~.dotr::after{transform:scale(1)}
+.pill input:focus-visible~.dotr{outline:3px solid var(--acc);outline-offset:3px}.ot{font-weight:400}
+.actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem;padding:.2rem .2rem 0}
+.cta{font:inherit;font-weight:700;background:var(--fill);color:var(--on);border:0;border-radius:6px;padding:.8rem 1.6rem;min-height:48px;cursor:pointer}.cta[disabled]{opacity:.65;cursor:progress}
+.clear{font:inherit;font-weight:600;background:none;border:0;color:var(--acc);min-height:48px;padding:0 .8rem;cursor:pointer;border-radius:6px}.clear:hover{text-decoration:underline}
+.done{margin-top:1.4rem;border-top:10px solid var(--fill)}.done h3{margin:.2rem 0 .6rem;font-size:1.5rem}.donemsg{margin:0;font-weight:600}.donethanks{margin:.6rem 0 0}.donethanks:empty{display:none}
+.again{font:inherit;font-weight:600;background:none;border:0;color:var(--acc);min-height:48px;padding:0;margin-top:.6rem;cursor:pointer;text-decoration:underline}
+.fine{margin:0;color:var(--muted);font-size:.9rem;padding:0 .2rem}
+.msg{margin:0;font-weight:600;padding:0 .2rem}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
 .demo-note{margin:0;padding:.7rem .9rem;border:2px dashed var(--ctl);border-radius:10px;background:var(--soft);color:var(--ink)}
 .draft{display:grid;gap:.4rem}.draft textarea{font:inherit;font-weight:400;width:100%;min-height:9rem;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.6rem}
 ::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
-@media print{:root{${palVars(print)}}body{background:#fff}.no-print,.topbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{:root{${palVars(print)}}body{background:#fff}.no-print,.topbar{display:none!important}.sheet::after{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .job,.bul li{break-inside:avoid}section h3,.side h3,.hd{break-after:avoid}@page{margin:10mm}}`;
   const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
     `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
