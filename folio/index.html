@@ -185,8 +185,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.6';
+const APP_VERSION = 'v1.1.7';
 const RELEASES = [
+  ['v1.1.7', 'If pressing Update now still shows the old version (the browser kept its saved copy), the banner now says so and offers Reload again, until the newest version is showing.'],
   ['v1.1.6', 'Fixes the human check never appearing on the Publish card. Folio was calling a Cloudflare function that refuses to run when the check script is added after the page loads, so the check could not start.'],
   ['v1.1.5', 'If the human check cannot load, Folio says whether the Cloudflare script was blocked or timed out, and a Try the human check again button retries without reloading the page.'],
   ['v1.1.4', 'When the human check cannot run, Folio now says why in plain words (for example, the website address is not allowed for the key) and keeps that reason on screen, instead of a message that pointed to another message.'],
@@ -869,17 +870,22 @@ function isNewerVersion(a, b) { const x = versionParts(a), y = versionParts(b); 
 async function checkForUpdate() {
   if (!/^https?:$/.test(location.protocol)) return;
   try {
+    const came = new URLSearchParams(location.search).has('v'); // true when we got here by pressing Update now
     const res = await fetch(location.origin + location.pathname + '?versioncheck=' + Date.now(), { cache: 'no-store', credentials: 'omit' });
     if (!res.ok) return;
     const m = (await res.text()).match(/const APP_VERSION = '(v[\d.]+)'/);
-    if (!m || !isNewerVersion(m[1], APP_VERSION)) return;
+    if (!m) return;
+    if (!isNewerVersion(m[1], APP_VERSION)) { if (came) { try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* fine */ } const b = document.querySelector('#updateBanner'); if (b) b.hidden = true; } return; }
     let skipped = ''; try { skipped = sessionStorage.getItem('folio.skipUpdate') || ''; } catch (e) { /* fine */ }
-    if (skipped === m[1]) return;
+    if (skipped === m[1] && !came) return;
     const box = document.querySelector('#updateBanner');
-    box.innerHTML = `<p><strong>A new version is out: ${m[1]}.</strong> You have ${APP_VERSION}. Your resume, style and publishing access stay as they are.</p><button type="button" class="btn btn-primary" id="updateNowBtn">Update now</button><button type="button" class="btn" id="updateLaterBtn">Later</button>`;
+    // Still old after pressing Update now: the browser kept its saved copy. Keep asking until the newest version is showing.
+    box.innerHTML = came
+      ? `<p><strong>Still showing ${APP_VERSION}.</strong> The newest version is ${m[1]}, but your browser kept the old copy. Press Reload again.</p><button type="button" class="btn btn-primary" id="updateNowBtn">Reload again</button>`
+      : `<p><strong>A new version is out: ${m[1]}.</strong> You have ${APP_VERSION}. Your resume, style and publishing access stay as they are.</p><button type="button" class="btn btn-primary" id="updateNowBtn">Update now</button><button type="button" class="btn" id="updateLaterBtn">Later</button>`;
     box.hidden = false;
-    document.querySelector('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + location.hash; });
-    document.querySelector('#updateLaterBtn').addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('folio.skipUpdate', m[1]); } catch (e) { /* fine */ } });
+    document.querySelector('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + '&_=' + Date.now() + location.hash; });
+    const later = document.querySelector('#updateLaterBtn'); if (later) later.addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('folio.skipUpdate', m[1]); } catch (e) { /* fine */ } });
   } catch (e) { /* offline or blocked: try again later */ }
 }
 function watchForUpdate() { if (VIEWER) return; checkForUpdate(); setInterval(checkForUpdate, 5 * 60 * 1000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); }); }

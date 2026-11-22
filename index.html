@@ -32,6 +32,7 @@
   Change it in one place: APP_VERSION in section 1.
 
   JOB SEARCH TRACKER
+  v1.4.26 makes the new-version banner keep asking you to reload when Update now still leaves the old version showing, until the newest version is current.
   Single file: HTML, CSS, JavaScript. No libraries, no build step.
   Phase 2 adds the Job Feed screen. It reads jobs-feed.json, which
   fetch-jobs.mjs writes once a day through .github/workflows/fetch-jobs.yml,
@@ -1361,9 +1362,10 @@ html :is(button:disabled,.tab-arrow:disabled,input:disabled,select:disabled){cur
    1. CONSTANTS
    ============================================================ */
 const APP_ID = 'job-search-tracker';
-const APP_VERSION = 'v1.4.25'; // shown in the footer; numbering rule is in the comment at the top of this file
+const APP_VERSION = 'v1.4.26'; // shown in the footer; numbering rule is in the comment at the top of this file
 // Release notes shown by the footer button, newest first. Add a row here with every new version.
 const RELEASES = [
+  ['v1.4.26', 'If pressing Update now still shows the old version (the browser kept its saved copy), the banner now says so and offers Reload again, until the newest version is showing.'],
   ['v1.4.25', 'Footer buttons are stacked, and the hub link is a back button with an arrow icon.'],
   ['v1.4.24', 'The tab strip fades and arrows update while you drag, not after you let go.'],
   ['v1.4.23', 'These notes are now labeled Job Search only, and the footer has an All tools (Hub) link to the new hub page.'],
@@ -5913,20 +5915,26 @@ function isNewerVersion(a, b) { const x = versionParts(a), y = versionParts(b); 
 async function checkForUpdate() {
   if (!/^https?:$/.test(location.protocol)) return;
   try {
+    const came = new URLSearchParams(location.search).has('v'); // true when we got here by pressing Update now
     const url = location.origin + location.pathname + '?versioncheck=' + Date.now();
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return;
     const m = (await res.text()).match(/const APP_VERSION = '(v[\d.]+)'/);
-    if (!m || !isNewerVersion(m[1], APP_VERSION)) return;
+    if (!m) return;
+    if (!isNewerVersion(m[1], APP_VERSION)) { if (came) { try { history.replaceState(null, '', location.pathname + location.hash); } catch { /* fine */ } const b = $('#updateBanner'); if (b) b.hidden = true; } return; }
     let skipped = ''; try { skipped = sessionStorage.getItem('jobsearch.skipUpdate') || ''; } catch { /* fine */ }
-    if (skipped === m[1]) return;
+    if (skipped === m[1] && !came) return;
     const box = $('#updateBanner');
-    box.innerHTML = `<p><strong>A new version is out: ${esc(m[1])}.</strong> You have ${esc(APP_VERSION)}. Your saved jobs and settings stay as they are.</p>
+    // Still old after pressing Update now: the browser kept its saved copy. Keep asking until the newest version is showing.
+    box.innerHTML = came
+      ? `<p><strong>Still showing ${esc(APP_VERSION)}.</strong> The newest version is ${esc(m[1])}, but your browser kept the old copy. Press Reload again. Your saved jobs and settings stay as they are.</p>
+      <button type="button" class="btn btn-small btn-primary" id="updateNowBtn">Reload again</button>`
+      : `<p><strong>A new version is out: ${esc(m[1])}.</strong> You have ${esc(APP_VERSION)}. Your saved jobs and settings stay as they are.</p>
       <button type="button" class="btn btn-small btn-primary" id="updateNowBtn">Update now</button>
       <button type="button" class="btn btn-small" id="updateLaterBtn">Later</button>`;
     box.hidden = false;
-    $('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + location.hash; });
-    $('#updateLaterBtn').addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('jobsearch.skipUpdate', m[1]); } catch { /* fine */ } });
+    $('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + '&_=' + Date.now() + location.hash; });
+    const later = $('#updateLaterBtn'); if (later) later.addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('jobsearch.skipUpdate', m[1]); } catch { /* fine */ } });
   } catch { /* offline or blocked: try again later */ }
 }
 function watchForUpdate() {

@@ -117,8 +117,9 @@ dialog.notes-card::backdrop{background:rgba(42,36,31,.45)}
 
 <script>
 'use strict';
-const HUB_VERSION = 'v1.1.1';
+const HUB_VERSION = 'v1.1.2';
 const RELEASES = [
+  ['v1.1.2', 'If pressing Update now still shows the old version (the browser kept its saved copy), the banner now says so and offers Reload again, until the newest version is showing.'],
   ['v1.1.1', 'A banner at the top tells you when a newer version of the hub is published, with Update now and Later, the same as Job Search.'],
   ['v1.1.0', 'Folio added as the second live tool: resume builder and hire-me site maker. The Resume and Cover Letters example card is replaced by it.'],
   ['v1.0.0', 'First hub: a Job Search Tracker card that shows its current version, example cards for future tools, the same color theme and dark mode as Job Search, and this release notes card. Job Search keeps its own release notes inside its app.']
@@ -215,17 +216,22 @@ function isNewerVersion(a, b) { const x = versionParts(a), y = versionParts(b); 
 async function checkForUpdate() {
   if (!/^https?:$/.test(location.protocol)) return;
   try {
+    const came = new URLSearchParams(location.search).has('v'); // true when we got here by pressing Update now
     const res = await fetch(location.origin + location.pathname + '?versioncheck=' + Date.now(), { cache: 'no-store', credentials: 'omit' });
     if (!res.ok) return;
     const m = (await res.text()).match(/const HUB_VERSION = '(v[\d.]+)'/);
-    if (!m || !isNewerVersion(m[1], HUB_VERSION)) return;
+    if (!m) return;
+    if (!isNewerVersion(m[1], HUB_VERSION)) { if (came) { try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) { /* fine */ } const b = document.querySelector('#updateBanner'); if (b) b.hidden = true; } return; }
     let skipped = ''; try { skipped = sessionStorage.getItem('hub.skipUpdate') || ''; } catch (e) { /* fine */ }
-    if (skipped === m[1]) return;
+    if (skipped === m[1] && !came) return;
     const box = document.querySelector('#updateBanner');
-    box.innerHTML = `<p><strong>A new version is out: ${m[1]}.</strong> You have ${HUB_VERSION}. Nothing you saved is affected.</p><button type="button" class="primary" id="updateNowBtn">Update now</button><button type="button" class="" id="updateLaterBtn">Later</button>`;
+    // Still old after pressing Update now: the browser kept its saved copy. Keep asking until the newest version is showing.
+    box.innerHTML = came
+      ? `<p><strong>Still showing ${HUB_VERSION}.</strong> The newest version is ${m[1]}, but your browser kept the old copy. Press Reload again.</p><button type="button" class="primary" id="updateNowBtn">Reload again</button>`
+      : `<p><strong>A new version is out: ${m[1]}.</strong> You have ${HUB_VERSION}. Nothing you saved is affected.</p><button type="button" class="primary" id="updateNowBtn">Update now</button><button type="button" class="" id="updateLaterBtn">Later</button>`;
     box.hidden = false;
-    document.querySelector('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + location.hash; });
-    document.querySelector('#updateLaterBtn').addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('hub.skipUpdate', m[1]); } catch (e) { /* fine */ } });
+    document.querySelector('#updateNowBtn').addEventListener('click', () => { location.href = location.origin + location.pathname + '?v=' + encodeURIComponent(m[1]) + '&_=' + Date.now() + location.hash; });
+    const later = document.querySelector('#updateLaterBtn'); if (later) later.addEventListener('click', () => { box.hidden = true; try { sessionStorage.setItem('hub.skipUpdate', m[1]); } catch (e) { /* fine */ } });
   } catch (e) { /* offline or blocked: try again later */ }
 }
 checkForUpdate(); setInterval(checkForUpdate, 5 * 60 * 1000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
