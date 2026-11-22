@@ -1,10 +1,15 @@
 {
- "at": "2026-11-21T20:37:40.426Z",
- "passed": 59,
+ "at": "2026-11-22T21:16:44.428Z",
+ "passed": 60,
  "failed": 0,
  "results": [
   {
    "name": "test setup: PUBLISH config patched in the test copy only",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "config in folio/index.html holds only a public site key (no secret-looking values)",
    "ok": true,
    "note": ""
   },
@@ -21,7 +26,7 @@
   {
    "name": "publish: link has the form /folio/?id=<12 chars>",
    "ok": true,
-   "note": "http://x.test/folio/?id=Fdoy7Xvt8i2V"
+   "note": "http://x.test/folio/?id=dcTs7yfR88Q3"
   },
   {
    "name": "publish: Turnstile rendered with the public site key and action folio-publish",

@@ -6,9 +6,12 @@ const { makeD1, WRITE_LIMIT } = require('./d1-shim.cjs');
 const results = []; const rec = (n, ok, note) => { results.push({ name: n, ok, note: note || '' }); console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || !note ? '' : '  :: ' + note)); };
 const eq = (n, c, note) => rec(n, !!c, note);
 const HOME = 'http://x.test/folio/', API = 'https://folio-pages.test', SECRET = 'SECRET-turnstile-value-9f3a', SITEKEY = 'TEST-SITEKEY';
-const RAW = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const LIVE = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const CFG = /const PUBLISH = \{ api: '[^']*', siteKey: '[^']*' \};/;
+const RAW = LIVE.replace(CFG, "const PUBLISH = { api: '', siteKey: '' };");
 const APP = RAW.replace("const PUBLISH = { api: '', siteKey: '' };", `const PUBLISH = { api: '${API}', siteKey: '${SITEKEY}' };`);
-eq('test setup: PUBLISH config patched in the test copy only', APP !== RAW && /const PUBLISH = \{ api: '', siteKey: '' \};/.test(RAW));
+eq('test setup: PUBLISH config patched in the test copy only', APP !== RAW && CFG.test(LIVE));
+eq('config in folio/index.html holds only a public site key (no secret-looking values)', !/secret/i.test((LIVE.match(CFG) || [''])[0]) && /^[^]*siteKey: '0x4[A-Za-z0-9_-]{15,30}'/.test((LIVE.match(CFG) || [''])[0]));
 let worker, env, mode = {}, seen = [], ipN = 10;
 globalThis.fetch = async (url, init) => { // Worker -> Turnstile siteverify (simulated)
   const tok = new URLSearchParams(String(init.body)).get('response'); const ok = tok !== 'bad-token';

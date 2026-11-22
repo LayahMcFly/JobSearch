@@ -192,7 +192,7 @@ const KEY = 'folio:v1';
 /* Publishing connection. Both values are public. Fill them in after the publishing service exists (folio/worker/SETUP.md).
    api = the service's address with no trailing slash. siteKey = the Turnstile widget's SITE key. The Turnstile SECRET key
    must never be put in this file: it belongs only in the Worker's secret settings. */
-const PUBLISH = { api: '', siteKey: '' };
+const PUBLISH = { api: 'https://folio-pages.princesslayah404.workers.dev', siteKey: '0x4AAAAAAGNs6F3KjNe5u_CH' };
 const VIEWER = new URLSearchParams(location.search).has('id');
 const SAMPLE = {
   name: 'Jordan Rivera', headline: 'Freelance content writer and strategist', email: 'hello@example.com', phone: '', location: 'Valdosta, GA', website: '',
