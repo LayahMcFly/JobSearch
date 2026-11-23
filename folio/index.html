@@ -242,8 +242,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.23';
+const APP_VERSION = 'v1.1.24';
 const RELEASES = [
+  ['v1.1.24', 'When a published form cannot reach Google Apps Script or Web3Forms, the error now tells the page owner what to check.'],
   ['v1.1.23', 'On a published page, a form error now also appears in a box you can select and copy, and the Copy error button tells you when it could not copy. It said Copied even when the phone blocked copying.'],
   ['v1.1.22', 'Fixed the Hire me button at the top of a published page. It reloaded Folio inside the page and showed This page cannot be loaded right now. It now scrolls down to the hire form. The form button also did nothing because the page frame blocked forms, and that is fixed too.'],
   ['v1.1.21', 'Step 9 is gone. Back up and restore, Download backup and Start with a blank resume are now under the Download button, and the Update the publishing Worker help moved into step 8, Publish online.'],
@@ -489,7 +490,7 @@ function siteScript() {
   function finish(res) {
     if (res.ok === true) { say('The form service accepted your message. ' + C.thanks, 'ok'); f.reset(); say('The form service accepted your message. ' + C.thanks, 'ok'); if (done) { done.querySelector('.donethanks').textContent = C.thanks; f.hidden = true; done.hidden = false; done.scrollIntoView && done.scrollIntoView({ block: 'nearest' }); } return; }
     if (res.ok === false) { say('Your message was not accepted. ' + res.reason + ' Your details are still in the form.' + note(), 'err'); return; }
-    say((res.network ? 'No reply came back from the form service.' : 'The form service sent a reply this page could not read.') + ' Your message may not have been received, so please do not assume it was. Your details are still in the form.' + note(), 'err');
+    say((res.network ? 'No reply came back from the form service.' : 'The form service sent a reply this page could not read.') + ' Your message may not have been received, so please do not assume it was. Your details are still in the form.' + note() + (res.network && C.mode === 'gscript' ? ' (For the page owner: in Google Apps Script, open Deploy, then Manage deployments, and check that Who has access is set to Anyone. After any code change, make a new version and deploy again.)' : '') + (res.network && C.mode === 'web3forms' ? ' (For the page owner: check that the Web3Forms access key in Folio step 7 is copied exactly, then publish again.)' : ''), 'err');
   }
   function send(d) {
     busy = true; btn.disabled = true; say('Sending...', 'note');
