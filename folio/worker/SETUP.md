@@ -61,23 +61,12 @@ The page ID in the link only allows viewing. The edit key is shown once, kept in
 
 Set `PUBLISHING_PAUSED` to `true` (stops publishing and updates immediately). To remove everything: delete the Worker, the D1 database and the Turnstile widget in the dashboard. Published pages disappear with the database.
 
-## 8. Portfolio files (images and videos): extra setup, Worker v1.1.0
+## 8. Worker 1.0.1 and the Google Apps Script message option
 
-Folio v1.2.0 lets a page show up to 6 images or videos (15 MB each). Online storage for them is a **Workers KV** namespace. KV is on the free plan and needs no payment card. Without it, everything else keeps working, and Publish stops with a plain message if a portfolio has files.
-
-1. **Namespace.** A KV namespace named `folio-media` already exists in your Cloudflare account (id `2cd1222e15b144988bff1935a4c9b795`). If it is missing, create it: Dashboard > Storage & databases > KV > Create, name `folio-media`.
-2. **New Worker code.** Worker `folio-pages` > Edit code. Replace everything with the current `folio/worker/folio-pages.mjs` (version 1.1.0), then Deploy.
-3. **Bind the namespace.** Worker > Settings > Bindings > Add > KV namespace. Variable name exactly `MEDIA`, namespace `folio-media`. Deploy.
-4. **Check.** Open `.../api/status`. It should show `"media":true` and `"version":"1.1.0"`.
-
-Free KV limits: 1 GB stored, 1,000 writes and 1,000 deletes a day, 100,000 reads a day. Folio stops accepting files at 900 MB in total (change with the `MEDIA_TOTAL_CAP_MB` setting). A full page of 6 files can use 90 MB, so about 10 such pages fill it. KV can show a brand-new or just-deleted file for up to about a minute in some places.
-
-Rules the Worker enforces: only the page's edit key can upload; JPEG, PNG, WebP, GIF, MP4 and WebM only (no SVG); the first bytes of each file must match its type, checked before anything is stored; 15 MB per file, 6 files and 90 MB per page; 60 uploads per page per hour. Files are deleted when you remove them and update, or when you unpublish. Visitors load files through the Worker (`/api/media/<page>/<file>`), which counts toward the Worker's free 100,000 requests a day. Videos play in pieces (byte ranges), and every piece is a request and a KV read.
-
-Version 1.1.0 also accepts the new `gscript` message mode (Folio's Google Apps Script option). Pages using that mode will not publish until the Worker is updated.
+Worker 1.0.1 only adds one accepted value (`gscript`) to the list of hire-form modes. If you use Folio's Google Apps Script mode and publish online, replace the Worker code with the current `folio/worker/folio-pages.mjs` and Deploy. Nothing else changes: no new bindings, no new storage.
 
 ## 9. Messages from the hire-me form (free options)
 
-- **Google Apps Script** (in Folio section 7): a small script in your own Google account emails you each message. Free, about 100 emails a day. Folio shows the script and the steps.
+- **Google Apps Script** (Folio section 7): a small script in your own Google account emails you each message. Free, about 100 emails a day. Folio shows the script and the steps.
 - **Web3Forms** or **Formspree**: free tiers with a form address or key.
 - **Email app draft** (default): sends nothing by itself. The visitor has to press Send in their own email app.

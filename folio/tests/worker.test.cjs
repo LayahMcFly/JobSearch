@@ -140,7 +140,7 @@ const allPublic = [];
   /* ---- ids, schema, consistency ---- */
   fresh({ RL_PUBLISH_IP_HOUR: '9999', RL_PUBLISH_IP_DAY: '9999', RL_PUBLISH_GLOBAL_DAY: '9999' }); const ids = new Set(), keys = new Set(); for (let i = 0; i < 300; i++) { const x = await pub(); ids.add(x.j.id); keys.add(x.j.editKey); }
   eq('ids: 300 publishes gave 300 different IDs and 300 different keys, all well-formed', ids.size === 300 && keys.size === 300 && [...ids].every(i => /^[2-9A-HJ-NP-Za-km-z]{12}$/.test(i)));
-  fresh(); await pub(); await pub(); eq('schema: tables are created on first use, with no manual setup, and reusing them is harmless', count('pages') === 2 && env.DB._raw.prepare("select count(*) c from sqlite_master where type='table'").get().c === 4);
+  fresh(); await pub(); await pub(); eq('schema: tables are created on first use, with no manual setup, and reusing them is harmless', count('pages') === 2 && env.DB._raw.prepare("select count(*) c from sqlite_master where type='table'").get().c === 3);
   fresh(); A = await pub(); await call('PUT', '/api/pages/' + A.j.id, { body: body2(), key: A.j.editKey }); const immediate = await nameOf(A.j.id); await call('DELETE', '/api/pages/' + A.j.id, { key: A.j.editKey }); eq('consistency (this SQLite stand-in only): update and unpublish are visible on the very next read', immediate === 'Changed' && (await call('GET', '/api/pages/' + A.j.id)).s === 404);
 
   /* ---- nothing sensitive was ever logged ---- */

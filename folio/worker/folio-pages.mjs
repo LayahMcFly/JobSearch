@@ -5,7 +5,6 @@
 
    WHAT IT NEEDS (see SETUP.md for the exact clicks):
      binding   DB                 a D1 database
-     binding   MEDIA              a Workers KV namespace for portfolio images and videos (optional; without it portfolio uploads are refused). KV needs no card.
      secret    TURNSTILE_SECRET   the Turnstile widget's secret key (never sent to a browser, never logged)
      variable  ALLOWED_ORIGIN     optional, default https://layahmcfly.github.io
      variable  TURNSTILE_HOSTNAMES optional, comma list, default layahmcfly.github.io
@@ -15,19 +14,13 @@
    Only its SHA-256 hash is stored. Updating, unpublishing and checking a key all need that key in an
    Authorization header (never in a URL). Public responses never contain a key or a hash.
 
-   PORTFOLIO FILES (stored in Workers KV, free, no card; 1 GB, 1,000 writes and 100,000 reads a day): a page may list up to 6 images or videos (JPEG, PNG, WebP, GIF, MP4, WebM), each at most 15 MB. Only the page's
-   edit key can upload. Each upload is checked against its real bytes, not just its label. Files are served back with
-   nosniff and a locked-down CSP, and they are deleted when the page is unpublished or no longer lists them.
-
    Nothing here logs request headers, bodies, keys, hashes or secrets. */
 
-const VERSION = '1.1.0';
+const VERSION = '1.0.1';
 const ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'; // 57 characters, no look-alikes
 const ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/;
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
 const MAX_BODY = 100000; // bytes
-const MEDIA_MAX = 15 * 1024 * 1024, MEDIA_FILES = 6;
-const MEDIA_TYPES = { 'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image', 'video/mp4': 'video', 'video/webm': 'video' };
 
 // Limits. Counters are exact (one D1 database, atomic upserts) but use fixed windows, so a burst can straddle a
 // window edge and briefly reach up to twice the limit. Each can be overridden with an environment variable.
@@ -49,8 +42,7 @@ const PAPERS = ['white', 'warm', 'dark'];
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS pages (id TEXT PRIMARY KEY, key_hash TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
   'CREATE TABLE IF NOT EXISTS counters (k TEXT PRIMARY KEY, n INTEGER NOT NULL, win INTEGER NOT NULL)',
-  'CREATE TABLE IF NOT EXISTS used_tokens (h TEXT PRIMARY KEY, at INTEGER NOT NULL)',
-  'CREATE TABLE IF NOT EXISTS media (page_id TEXT NOT NULL, mid TEXT NOT NULL, type TEXT NOT NULL, size INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (page_id, mid))'
+  'CREATE TABLE IF NOT EXISTS used_tokens (h TEXT PRIMARY KEY, at INTEGER NOT NULL)'
 ];
 
 /* ---------- small helpers ---------- */
@@ -108,7 +100,7 @@ function validateData(data) {
   if (!isObj(data) || !isObj(data.D) || !isObj(data.ST)) return 'data must contain D and ST objects';
   if (Object.keys(data).length !== 2) return 'unexpected fields in data';
   const D = data.D, ST = data.ST, want = [...Object.keys(STR), 'formMode', ...Object.keys(LIST)];
-  for (const k of Object.keys(D)) if (!want.includes(k) && k !== 'portfolio') return 'unexpected field D.' + k;
+  for (const k of Object.keys(D)) if (!want.includes(k)) return 'unexpected field D.' + k;
   for (const k of want) if (!own(D, k)) return 'missing field D.' + k;
   for (const k in STR) { if (typeof D[k] !== 'string') return 'D.' + k + ' must be text'; if (D[k].length > STR[k]) return 'D.' + k + ' is too long'; }
   if (!MODES.includes(D.formMode)) return 'D.formMode is not valid';
@@ -119,19 +111,6 @@ function validateData(data) {
       if (!isObj(e)) return 'D.' + k + ' has an entry that is not an object';
       for (const f of Object.keys(e)) if (!own(shape, f)) return 'unexpected field in D.' + k;
       for (const f in shape) { if (typeof e[f] !== 'string') return 'D.' + k + '.' + f + ' must be text'; if (e[f].length > shape[f]) return 'D.' + k + '.' + f + ' is too long'; }
-    }
-  }
-  if (own(D, 'portfolio')) {
-    const pf = D.portfolio; if (!Array.isArray(pf) || pf.length > MEDIA_FILES) return 'D.portfolio must be a list of at most ' + MEDIA_FILES;
-    const seen = new Set();
-    for (const e of pf) {
-      if (!isObj(e)) return 'D.portfolio has an entry that is not an object';
-      for (const f of Object.keys(e)) if (!['id', 'kind', 'type', 'name', 'caption', 'alt', 'size'].includes(f)) return 'unexpected field in D.portfolio';
-      if (typeof e.id !== 'string' || !ID_RE.test(e.id) || seen.has(e.id)) return 'D.portfolio.id is not valid';
-      seen.add(e.id);
-      if (!own(MEDIA_TYPES, e.type) || MEDIA_TYPES[e.type] !== e.kind) return 'D.portfolio has an unsupported file type';
-      for (const [f, m] of [['name', 120], ['caption', 200], ['alt', 200]]) if (typeof e[f] !== 'string' || e[f].length > m) return 'D.portfolio.' + f + ' must be text of at most ' + m;
-      if (!Number.isInteger(e.size) || e.size < 1 || e.size > MEDIA_MAX) return 'D.portfolio.size is not valid';
     }
   }
   for (const k of Object.keys(ST)) if (!['layout', 'font', 'color', 'paper'].includes(k)) return 'unexpected field ST.' + k;
@@ -262,7 +241,6 @@ async function updatePage(request, env, id, now) {
   const t = Math.floor(now / 1000), kh = await sha256(key);
   const r = await env.DB.prepare('UPDATE pages SET data = ?1, updated_at = ?2 WHERE id = ?3 AND key_hash = ?4').bind(JSON.stringify({ D: b.data.D, ST: b.data.ST }), t, id, kh).run();
   if (!r.meta || r.meta.changes !== 1) return fail(request, env, 403, 'forbidden');
-  try { await pruneMedia(env, id, Array.isArray(b.data.D.portfolio) ? b.data.D.portfolio.map(e => e.id) : []); } catch (e) { /* housekeeping: retried on the next update */ }
   return reply(request, env, 200, { id, updatedAt: t });
 }
 
@@ -270,85 +248,9 @@ async function deletePage(request, env, id, now) {
   const key = bearer(request); if (!key) return fail(request, env, 401, 'edit_key_required');
   await ensureSchema(env);
   const a = await authorize(request, env, id, key, now); if (a.res) return a.res;
-  try { await pruneMedia(env, id, null); } catch (e) { return fail(request, env, 503, 'storage_unavailable'); } // files could not be removed, so the page stays published
   const r = await env.DB.prepare('DELETE FROM pages WHERE id = ?1 AND key_hash = ?2').bind(id, await sha256(key)).run();
   if (!r.meta || r.meta.changes !== 1) return fail(request, env, 403, 'forbidden');
   return reply(request, env, 200, { deleted: true });
-}
-
-/* ---------- portfolio files ---------- */
-const ascii = t => [...t].map(c => c.charCodeAt(0));
-function sniffOk(type, b) { // the real first bytes must match the type the file claims to be
-  const at = (o, arr) => b.length >= o + arr.length && arr.every((v, i) => b[o + i] === v);
-  switch (type) {
-    case 'image/jpeg': return at(0, [0xFF, 0xD8, 0xFF]);
-    case 'image/png': return at(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-    case 'image/gif': return at(0, ascii('GIF87a')) || at(0, ascii('GIF89a'));
-    case 'image/webp': return at(0, ascii('RIFF')) && at(8, ascii('WEBP'));
-    case 'video/mp4': return at(4, ascii('ftyp')) && !at(8, ascii('qt  '));
-    case 'video/webm': return at(0, [0x1A, 0x45, 0xDF, 0xA3]);
-    default: return false;
-  }
-}
-const mediaCapBytes = env => num(env.MEDIA_TOTAL_CAP_MB, 900) * 1024 * 1024; // stay under Workers KV's 1 GB free storage
-async function pageMedia(env, id) {
-  const row = await env.DB.prepare('SELECT data FROM pages WHERE id = ?1').bind(id).first();
-  let list = []; try { const d = JSON.parse(row.data); if (d && d.D && Array.isArray(d.D.portfolio)) list = d.D.portfolio; } catch (e) { list = []; }
-  return list;
-}
-/* Remove files (and their rows) that a page no longer lists. keep = array of ids still wanted; null removes all. */
-async function pruneMedia(env, id, keep) {
-  const rows = (await env.DB.prepare('SELECT mid FROM media WHERE page_id = ?1').bind(id).all()).results || [];
-  const gone = rows.map(r => String(r.mid)).filter(m => !keep || !keep.includes(m));
-  if (!gone.length) return;
-  if (env.MEDIA) for (const m of gone) await env.MEDIA.delete(id + '/' + m);
-  for (const m of gone) await env.DB.prepare('DELETE FROM media WHERE page_id = ?1 AND mid = ?2').bind(id, m).run();
-}
-
-async function putMedia(request, env, id, mid, now) {
-  const key = bearer(request); if (!key) return fail(request, env, 401, 'edit_key_required');
-  if (!env.MEDIA) return fail(request, env, 503, 'media_unavailable');
-  const type = String(request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-  if (!own(MEDIA_TYPES, type)) return fail(request, env, 415, 'unsupported_type');
-  const len = Number(request.headers.get('content-length'));
-  if (!Number.isInteger(len) || len < 1) return fail(request, env, 411, 'length_required');
-  if (len > MEDIA_MAX) return fail(request, env, 413, 'file_too_large', { maxBytes: MEDIA_MAX });
-  await ensureSchema(env);
-  const a = await authorize(request, env, id, key, now); if (a.res) return a.res;
-  const entry = (await pageMedia(env, id)).find(e => e && e.id === mid);
-  if (!entry || entry.type !== type) return fail(request, env, 422, 'not_in_page');
-  const mine = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS s FROM media WHERE page_id = ?1 AND mid <> ?2').bind(id, mid).first();
-  if (Number(mine.n) >= MEDIA_FILES || Number(mine.s) + len > MEDIA_FILES * MEDIA_MAX) return fail(request, env, 413, 'page_media_full', { maxFiles: MEDIA_FILES });
-  const all = await env.DB.prepare('SELECT COALESCE(SUM(size), 0) AS s FROM media').first();
-  if (Number(all.s) + len > mediaCapBytes(env)) return fail(request, env, 503, 'media_storage_full');
-  const u = await hit(env, 'mup:' + id, 3600, num(env.RL_MEDIA_PAGE_HOUR, 60), now); if (!u.ok) return tooMany(request, env, u);
-  const objKey = id + '/' + mid;
-  const buf = await request.arrayBuffer(); // up to 15 MB, checked below before anything is stored
-  if (buf.byteLength !== len) return fail(request, env, 400, 'upload_incomplete');
-  if (!sniffOk(type, new Uint8Array(buf, 0, Math.min(16, buf.byteLength)))) return fail(request, env, 415, 'content_mismatch');
-  await env.MEDIA.put(objKey, buf);
-  await env.DB.prepare('INSERT OR REPLACE INTO media(page_id, mid, type, size, created_at) VALUES(?1, ?2, ?3, ?4, ?5)').bind(id, mid, type, len, Math.floor(now / 1000)).run();
-  return reply(request, env, 200, { id, mid, size: len });
-}
-
-async function getMedia(request, env, id, mid) {
-  if (!env.MEDIA) return fail(request, env, 404, 'not_found');
-  await ensureSchema(env);
-  const row = await env.DB.prepare('SELECT type FROM media WHERE page_id = ?1 AND mid = ?2').bind(id, mid).first();
-  if (!row || !own(MEDIA_TYPES, String(row.type))) return fail(request, env, 404, 'not_found');
-  const buf = await env.MEDIA.get(id + '/' + mid, { type: 'arrayBuffer' });
-  if (!buf) return fail(request, env, 404, 'not_found');
-  const size = buf.byteLength, h = { 'content-type': String(row.type), 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", 'cross-origin-resource-policy': 'cross-origin', 'cache-control': 'no-cache' };
-  h.vary = 'Origin'; const o = request.headers.get('Origin'); if (o && o === allowedOrigin(env)) h['access-control-allow-origin'] = o; // lets Folio copy your own files to a new device
-  const rg = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') || '');
-  if (rg && (rg[1] !== '' || rg[2] !== '')) { // Safari needs byte ranges to play video
-    let a = rg[1] === '' ? Math.max(0, size - Number(rg[2])) : Number(rg[1]), z = rg[1] === '' || rg[2] === '' ? size - 1 : Math.min(Number(rg[2]), size - 1);
-    if (a >= size || a > z) return new Response(null, { status: 416, headers: { 'content-range': 'bytes */' + size } });
-    h['content-range'] = 'bytes ' + a + '-' + z + '/' + size; h['content-length'] = String(z - a + 1);
-    return new Response(buf.slice(a, z + 1), { status: 206, headers: h });
-  }
-  h['content-length'] = String(size);
-  return new Response(buf, { status: 200, headers: h });
 }
 
 async function checkKey(request, env, id, now) {
@@ -370,13 +272,9 @@ export default {
       }
       if (method !== 'GET' && method !== 'HEAD' && origin && origin !== allowedOrigin(env)) return fail(request, env, 403, 'origin_not_allowed');
       const p = url.pathname.replace(/\/+$/, '');
-      if (p === '/api/status' && method === 'GET') return reply(request, env, 200, { ok: true, service: 'folio-pages', version: VERSION, publishing: String(env.PUBLISHING_PAUSED).toLowerCase() !== 'true', maxBytes: MAX_BODY, media: !!env.MEDIA, maxMediaBytes: MEDIA_MAX, maxMediaFiles: MEDIA_FILES });
+      if (p === '/api/status' && method === 'GET') return reply(request, env, 200, { ok: true, service: 'folio-pages', version: VERSION, publishing: String(env.PUBLISHING_PAUSED).toLowerCase() !== 'true', maxBytes: MAX_BODY });
       if (!env.DB) return fail(request, env, 503, 'storage_unavailable');
       if (p === '/api/pages' && method === 'POST') return await publish(request, env, now);
-      const mm = /^\/api\/pages\/([^/]+)\/media\/([^/]+)$/.exec(p);
-      if (mm && ID_RE.test(mm[1]) && ID_RE.test(mm[2])) return method === 'PUT' ? await putMedia(request, env, mm[1], mm[2], now) : fail(request, env, 405, 'method_not_allowed');
-      const gm = /^\/api\/media\/([^/]+)\/([^/]+)$/.exec(p);
-      if (gm && ID_RE.test(gm[1]) && ID_RE.test(gm[2])) return method === 'GET' || method === 'HEAD' ? await getMedia(request, env, gm[1], gm[2]) : fail(request, env, 405, 'method_not_allowed');
       const m = /^\/api\/pages\/([^/]+)(\/check)?$/.exec(p);
       if (m && ID_RE.test(m[1])) {
         const id = m[1];
