@@ -125,6 +125,8 @@ input[type=color]{width:52px;height:44px;padding:2px;border-radius:50%;border:1.
 .toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#2a241f;color:#fff;padding:.7rem 1.1rem;border-radius:12px;z-index:50;max-width:92vw;display:none}
 .toast.show{display:block}
 .toast,.pubmsg{user-select:text;-webkit-user-select:text}
+.livebadge{margin:.6rem 0;padding:.6rem .9rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-weight:600}.livebadge.ok{color:#1b5e2e;border-color:#1b5e2e}.livebadge.warn{color:#8a5a00;border-color:#8a5a00}.livebadge.bad{color:var(--danger);border-color:var(--danger)}
+.wk{margin:0 0 .8rem;padding:.6rem .8rem;border:1px solid var(--border);border-radius:10px;background:var(--surface-2)}.wk summary{cursor:pointer}.wk .steps{margin:.6rem 0 0}
 .copyerr{font:inherit;font-size:.85rem;font-weight:700;margin-left:.6rem;padding:.25rem .7rem;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer}
 .pubmsg .copyerr{display:block;margin:.5rem 0 0}
 footer{text-align:center;color:var(--muted);font-size:.88rem;padding:1.5rem 1rem 2rem;display:flex;flex-direction:column;align-items:center;gap:.6rem}
@@ -226,8 +228,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.17';
+const APP_VERSION = 'v1.1.18';
 const RELEASES = [
+  ['v1.1.18', 'Publish online now shows whether your site is live and matches Folio (Live and up to date, Live but older, or Not live), and rechecks after every update. Step 9 also includes Update the publishing Worker, which a Publish error about page contents points you to.'],
   ['v1.1.17', 'Error messages now have a Copy error button (and the text can be selected), so you can paste the exact words to send for help. This covers publishing errors, pop-up errors and errors on the Hire me form of your site.'],
   ['v1.1.16', 'Pasting a long address into a box no longer leaves the page scrolled sideways: the page cannot pan past its edges, and the box scrolls back to the start when you finish.'],
   ['v1.1.15', 'The Google Apps Script code is now written with no leading spaces, so phone editors that add their own indentation do not scramble it. The steps also say to paste into an empty editor without typing, and Web3Forms is suggested as the easiest option on a phone.'],
@@ -667,10 +670,11 @@ function renderPanel() {
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('online', '8. Publish online', onlineBody()) +
     card('pub', '9. Download your site and back up',
+      `<details class="wk"><summary><b>Update the publishing Worker</b> (needed when Publish says the page contents are not valid)</summary><ol class="steps"><li>Open the Worker code on GitHub and tap the copy icon at the top right of the code.<div class="btnrow"><a class="btn" href="https://github.com/LayahMcFly/JobSearch/blob/main/folio/worker/folio-pages.mjs" target="_blank" rel="noopener">Open Worker code</a></div></li><li>On dash.cloudflare.com open <b>Workers &amp; Pages</b>, then <b>folio-pages</b>, then <b>Edit code</b>.</li><li>Select everything in the editor, paste over it and tap <b>Deploy</b>. Your database and Turnstile secret stay as they are.</li><li>Come back here and press Publish again.</li></ol></details>` +
       `<ol class="steps"><li>Press <b>Download my site</b>. You get a file named <b>index.html</b>.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>` +
       `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>` +
       `<p class="hint">Backups hold your resume and style only. They never include publishing access (see step 8).</p>`);
-  if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); }
+  if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); if (openCards.online && PUB && !liveAuto) { liveAuto = true; checkLive(); } }
 }
 
 /* ---------- 5. preview ---------- */
@@ -837,7 +841,7 @@ function failText(res, what) {
     case 'daily_limit': return 'The publishing service reached a free daily limit on Cloudflare (' + (j.which === 'read' ? 'reads' : 'writes') + ').' + wait + ' ' + state;
     case 'storage_unavailable': return 'The publishing storage is unavailable right now. ' + state;
     case 'too_large': return 'Your page is too large to publish (limit 100 KB). ' + state;
-    case 'invalid_data': return 'The service rejected the page contents' + (j.detail ? ' (' + String(j.detail).slice(0, 120) + ')' : '') + '. ' + state;
+    case 'invalid_data': return 'The service rejected the page contents' + (j.detail ? ' (' + String(j.detail).slice(0, 120) + ')' : '') + '. ' + (/formMode/.test(j.detail || '') ? 'The publishing Worker is probably out of date: follow "Update the publishing Worker" in step 9. ' : '') + state;
     case 'edit_key_required': case 'forbidden': return 'The edit key does not match this page, or the page no longer exists. ' + state;
     case 'origin_not_allowed': return 'The publishing service does not accept requests from this website address. ' + state;
     default: return 'The publishing service returned an error (' + res.status + '). ' + state;
@@ -845,6 +849,17 @@ function failText(res, what) {
 }
 function setPubMsg(kind, text) { pubMsg = text ? { kind, text } : null; const el = $('#pubLive'); if (el) el.innerHTML = pubMsgHtml(); }
 const pubMsgHtml = () => pubMsg ? `<p class="pubmsg ${pubMsg.kind}" role="${pubMsg.kind === 'err' ? 'alert' : 'status'}">${esc(pubMsg.text)}${pubMsg.kind === 'err' ? '<button type="button" class="copyerr" data-copyerr>Copy error</button>' : ''}</p>` : '';
+let liveState = null, liveAuto = false;
+async function checkLive() {
+  const b = $('#liveBadge'); if (!b || !PUB) return; const show = (k, t) => { liveState = { k, t }; const e = $('#liveBadge'); if (e) { e.className = 'livebadge ' + k; e.textContent = t; } };
+  show('wait', 'Checking with the service…'); const at = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  let res; try { res = await pubApi('GET', '/api/pages/' + PUB.id); } catch (e) { res = { status: 0 }; }
+  if (res.status === 200 && res.json && res.json.data && res.json.data.D && res.json.data.ST) {
+    const same = JSON.stringify({ D: normData(res.json.data.D), ST: normStyle(res.json.data.ST) }) === snapNow();
+    show(same ? 'ok' : 'warn', same ? 'Live and up to date. The online page matches what is in Folio. Checked at ' + at + '.' : 'Live, but the online page is different from what is in Folio. Press Update published page to publish your latest changes. Checked at ' + at + '.');
+  } else if (res.status === 404) show('bad', 'Not live. The service has no page with this ID, so the link shows "not found". Checked at ' + at + '.');
+  else show('bad', 'Could not check: ' + failText(res, 'check') + ' Checked at ' + at + '.');
+}
 function updatePubStatus() { const el = $('#pubDirty'); if (el && PUB) el.textContent = PUB.snap === snapNow() ? 'The published page matches what is in Folio.' : 'You have changes that are not published yet. Press Update published page.'; }
 function setPubBusy(b) { pubBusy = b; document.querySelectorAll('[data-pub]').forEach(x => { x.disabled = b; }); }
 /* The Publish button is never greyed out for a missing step: pressing it says what is missing. This shows where the human check stands. */
@@ -869,6 +884,7 @@ function onlineBody() {
     return `<p class="hint">Your page is live. Anyone with the link can view it. They cannot change it, and the link does not contain your edit key.</p>` +
       `<label class="f">Share link<input type="text" readonly id="pubLink" value="${esc(link)}"></label>` +
       `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="copy">Copy link</button><a class="btn" href="${esc(link)}" target="_blank" rel="noopener noreferrer">View page</a></div>` +
+      `<p class="livebadge ${liveState ? liveState.k : ''}" id="liveBadge" role="status" aria-live="polite">${esc(liveState ? liveState.t : 'Not checked yet.')}</p><div class="btnrow"><button type="button" class="btn" data-pub="check">Check if my site is live</button></div>` +
       `<p class="hint" id="pubDirty"></p>` +
       `<div class="btnrow"><button type="button" class="btn btn-primary" data-pub="update">Update published page</button><button type="button" class="btn btn-danger" data-pub="unpublish">Unpublish</button></div>` + live +
       `<div class="keybox"><b>Publishing recovery file</b><p class="hint">This file holds your private edit key. Anyone who has it can change or remove your page, so store it like a password. Do not share it, email it, or upload it to a public place such as GitHub. Without it, you cannot update or unpublish this page after you clear this browser or switch devices. Your normal backup does not include it.${PUB.saved ? '' : ' <b>You have not saved it yet.</b>'}</p><div class="btnrow"><button type="button" class="btn" data-pub="saveKey">Save recovery file</button></div></div>` +
@@ -919,7 +935,7 @@ async function doUpdate() {
   if (pubBusy || !PUB) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
   setPubBusy(true); setPubMsg('note', 'Updating…'); const snap = snapNow();
   const res = await pubApi('PUT', '/api/pages/' + PUB.id, { key: PUB.key, body: { data: JSON.parse(snap) } });
-  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = snap; savePub(); setPubMsg('ok', 'The service confirmed the update. Open your link to see what visitors get. If it still looks old, wait a little and reload.'); updatePubStatus(); }
+  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = snap; savePub(); setPubMsg('ok', 'The service confirmed the update. Open your link to see what visitors get. If it still looks old, wait a little and reload.'); updatePubStatus(); checkLive(); }
   else setPubMsg('err', failText(res, 'update'));
   setPubBusy(false);
 }
@@ -961,7 +977,7 @@ function copyPubLink() {
 }
 document.addEventListener('click', e => {
   const b = e.target.closest ? e.target.closest('[data-pub]') : null; if (!b || b.disabled) return; const a = b.dataset.pub;
-  if (a === 'publish') doPublish(); else if (a === 'update') doUpdate(); else if (a === 'unpublish') doUnpublish(); else if (a === 'copy') copyPubLink(); else if (a === 'saveKey') saveRecovery(); else if (a === 'loadCopy') loadPublished(); else if (a === 'retryTs') retryTurnstile();
+  if (a === 'publish') doPublish(); else if (a === 'update') doUpdate(); else if (a === 'unpublish') doUnpublish(); else if (a === 'copy') copyPubLink(); else if (a === 'check') checkLive(); else if (a === 'saveKey') saveRecovery(); else if (a === 'loadCopy') loadPublished(); else if (a === 'retryTs') retryTurnstile();
   else if (a === 'forget') confirmDialog({ title: 'Stop managing this page here?', message: 'The page stays public. This browser forgets its edit key, so unless you saved the recovery file you will not be able to update or unpublish it.', ok: 'Forget it' }).then(yes => { if (yes) { PUB = null; savePub(); setPubMsg('', ''); renderPanel(); } });
 });
 document.addEventListener('change', e => { if (e.target.id === 'pubConsent') { pubConsent = e.target.checked; refreshPubButtons(); if (pubConsent) setPubMsg('', ''); } if (e.target.id === 'pubRestoreFile') { restoreRecovery(e.target.files[0]); e.target.value = ''; } });

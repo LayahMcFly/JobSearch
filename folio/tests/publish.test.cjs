@@ -199,6 +199,13 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- live status ---- */
+  { const P = await open(HOME); await P.waitForFunction('typeof D !== "undefined"');
+    const run = async (resp) => P.evaluate(async r => { if (!document.getElementById('liveBadge')) { const e = document.createElement('p'); e.id = 'liveBadge'; document.body.appendChild(e); } PUB = { id: 'Ab3dE5gH7jKm', key: 'k', api: 'x', snap: '' }; pubApi = async () => r === 'same' ? { status: 200, json: { data: JSON.parse(snapNow()) } } : r === 'diff' ? { status: 200, json: { data: { D: Object.assign({}, JSON.parse(snapNow()).D, { name: 'Someone else' }), ST: JSON.parse(snapNow()).ST } } } : { status: 404, json: { error: 'not_found' } }; await checkLive(); const b = document.getElementById('liveBadge'); return b.className + '|' + b.textContent; }, resp);
+    eq('live status: matching page says live and up to date', /^livebadge ok\|Live and up to date/.test(await run('same')));
+    eq('live status: different page says live but older, tells you to update', /^livebadge warn\|Live, but.*Update published page/.test(await run('diff')));
+    eq('live status: missing page says not live', /^livebadge bad\|Not live/.test(await run('gone'))); await P.ctx.close(); }
+
   /* ---- copyable errors ---- */
   { const P = await open(HOME); await P.waitForFunction('typeof D !== "undefined"');
     await P.evaluate(() => { window.__c = null; window.copyText = t => { window.__c = t; return Promise.resolve(true); }; if (!document.getElementById('pubLive')) { const d = document.createElement('div'); d.id = 'pubLive'; document.body.appendChild(d); } setPubMsg('err', 'Something broke: code 42'); });
