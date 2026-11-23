@@ -1,7 +1,7 @@
 {
  "app": "job-search-tracker",
  "feedFormat": 1,
- "generatedAt": "2026-11-22T19:45:17.950Z",
+ "generatedAt": "2026-11-23T01:47:41.599Z",
  "sources": [
   {
    "name": "Remotive: all categories",
@@ -16,7 +16,7 @@
    "status": "ok",
    "count": 100,
    "fetched": 100,
-   "ms": 766
+   "ms": 549
   },
   {
    "name": "RSS: We Work Remotely: Customer Support",
@@ -24,7 +24,7 @@
    "status": "ok",
    "count": 90,
    "fetched": 95,
-   "ms": 1642
+   "ms": 833
   },
   {
    "name": "RSS: We Work Remotely: All Jobs",
@@ -32,15 +32,15 @@
    "status": "ok",
    "count": 100,
    "fetched": 100,
-   "ms": 1129
+   "ms": 742
   },
   {
    "name": "RSS: We Work Remotely: Sales and Marketing",
    "type": "rss",
    "status": "ok",
    "count": 200,
-   "fetched": 238,
-   "ms": 606
+   "fetched": 237,
+   "ms": 602
   },
   {
    "name": "RSS: We Work Remotely: All Other",
@@ -48,7 +48,7 @@
    "status": "ok",
    "count": 105,
    "fetched": 110,
-   "ms": 491
+   "ms": 372
   },
   {
    "name": "RSS: We Work Remotely: Programming",
@@ -56,7 +56,7 @@
    "status": "ok",
    "count": 21,
    "fetched": 25,
-   "ms": 334
+   "ms": 153
   },
   {
    "name": "RSS: We Work Remotely: Design",
@@ -64,7 +64,7 @@
    "status": "ok",
    "count": 29,
    "fetched": 33,
-   "ms": 165
+   "ms": 190
   }
  ],
  "jobs": [
