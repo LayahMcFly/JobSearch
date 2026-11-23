@@ -5,7 +5,7 @@
 
    WHAT IT NEEDS (see SETUP.md for the exact clicks):
      binding   DB                 a D1 database
-     binding   MEDIA              an R2 bucket for portfolio images and videos (optional; without it portfolio uploads are refused)
+     binding   MEDIA              a Workers KV namespace for portfolio images and videos (optional; without it portfolio uploads are refused). KV needs no card.
      secret    TURNSTILE_SECRET   the Turnstile widget's secret key (never sent to a browser, never logged)
      variable  ALLOWED_ORIGIN     optional, default https://layahmcfly.github.io
      variable  TURNSTILE_HOSTNAMES optional, comma list, default layahmcfly.github.io
@@ -15,7 +15,7 @@
    Only its SHA-256 hash is stored. Updating, unpublishing and checking a key all need that key in an
    Authorization header (never in a URL). Public responses never contain a key or a hash.
 
-   PORTFOLIO FILES: a page may list up to 6 images or videos (JPEG, PNG, WebP, GIF, MP4, WebM), each at most 15 MB. Only the page's
+   PORTFOLIO FILES (stored in Workers KV, free, no card; 1 GB, 1,000 writes and 100,000 reads a day): a page may list up to 6 images or videos (JPEG, PNG, WebP, GIF, MP4, WebM), each at most 15 MB. Only the page's
    edit key can upload. Each upload is checked against its real bytes, not just its label. Files are served back with
    nosniff and a locked-down CSP, and they are deleted when the page is unpublished or no longer lists them.
 
@@ -290,7 +290,7 @@ function sniffOk(type, b) { // the real first bytes must match the type the file
     default: return false;
   }
 }
-const mediaCapBytes = env => num(env.MEDIA_TOTAL_CAP_MB, 8000) * 1024 * 1024; // stay under R2's 10 GB free storage
+const mediaCapBytes = env => num(env.MEDIA_TOTAL_CAP_MB, 900) * 1024 * 1024; // stay under Workers KV's 1 GB free storage
 async function pageMedia(env, id) {
   const row = await env.DB.prepare('SELECT data FROM pages WHERE id = ?1').bind(id).first();
   let list = []; try { const d = JSON.parse(row.data); if (d && d.D && Array.isArray(d.D.portfolio)) list = d.D.portfolio; } catch (e) { list = []; }
@@ -301,7 +301,7 @@ async function pruneMedia(env, id, keep) {
   const rows = (await env.DB.prepare('SELECT mid FROM media WHERE page_id = ?1').bind(id).all()).results || [];
   const gone = rows.map(r => String(r.mid)).filter(m => !keep || !keep.includes(m));
   if (!gone.length) return;
-  if (env.MEDIA) await env.MEDIA.delete(gone.map(m => id + '/' + m));
+  if (env.MEDIA) for (const m of gone) await env.MEDIA.delete(id + '/' + m);
   for (const m of gone) await env.DB.prepare('DELETE FROM media WHERE page_id = ?1 AND mid = ?2').bind(id, m).run();
 }
 
@@ -323,11 +323,10 @@ async function putMedia(request, env, id, mid, now) {
   if (Number(all.s) + len > mediaCapBytes(env)) return fail(request, env, 503, 'media_storage_full');
   const u = await hit(env, 'mup:' + id, 3600, num(env.RL_MEDIA_PAGE_HOUR, 60), now); if (!u.ok) return tooMany(request, env, u);
   const objKey = id + '/' + mid;
-  await env.MEDIA.put(objKey, request.body, { httpMetadata: { contentType: type } });
-  const head = await env.MEDIA.head(objKey);
-  let ok = !!head && head.size === len;
-  if (ok) { const part = await env.MEDIA.get(objKey, { range: { offset: 0, length: 16 } }); ok = !!part && sniffOk(type, new Uint8Array(await part.arrayBuffer())); if (!ok) { await env.MEDIA.delete(objKey); return fail(request, env, 415, 'content_mismatch'); } }
-  if (!ok) { await env.MEDIA.delete(objKey); return fail(request, env, 400, 'upload_incomplete'); }
+  const buf = await request.arrayBuffer(); // up to 15 MB, checked below before anything is stored
+  if (buf.byteLength !== len) return fail(request, env, 400, 'upload_incomplete');
+  if (!sniffOk(type, new Uint8Array(buf, 0, Math.min(16, buf.byteLength)))) return fail(request, env, 415, 'content_mismatch');
+  await env.MEDIA.put(objKey, buf);
   await env.DB.prepare('INSERT OR REPLACE INTO media(page_id, mid, type, size, created_at) VALUES(?1, ?2, ?3, ?4, ?5)').bind(id, mid, type, len, Math.floor(now / 1000)).run();
   return reply(request, env, 200, { id, mid, size: len });
 }
@@ -337,16 +336,19 @@ async function getMedia(request, env, id, mid) {
   await ensureSchema(env);
   const row = await env.DB.prepare('SELECT type FROM media WHERE page_id = ?1 AND mid = ?2').bind(id, mid).first();
   if (!row || !own(MEDIA_TYPES, String(row.type))) return fail(request, env, 404, 'not_found');
-  const wantRange = request.headers.get('range');
-  let obj; try { obj = await env.MEDIA.get(id + '/' + mid, wantRange ? { range: request.headers } : undefined); } catch (e) { return new Response(null, { status: 416, headers: { 'content-range': 'bytes */' + 0 } }); }
-  if (!obj) return fail(request, env, 404, 'not_found');
-  const h = { 'content-type': String(row.type), 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", 'cross-origin-resource-policy': 'cross-origin', 'cache-control': 'no-cache' };
+  const buf = await env.MEDIA.get(id + '/' + mid, { type: 'arrayBuffer' });
+  if (!buf) return fail(request, env, 404, 'not_found');
+  const size = buf.byteLength, h = { 'content-type': String(row.type), 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", 'cross-origin-resource-policy': 'cross-origin', 'cache-control': 'no-cache' };
   h.vary = 'Origin'; const o = request.headers.get('Origin'); if (o && o === allowedOrigin(env)) h['access-control-allow-origin'] = o; // lets Folio copy your own files to a new device
-  if (obj.httpEtag) h.etag = obj.httpEtag;
-  const r = wantRange && obj.range && Number.isFinite(obj.range.offset) ? obj.range : null;
-  if (r) { const len = Number.isFinite(r.length) ? r.length : obj.size - r.offset; h['content-range'] = 'bytes ' + r.offset + '-' + (r.offset + len - 1) + '/' + obj.size; h['content-length'] = String(len); return new Response(obj.body, { status: 206, headers: h }); }
-  h['content-length'] = String(obj.size);
-  return new Response(obj.body, { status: 200, headers: h });
+  const rg = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') || '');
+  if (rg && (rg[1] !== '' || rg[2] !== '')) { // Safari needs byte ranges to play video
+    let a = rg[1] === '' ? Math.max(0, size - Number(rg[2])) : Number(rg[1]), z = rg[1] === '' || rg[2] === '' ? size - 1 : Math.min(Number(rg[2]), size - 1);
+    if (a >= size || a > z) return new Response(null, { status: 416, headers: { 'content-range': 'bytes */' + size } });
+    h['content-range'] = 'bytes ' + a + '-' + z + '/' + size; h['content-length'] = String(z - a + 1);
+    return new Response(buf.slice(a, z + 1), { status: 206, headers: h });
+  }
+  h['content-length'] = String(size);
+  return new Response(buf, { status: 200, headers: h });
 }
 
 async function checkKey(request, env, id, now) {

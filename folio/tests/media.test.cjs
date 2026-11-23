@@ -1,7 +1,7 @@
 /* Tests for portfolio files in the folio-pages Worker. Run from the repo root:  node folio/tests/media.test.cjs
-   The REAL Worker code runs against real SQLite (d1-shim) and an in-memory R2 stand-in (r2-shim). Not real Cloudflare. */
+   The REAL Worker code runs against real SQLite (d1-shim) and an in-memory KV stand-in (kv-shim). Not real Cloudflare. */
 const path = require('path'), { pathToFileURL } = require('url');
-const { makeD1 } = require('./d1-shim.cjs'), { makeR2 } = require('./r2-shim.cjs');
+const { makeD1 } = require('./d1-shim.cjs'), { makeKV } = require('./kv-shim.cjs');
 const results = []; const eq = (n, c, note) => { results.push(!!c); console.log((c ? 'PASS ' : 'FAIL ') + n + (c || !note ? '' : '  :: ' + note)); };
 const ORIGIN = 'https://layahmcfly.github.io', ALPHA = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const rid = () => Array.from({ length: 12 }, () => ALPHA[Math.floor(Math.random() * ALPHA.length)]).join('');
@@ -15,7 +15,7 @@ const bytes = {
   'video/webm': Buffer.concat([Buffer.from([0x1A, 0x45, 0xDF, 0xA3]), Buffer.alloc(1000, 7)])
 };
 let worker, env, ipN = 0;
-const fresh = extra => { env = Object.assign({ DB: makeD1(), MEDIA: makeR2(), TURNSTILE_SECRET: 's', ALLOWED_ORIGIN: ORIGIN, RL_PUBLISH_IP_HOUR: '999', RL_PUBLISH_IP_DAY: '999', RL_PUBLISH_GLOBAL_DAY: '999' }, extra || {}); };
+const fresh = extra => { env = Object.assign({ DB: makeD1(), MEDIA: makeKV(), TURNSTILE_SECRET: 's', ALLOWED_ORIGIN: ORIGIN, RL_PUBLISH_IP_HOUR: '999', RL_PUBLISH_IP_DAY: '999', RL_PUBLISH_GLOBAL_DAY: '999' }, extra || {}); };
 const ip = () => '203.0.113.' + (ipN++ % 250 + 1);
 async function call(method, p, o) {
   o = o || {}; const h = { 'CF-Connecting-IP': o.ip || ip(), Origin: ORIGIN }; if (o.key) h.Authorization = 'Bearer ' + o.key; if (o.ct) h['Content-Type'] = o.ct; if (o.headers) Object.assign(h, o.headers);
@@ -33,7 +33,7 @@ const count = t => env.DB._raw.prepare('SELECT COUNT(*) c FROM ' + t).get().c;
   worker = (await import(pathToFileURL(path.join(__dirname, '..', 'worker', 'folio-pages.mjs')).href)).default;
   fresh();
   const st = (await call('GET', '/api/status')).j; eq('status: reports media support, 15 MB and 6 files', st.media === true && st.maxMediaBytes === 15728640 && st.maxMediaFiles === 6);
-  fresh({ MEDIA: undefined }); eq('status: without an R2 bucket it says media is off', (await call('GET', '/api/status')).j.media === false);
+  fresh({ MEDIA: undefined }); eq('status: without a KV namespace it says media is off', (await call('GET', '/api/status')).j.media === false);
   let pg; { const pe = entry('image/png'); pg = await publish([pe]); const nb = Object.assign({}, env, { MEDIA: undefined }); const saved = env; env = nb; const r = await put(pg, pe, bytes['image/png']); env = saved; eq('no bucket: upload is refused honestly (503 media_unavailable)', r.s === 503 && r.j.error === 'media_unavailable'); }
   fresh();
   const list = Object.keys(bytes).map(t => entry(t)); pg = await publish(list);

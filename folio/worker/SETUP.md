@@ -61,17 +61,18 @@ The page ID in the link only allows viewing. The edit key is shown once, kept in
 
 Set `PUBLISHING_PAUSED` to `true` (stops publishing and updates immediately). To remove everything: delete the Worker, the D1 database and the Turnstile widget in the dashboard. Published pages disappear with the database.
 
-## 8. Portfolio files (images and videos): extra setup, v1.1.0 of the Worker
+## 8. Portfolio files (images and videos): extra setup, Worker v1.1.0
 
-Folio v1.2.0 lets a page show up to 6 images or videos (15 MB each). Online storage for them is a Cloudflare **R2** bucket. Without it, everything else keeps working, and Publish stops with a plain message if a portfolio has files.
+Folio v1.2.0 lets a page show up to 6 images or videos (15 MB each). Online storage for them is a **Workers KV** namespace. KV is on the free plan and needs no payment card. Without it, everything else keeps working, and Publish stops with a plain message if a portfolio has files.
 
-1. **Turn on R2.** Dashboard > Storage & databases > R2 object storage > Get started. R2 has a free allowance (10 GB stored, no charge for downloads). Cloudflare may ask for a payment card to switch R2 on. If it does, stop and decide whether you want that. Folio's code never goes past the free allowance on purpose: it refuses uploads once 8 GB is stored (change with the `MEDIA_TOTAL_CAP_MB` setting).
-2. **Create a bucket** named `folio-media`. Leave it private (do not turn on a public address).
-3. **New Worker code.** Worker `folio-pages` > Edit code. Replace everything with the current `folio/worker/folio-pages.mjs` (version 1.1.0), then Deploy.
-4. **Bind the bucket.** Worker > Settings > Bindings > Add > R2 bucket. Variable name exactly `MEDIA`, bucket `folio-media`. Deploy.
-5. **Check.** Open `.../api/status`. It should now show `"media":true` and `"version":"1.1.0"`.
+1. **Namespace.** A KV namespace named `folio-media` already exists in your Cloudflare account (id `2cd1222e15b144988bff1935a4c9b795`). If it is missing, create it: Dashboard > Storage & databases > KV > Create, name `folio-media`.
+2. **New Worker code.** Worker `folio-pages` > Edit code. Replace everything with the current `folio/worker/folio-pages.mjs` (version 1.1.0), then Deploy.
+3. **Bind the namespace.** Worker > Settings > Bindings > Add > KV namespace. Variable name exactly `MEDIA`, namespace `folio-media`. Deploy.
+4. **Check.** Open `.../api/status`. It should show `"media":true` and `"version":"1.1.0"`.
 
-Rules the Worker enforces: only the page's edit key can upload; JPEG, PNG, WebP, GIF, MP4 and WebM only (no SVG); the first bytes of each file must match its type; 15 MB per file, 6 files and 90 MB per page; 60 uploads per page per hour. Files are deleted when you remove them and update, or unpublish. Visitors load files through the Worker (`/api/media/<page>/<file>`), which counts toward the Worker's free 100,000 requests a day, and long videos load in pieces, so each piece is a request.
+Free KV limits: 1 GB stored, 1,000 writes and 1,000 deletes a day, 100,000 reads a day. Folio stops accepting files at 900 MB in total (change with the `MEDIA_TOTAL_CAP_MB` setting). A full page of 6 files can use 90 MB, so about 10 such pages fill it. KV can show a brand-new or just-deleted file for up to about a minute in some places.
+
+Rules the Worker enforces: only the page's edit key can upload; JPEG, PNG, WebP, GIF, MP4 and WebM only (no SVG); the first bytes of each file must match its type, checked before anything is stored; 15 MB per file, 6 files and 90 MB per page; 60 uploads per page per hour. Files are deleted when you remove them and update, or when you unpublish. Visitors load files through the Worker (`/api/media/<page>/<file>`), which counts toward the Worker's free 100,000 requests a day. Videos play in pieces (byte ranges), and every piece is a request and a KV read.
 
 Version 1.1.0 also accepts the new `gscript` message mode (Folio's Google Apps Script option). Pages using that mode will not publish until the Worker is updated.
 

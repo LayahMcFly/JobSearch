@@ -2,7 +2,7 @@
    Real Folio page in Chromium + the REAL Worker code + real SQLite standing in for D1 (see d1-shim.cjs).
    Turnstile (the widget script and siteverify) is SIMULATED. Nothing here touches Cloudflare. */
 const { chromium } = require('playwright'); const fs = require('fs'), path = require('path'), crypto = require('crypto'), { pathToFileURL } = require('url');
-const { makeD1, WRITE_LIMIT } = require('./d1-shim.cjs'), { makeR2 } = require('./r2-shim.cjs'), vm = require('vm');
+const { makeD1, WRITE_LIMIT } = require('./d1-shim.cjs'), { makeKV } = require('./kv-shim.cjs'), vm = require('vm');
 const results = []; const rec = (n, ok, note) => { results.push({ name: n, ok, note: note || '' }); console.log((ok ? 'PASS ' : 'FAIL ') + n + (ok || !note ? '' : '  :: ' + note)); };
 const eq = (n, c, note) => rec(n, !!c, note);
 const HOME = 'http://x.test/folio/', API = 'https://folio-pages.test', SECRET = 'SECRET-turnstile-value-9f3a', SITEKEY = 'TEST-SITEKEY';
@@ -17,7 +17,7 @@ globalThis.fetch = async (url, init) => { // Worker -> Turnstile siteverify (sim
   const tok = new URLSearchParams(String(init.body)).get('response'); const ok = tok !== 'bad-token';
   return new Response(JSON.stringify(ok ? { success: true, hostname: 'x.test', action: 'folio-publish' } : { success: false, 'error-codes': ['invalid-input-response'] }), { status: 200, headers: { 'content-type': 'application/json' } });
 };
-const newEnv = x => { env = Object.assign({ DB: makeD1(), MEDIA: makeR2(), TURNSTILE_SECRET: SECRET, ALLOWED_ORIGIN: 'http://x.test', TURNSTILE_HOSTNAMES: 'x.test' }, x || {}); mode = {}; seen = []; };
+const newEnv = x => { env = Object.assign({ DB: makeD1(), MEDIA: makeKV(), TURNSTILE_SECRET: SECRET, ALLOWED_ORIGIN: 'http://x.test', TURNSTILE_HOSTNAMES: 'x.test' }, x || {}); mode = {}; seen = []; };
 async function wire(ctx) {
   const ip = '198.51.100.' + (ipN++);
   await ctx.route('**/*', async r => {
