@@ -124,6 +124,9 @@ input[type=color]{width:52px;height:44px;padding:2px;border-radius:50%;border:1.
 .btnrow{display:flex;flex-wrap:wrap;gap:.6rem}
 .toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#2a241f;color:#fff;padding:.7rem 1.1rem;border-radius:12px;z-index:50;max-width:92vw;display:none}
 .toast.show{display:block}
+.toast,.pubmsg{user-select:text;-webkit-user-select:text}
+.copyerr{font:inherit;font-size:.85rem;font-weight:700;margin-left:.6rem;padding:.25rem .7rem;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer}
+.pubmsg .copyerr{display:block;margin:.5rem 0 0}
 footer{text-align:center;color:var(--muted);font-size:.88rem;padding:1.5rem 1rem 2rem;display:flex;flex-direction:column;align-items:center;gap:.6rem}
 .notes-btn{min-height:36px;padding:.25rem .9rem;border-radius:999px;border:1.5px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--bg));color:var(--accent-text);font:inherit;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
 .notes-btn svg{width:18px;height:18px;margin-right:.45rem;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
@@ -223,8 +226,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.16';
+const APP_VERSION = 'v1.1.17';
 const RELEASES = [
+  ['v1.1.17', 'Error messages now have a Copy error button (and the text can be selected), so you can paste the exact words to send for help. This covers publishing errors, pop-up errors and errors on the Hire me form of your site.'],
   ['v1.1.16', 'Pasting a long address into a box no longer leaves the page scrolled sideways: the page cannot pan past its edges, and the box scrolls back to the start when you finish.'],
   ['v1.1.15', 'The Google Apps Script code is now written with no leading spaces, so phone editors that add their own indentation do not scramble it. The steps also say to paste into an empty editor without typing, and Web3Forms is suggested as the easiest option on a phone.'],
   ['v1.1.14', 'The Google Apps Script steps now say to empty the editor first (a leftover bracket from Google sample code causes a Syntax error), the script starts with a reminder comment, and Copy script reports how many lines it copied.'],
@@ -276,7 +280,7 @@ const SAMPLE = {
 const STYLE0 = { layout: 'modern', font: 'editorial', color: '#8a3f1f', paper: 'white' };
 let D = JSON.parse(JSON.stringify(SAMPLE)), ST = Object.assign({}, STYLE0);
 let saveTimer = 0;
-function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ D, ST })); } catch (e) { toast('Could not save in this browser. Download a backup.'); } }, 250); }
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ D, ST })); } catch (e) { toast('Could not save in this browser. Download a backup.', true); } }, 250); }
 
 /* ---------- 2. style choices ---------- */
 const LAYOUTS = [
@@ -397,7 +401,7 @@ function siteScript() {
   var f = document.getElementById('hireForm');
   if (!f) return;
   var msg = f.querySelector('.msg'), btn = f.querySelector('.cta'), busy = false;
-  function say(t, kind) { msg.className = 'msg' + (kind ? ' ' + kind : ''); msg.textContent = t; }
+  function say(t, kind) { msg.className = 'msg' + (kind ? ' ' + kind : ''); msg.textContent = t; if (kind === 'err') { var b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error'; b.onclick = function () { var done = function () { b.textContent = 'Copied'; }; try { navigator.clipboard.writeText(t).then(done, done); } catch (e) { var a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (x) {} a.remove(); done(); } }; msg.appendChild(b); } }
   function el(n) { return f.elements[n]; }
   function val(n) { return el(n) ? el(n).value.trim() : ''; }
   function clearBad() { var c = f.querySelectorAll('.q.bad'); for (var i = 0; i < c.length; i++) { c[i].classList.remove('bad'); var e = c[i].querySelector('.qerr'); if (e) e.hidden = true; } }
@@ -551,7 +555,7 @@ fieldset.poll{min-width:0}.poll legend{font-weight:500;padding:0 .2rem;margin-le
 .done{margin-top:1.4rem;border-top:10px solid var(--fill)}.done h3{margin:.2rem 0 .6rem;font-size:1.5rem}.donemsg{margin:0;font-weight:600}.donethanks{margin:.6rem 0 0}.donethanks:empty{display:none}
 .again{font:inherit;font-weight:600;background:none;border:0;color:var(--acc);min-height:48px;padding:0;margin-top:.6rem;cursor:pointer;text-decoration:underline}
 .fine{margin:0;color:var(--muted);font-size:.9rem;padding:0 .2rem}
-.msg{margin:0;font-weight:600;padding:0 .2rem}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
+.msg{margin:0;font-weight:600;padding:0 .2rem;user-select:text;-webkit-user-select:text}.copyerr{font:inherit;font-size:.85rem;font-weight:700;margin-left:.6rem;padding:.2rem .7rem;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
 .demo-note{margin:0;padding:.7rem .9rem;border:2px dashed var(--ctl);border-radius:10px;background:var(--soft);color:var(--ink)}
 .draft{display:grid;gap:.4rem}.draft textarea{font:inherit;font-weight:400;width:100%;min-height:9rem;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.6rem}
 ::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
@@ -679,7 +683,10 @@ function refresh() {
     fr.onload = () => { try { fr.contentWindow.scrollTo(0, y); } catch (e) {} };
   }, 200);
 }
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 3500); }
+function copyText(txt) { const done = () => true; try { if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(txt).then(done, () => legacyCopy(txt)); } catch (e) {} return Promise.resolve(legacyCopy(txt)); }
+function legacyCopy(txt) { const a = document.createElement('textarea'); a.value = txt; a.setAttribute('readonly', ''); a.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px'; document.body.appendChild(a); a.select(); a.setSelectionRange(0, 99999); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} a.remove(); return ok; }
+function toast(msg, isErr) { const t = $('#toast'); t.textContent = msg; if (isErr) { const b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error'; b.dataset.copyerr = '1'; t.appendChild(b); } t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isErr ? 12000 : 3500); }
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-copyerr]'); if (!b) return; const box = b.parentElement; const txt = (box.firstChild && box.firstChild.nodeType === 3 ? box.firstChild.nodeValue : box.textContent.replace(b.textContent, '')).trim(); Promise.resolve(copyText(txt)).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy error'; }, 1500); }); });
 function change() { save(); refresh(); if (typeof updatePubStatus === 'function') updatePubStatus(); }
 
 document.addEventListener('input', e => {
@@ -736,7 +743,7 @@ function showFieldError(v) {
   if (err) { err.textContent = v.msg; err.hidden = false; }
   if (v.mode) { const m = document.querySelector('[data-err="mode"]'); if (m) { m.textContent = v.mode; m.hidden = false; } }
   if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
-  toast('The site was not downloaded. Fix the highlighted field first.');
+  toast('The site was not downloaded. Fix the highlighted field first.', true);
 }
 $('#exportBtn').addEventListener('click', () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
@@ -764,7 +771,7 @@ $('#pdfWhite').addEventListener('click', () => $('#pdfDialog').close('white'));
 $('#pdfPaper').addEventListener('click', () => $('#pdfDialog').close('paper'));
 $('#pdfBtn').addEventListener('click', async () => {
   const choice = await askPaperForPdf(); if (!choice) return;
-  const fr = $('#frame'); const go = () => { try { fr.contentWindow.focus(); fr.contentWindow.addEventListener('afterprint', () => refresh(), { once: true }); fr.contentWindow.print(); } catch (e) { toast('Could not open print. Use your browser menu, then Print.'); } };
+  const fr = $('#frame'); const go = () => { try { fr.contentWindow.focus(); fr.contentWindow.addEventListener('afterprint', () => refresh(), { once: true }); fr.contentWindow.print(); } catch (e) { toast('Could not open print. Use your browser menu, then Print.', true); } };
   view = 'resume'; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.view === 'resume')));
   fr.onload = go; fr.srcdoc = buildSite(D, ST, { resumeOnly: true, printPaper: choice === 'paper' });
 });
@@ -776,7 +783,7 @@ document.addEventListener('click', e => {
     renderPanel(); change(); const rb = $('#resetBtn'); if (rb) rb.focus();
   });
 });
-function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j || typeof j !== 'object' || !j.D || typeof j.D !== 'object') throw 0; D = normData(j.D); ST = normStyle(j.ST); renderPanel(); change(); toast('Backup restored.'); }).catch(() => toast('That file is not a Folio backup.')); }
+function restore(file) { if (!file) return; file.text().then(t => { const j = JSON.parse(t); if (!j || typeof j !== 'object' || !j.D || typeof j.D !== 'object') throw 0; D = normData(j.D); ST = normStyle(j.ST); renderPanel(); change(); toast('Backup restored.'); }).catch(() => toast('That file is not a Folio backup.', true)); }
 
 /* ---------- 6b. themed confirmation (replaces the browser's own confirm box) ---------- */
 // Opens as a modal (the page behind is inert and Tab stays inside), focuses Cancel first, closes on Escape or a click
@@ -837,7 +844,7 @@ function failText(res, what) {
   }
 }
 function setPubMsg(kind, text) { pubMsg = text ? { kind, text } : null; const el = $('#pubLive'); if (el) el.innerHTML = pubMsgHtml(); }
-const pubMsgHtml = () => pubMsg ? `<p class="pubmsg ${pubMsg.kind}" role="${pubMsg.kind === 'err' ? 'alert' : 'status'}">${esc(pubMsg.text)}</p>` : '';
+const pubMsgHtml = () => pubMsg ? `<p class="pubmsg ${pubMsg.kind}" role="${pubMsg.kind === 'err' ? 'alert' : 'status'}">${esc(pubMsg.text)}${pubMsg.kind === 'err' ? '<button type="button" class="copyerr" data-copyerr>Copy error</button>' : ''}</p>` : '';
 function updatePubStatus() { const el = $('#pubDirty'); if (el && PUB) el.textContent = PUB.snap === snapNow() ? 'The published page matches what is in Folio.' : 'You have changes that are not published yet. Press Update published page.'; }
 function setPubBusy(b) { pubBusy = b; document.querySelectorAll('[data-pub]').forEach(x => { x.disabled = b; }); }
 /* The Publish button is never greyed out for a missing step: pressing it says what is missing. This shows where the human check stands. */

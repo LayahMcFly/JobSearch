@@ -199,6 +199,15 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- copyable errors ---- */
+  { const P = await open(HOME); await P.waitForFunction('typeof D !== "undefined"');
+    await P.evaluate(() => { window.__c = null; window.copyText = t => { window.__c = t; return Promise.resolve(true); }; if (!document.getElementById('pubLive')) { const d = document.createElement('div'); d.id = 'pubLive'; document.body.appendChild(d); } setPubMsg('err', 'Something broke: code 42'); });
+    await P.evaluate(() => document.querySelector('.pubmsg.err [data-copyerr]').click()); await P.waitForTimeout(100);
+    eq('copy error: publishing error copies only its own text', await P.evaluate(() => window.__c) === 'Something broke: code 42');
+    await P.evaluate(() => { window.__c = null; toast('Could not do it', true); }); await P.evaluate(() => document.querySelector('#toast [data-copyerr]').click()); await P.waitForTimeout(100);
+    eq('copy error: pop-up error copies its text without the button label', await P.evaluate(() => window.__c) === 'Could not do it');
+    eq('copy error: normal pop-ups have no copy button', await P.evaluate(() => { toast('Fine'); return !document.querySelector('#toast [data-copyerr]'); })); await P.ctx.close(); }
+
   /* ---- long paste does not push the page sideways ---- */
   { const P = await open(HOME, { viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true }); await P.waitForFunction('typeof D !== "undefined"');
     await P.evaluate(() => { D.formMode = 'gscript'; openCards.send = true; renderPanel(); }); await P.waitForSelector('input[data-f=formEndpoint]');
