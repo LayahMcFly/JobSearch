@@ -106,9 +106,9 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
 
   /* ---- backup is key-free; recovery file has the key ---- */
   await A.evaluate(() => { openCards.pub = true; renderPanel(); });
-  const [bk] = await Promise.all([A.waitForEvent('download'), A.click('#backupBtn')]); const bkText = fs.readFileSync(await bk.path(), 'utf8');
+  await A.evaluate(() => { const d = document.getElementById('backupDialog'); if (!d.open) d.showModal(); }); const [bk] = await Promise.all([A.waitForEvent('download'), A.click('#backupBtn')]); const bkText = fs.readFileSync(await bk.path(), 'utf8'); await A.evaluate(() => document.getElementById('backupDialog').close()); 
   eq('ordinary backup has no page ID, no edit key, no publishing fields', !bkText.includes(keyLocal) && !bkText.includes(idPub) && !/editKey|pageId|folioPublishing/.test(bkText) && Object.keys(JSON.parse(bkText)).sort().join() === 'D,ST');
-  eq('card warns that backups do not include publishing access', /never include publishing access/.test(await A.textContent('[data-card=pub]')));
+  eq('card warns that backups do not include publishing access', /never include publishing access/.test(await A.textContent('#backupDialog')));
   const [rf] = await Promise.all([A.waitForEvent('download'), A.click('[data-pub=saveKey]')]); const recPath = await rf.path(); const recText = fs.readFileSync(recPath, 'utf8'); const rec1 = JSON.parse(recText);
   eq('recovery file: named folio-publishing-recovery.json with page ID + edit key + service + warning', rf.suggestedFilename() === 'folio-publishing-recovery.json' && rec1.pageId === idPub && rec1.editKey === keyLocal && rec1.service === API && /never share/i.test(rec1.warning));
   eq('recovery file: card carries a clear security warning', /store it like a password/i.test(await A.textContent('[data-card=online]')) && /Do not share it/.test(await A.textContent('[data-card=online]')));

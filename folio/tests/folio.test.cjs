@@ -276,10 +276,11 @@ async function inspectPage(p, label, expectScripts) {
   });
   await T('confirm dialog: Reset', async () => {
     const p = await editor(); await openAll(p); await p.fill('[data-f=name]', 'Keep Me');
-    await p.focus('#resetBtn'); await p.keyboard.press('Enter'); await p.waitForSelector('#confirmDialog[open]'); await p.keyboard.press('Escape'); await p.waitForTimeout(200);
+    await p.evaluate(() => { const d = document.getElementById('backupDialog'); if (d && !d.open) d.showModal(); }); await p.focus('#resetBtn'); await p.keyboard.press('Enter'); await p.waitForSelector('#confirmDialog[open]'); await p.keyboard.press('Escape'); await p.waitForTimeout(200);
     eq('  Escape keeps data and returns focus to Reset', await p.evaluate(() => D.name) === 'Keep Me' && await p.evaluate(() => document.activeElement.id) === 'resetBtn');
     await p.click('#resetBtn'); await p.click('#cfOk'); await p.waitForTimeout(250);
     eq('  confirming clears the resume and keeps focus on Reset', await p.evaluate(() => D.name) !== 'Keep Me' && await p.evaluate(() => document.activeElement.id) === 'resetBtn');
+    await p.evaluate(() => (document.getElementById('backupDialog') || { close() {} }).close()); 
     eq('  no native confirm()', p.native.length === 0); await p.ctx.close();
   });
 
@@ -287,13 +288,13 @@ async function inspectPage(p, label, expectScripts) {
   await T('backup and storage compatibility with v1.0.0', async () => {
     if (!OLD) return skip('  v1.0.0 data loads in this version', 'set FOLIO_OLD=/path/to/old/index.html to run');
     serve = OLD; const p = await editor(); await openAll(p); await p.fill('[data-f=name]', 'Old Data Name'); await p.click('[data-st=layout][data-v=bold]'); await p.click('.sw[data-v="#1d5b86"]'); await p.click('[data-add=services]'); await p.waitForTimeout(500);
-    const dl = p.waitForEvent('download'); await p.click('#backupBtn'); const d = await dl; const bf = path.join(tmp, 'old-backup.json'); await d.saveAs(bf);
+    await p.evaluate(() => { const d = document.getElementById('backupDialog'); if (d && !d.open) d.showModal(); }); const dl = p.waitForEvent('download'); await p.click('#backupBtn'); const d = await dl; const bf = path.join(tmp, 'old-backup.json'); await d.saveAs(bf); await p.evaluate(() => (document.getElementById('backupDialog') || { close() {} }).close()); 
     const canon = o => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v); const oldD = canon(JSON.parse(await p.evaluate(() => JSON.stringify(D))));
     serve = APP; await p.reload(); await p.waitForFunction('typeof D !== "undefined"'); await openAll(p); const nowD = canon(JSON.parse(await p.evaluate(() => JSON.stringify(D))));
     { const stNow = await p.evaluate(() => JSON.stringify(ST)); eq('  data saved by v1.0.0 loads unchanged (resume data and style)', nowD === oldD && /bold/.test(stNow) && /1d5b86/.test(stNow), nowD === oldD ? stNow : 'D differs: ' + oldD.slice(0, 60) + ' vs ' + nowD.slice(0, 60)); }
     await p.evaluate(() => { D.name = 'x'; refresh(); }); await p.setInputFiles('#restoreFile', bf); await p.waitForTimeout(500);
     eq('  a backup file from v1.0.0 restores unchanged', canon(JSON.parse(await p.evaluate(() => JSON.stringify(D)))) === oldD);
-    const dl2 = p.waitForEvent('download'); await p.click('#backupBtn'); const f2 = path.join(tmp, 'new-backup.json'); await (await dl2).saveAs(f2);
+    await p.evaluate(() => { const d = document.getElementById('backupDialog'); if (d && !d.open) d.showModal(); }); const dl2 = p.waitForEvent('download'); await p.click('#backupBtn'); const f2 = path.join(tmp, 'new-backup.json'); await (await dl2).saveAs(f2); await p.evaluate(() => (document.getElementById('backupDialog') || { close() {} }).close()); 
     eq('  new backups keep the same shape ({D, ST}) as v1.0.0', JSON.stringify(Object.keys(JSON.parse(fs.readFileSync(f2, 'utf8'))).sort()) === '["D","ST"]' && canon(JSON.parse(fs.readFileSync(f2, 'utf8')).D) === oldD);
     await p.ctx.close();
   });

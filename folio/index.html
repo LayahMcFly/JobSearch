@@ -179,7 +179,7 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 <div class="bar">
   <h1>Folio</h1>
   <div class="dl"><button type="button" class="btn btn-primary btn-small" id="dlBtn" aria-expanded="false" aria-controls="dlMenu">Download <span aria-hidden="true">&#9662;</span></button>
-    <div class="dlmenu" id="dlMenu" hidden><button type="button" class="btn" id="pdfBtn">Download resume PDF</button><button type="button" class="btn" id="exportBtn">Download my site</button></div></div>
+    <div class="dlmenu" id="dlMenu" hidden><button type="button" class="btn" id="pdfBtn">Download resume PDF</button><button type="button" class="btn" id="exportBtn">Download my site</button><button type="button" class="btn" id="backupMenuBtn">Back up and restore</button></div></div>
 </div>
 <div class="seg" role="group" aria-label="Show">
   <button type="button" class="btn" data-seg="edit" aria-pressed="true">Edit</button>
@@ -227,6 +227,13 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
   <div class="cf-actions pdf-actions"><button type="button" class="btn" id="siteCancel">Cancel</button><button type="button" class="btn btn-primary" id="siteGo">Download index.html</button></div>
 </dialog>
 
+<dialog id="backupDialog" class="confirm-card" aria-labelledby="backupTitle">
+  <h2 id="backupTitle">Back up and restore</h2>
+  <p>Backups hold your resume and style only. They never include publishing access. Restore brings a backup back into Folio.</p>
+  <div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>
+  <div class="cf-actions"><button type="button" class="btn" id="backupClose">Close</button></div>
+</dialog>
+
 <dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
   <div class="panel-head"><h2 id="notesTitle">Folio release notes</h2><button type="button" class="icon-btn" id="notesClose" aria-label="Close Folio release notes">&times;</button></div>
   <div class="notes-scroll"><div class="notes-grid" id="notesBody" role="table" aria-label="Folio release notes by version">
@@ -235,11 +242,12 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.20';
+const APP_VERSION = 'v1.1.21';
 const RELEASES = [
+  ['v1.1.21', 'Step 9 is gone. Back up and restore, Download backup and Start with a blank resume are now under the Download button, and the Update the publishing Worker help moved into step 8, Publish online.'],
   ['v1.1.20', 'Download, then Download my site, now opens a window with the steps to put your site online (the HTML file and GitHub Pages) and a Download index.html button. Step 9 is now Back up and restore.'],
-  ['v1.1.19', 'After you download your site, the message now points to step 9 (Download your site and back up), where the steps to put it online are. It said step 8 before.'],
-  ['v1.1.18', 'Publish online now shows whether your site is live and matches Folio (Live and up to date, Live but older, or Not live), and rechecks after every update. Step 9 also includes Update the publishing Worker, which a Publish error about page contents points you to.'],
+  ['v1.1.19', 'After you download your site, the message now points to the steps to put it online. It named the wrong step before.'],
+  ['v1.1.18', 'Publish online now shows whether your site is live and matches Folio (Live and up to date, Live but older, or Not live), and rechecks after every update. Step 8 also includes Update the publishing Worker, which a Publish error about page contents points you to.'],
   ['v1.1.17', 'Error messages now have a Copy error button (and the text can be selected), so you can paste the exact words to send for help. This covers publishing errors, pop-up errors and errors on the Hire me form of your site.'],
   ['v1.1.16', 'Pasting a long address into a box no longer leaves the page scrolled sideways: the page cannot pan past its edges, and the box scrolls back to the start when you finish.'],
   ['v1.1.15', 'The Google Apps Script code is now written with no leading spaces, so phone editors that add their own indentation do not scramble it. The steps also say to paste into an empty editor without typing, and Web3Forms is suggested as the easiest option on a phone.'],
@@ -677,12 +685,7 @@ function renderPanel() {
         : D.formMode === 'gscript' ? `<ol class="steps"><li>Open <b>script.google.com</b> and sign in with the Google account that should get the emails. Press <b>New project</b>.</li><li><b>Empty the editor completely first</b> (click in the code, select all with Ctrl+A or long-press on a phone, then delete). Google's sample code leaves a stray <b>}</b> that causes a "Syntax error" if it stays. Then press Copy script below and paste once. Do not type in the editor. The code must end with one <b>}</b> and nothing after it. The editor on a phone often adds its own brackets and indentation, so a computer is much easier for this. Web3Forms (in the list above) needs no code at all.</li><li>Press <b>Deploy</b>, then <b>New deployment</b>. Click the gear and choose <b>Web app</b>. Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>. Press <b>Deploy</b>.</li><li>Google asks you to allow it to send email for you. Press <b>Authorize access</b>, choose your account, then <b>Advanced</b>, then <b>Go to project (unsafe)</b>, then <b>Allow</b>. This is your own script, so that warning is normal.</li><li>Copy the <b>Web app URL</b> (it ends in /exec) and paste it below.</li></ol><label class="f">The script<textarea readonly rows="8" id="gsCode">${esc(GSCRIPT_CODE)}</textarea></label><div class="btnrow"><button type="button" class="btn" id="gsCopy">Copy script</button><span class="hint" id="gsCopied" role="status"></span></div>` + F('Web app URL', 'formEndpoint', { ph: 'https://script.google.com/macros/s/.../exec', hint: ' Messages arrive in your Gmail inbox. Free Google accounts can send about 100 of these a day.', err: 'formEndpoint' })
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
-    card('online', '8. Publish online', onlineBody()) +
-    card('pub', '9. Back up and restore',
-      `<details class="wk"><summary><b>Update the publishing Worker</b> (needed when Publish says the page contents are not valid)</summary><ol class="steps"><li>Open the Worker code on GitHub and tap the copy icon at the top right of the code.<div class="btnrow"><a class="btn" href="https://github.com/LayahMcFly/JobSearch/blob/main/folio/worker/folio-pages.mjs" target="_blank" rel="noopener">Open Worker code</a></div></li><li>On dash.cloudflare.com open <b>Workers &amp; Pages</b>, then <b>folio-pages</b>, then <b>Edit code</b>.</li><li>Select everything in the editor, paste over it and tap <b>Deploy</b>. Your database and Turnstile secret stay as they are.</li><li>Come back here and press Publish again.</li></ol></details>` +
-      `<p class="hint">To get your site as a file, open <b>Download</b> at the top and choose <b>Download my site</b>. The steps to put it online are shown there.</p>` +
-      `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>` +
-      `<p class="hint">Backups hold your resume and style only. They never include publishing access (see step 8).</p>`);
+    card('online', '8. Publish online', onlineBody() + (PUBLISH.api ? WK_HTML : ''));
   if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); if (openCards.online && PUB && !liveAuto) { liveAuto = true; checkLive(); } }
 }
 
@@ -765,6 +768,9 @@ $('#exportBtn').addEventListener('click', () => {
   d.addEventListener('close', () => { d.removeEventListener('click', onBackdrop); if (d.returnValue === 'go') { download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Now follow the steps to upload it to GitHub.'); } else if (trigger && trigger.isConnected) trigger.focus(); }, { once: true });
   d.addEventListener('click', onBackdrop); d.showModal(); $('#siteGo').focus();
 });
+$('#backupMenuBtn').addEventListener('click', () => { const d = $('#backupDialog'); if (!d.open) d.showModal(); });
+$('#backupClose').addEventListener('click', () => $('#backupDialog').close());
+$('#backupDialog').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#siteCancel').addEventListener('click', () => $('#siteDialog').close('cancel'));
 $('#siteGo').addEventListener('click', () => $('#siteDialog').close('go'));
 function setDl(open, focusBtn) { const b = $('#dlBtn'), m = $('#dlMenu'); m.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) $('#pdfBtn').focus(); else if (focusBtn) b.focus(); }
@@ -855,7 +861,7 @@ function failText(res, what) {
     case 'daily_limit': return 'The publishing service reached a free daily limit on Cloudflare (' + (j.which === 'read' ? 'reads' : 'writes') + ').' + wait + ' ' + state;
     case 'storage_unavailable': return 'The publishing storage is unavailable right now. ' + state;
     case 'too_large': return 'Your page is too large to publish (limit 100 KB). ' + state;
-    case 'invalid_data': return 'The service rejected the page contents' + (j.detail ? ' (' + String(j.detail).slice(0, 120) + ')' : '') + '. ' + (/formMode/.test(j.detail || '') ? 'The publishing Worker is probably out of date: follow "Update the publishing Worker" in step 9. ' : '') + state;
+    case 'invalid_data': return 'The service rejected the page contents' + (j.detail ? ' (' + String(j.detail).slice(0, 120) + ')' : '') + '. ' + (/formMode/.test(j.detail || '') ? 'The publishing Worker is probably out of date: follow "Update the publishing Worker" at the bottom of step 8. ' : '') + state;
     case 'edit_key_required': case 'forbidden': return 'The edit key does not match this page, or the page no longer exists. ' + state;
     case 'origin_not_allowed': return 'The publishing service does not accept requests from this website address. ' + state;
     default: return 'The publishing service returned an error (' + res.status + '). ' + state;
@@ -890,6 +896,7 @@ function tsExplain(code) {
 }
 function refreshPubButtons() { const el = $('#tsState'); if (!el) return; el.classList.toggle('bad', !!(tsFailed && !tsToken)); const rb = document.querySelector('[data-pub=retryTs]'); if (rb) rb.hidden = !(tsFailed && !tsToken); el.textContent = tsToken ? 'Human check complete.' : tsFailed ? tsReason : 'Waiting for the human check to finish. It can take a few seconds.'; }
 
+const WK_HTML = `<details class="wk"><summary><b>Update the publishing Worker</b> (needed when Publish says the page contents are not valid)</summary><ol class="steps"><li>Open the Worker code on GitHub and tap the copy icon at the top right of the code.<div class="btnrow"><a class="btn" href="https://github.com/LayahMcFly/JobSearch/blob/main/folio/worker/folio-pages.mjs" target="_blank" rel="noopener">Open Worker code</a></div></li><li>On dash.cloudflare.com open <b>Workers &amp; Pages</b>, then <b>folio-pages</b>, then <b>Edit code</b>.</li><li>Select everything in the editor, paste over it and tap <b>Deploy</b>. Your database and Turnstile secret stay as they are.</li><li>Come back here and press Publish again.</li></ol></details>`;
 function onlineBody() {
   if (!PUBLISH.api) return `<p class="hint"><b>Publishing is not connected yet.</b> It needs a small service that the owner of this Folio site sets up once. Until then, use Download my site in the next step.</p>`;
   const live = `<div id="pubLive" aria-live="polite">${pubMsgHtml()}</div>`;
