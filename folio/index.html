@@ -206,7 +206,7 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <div id="updateBanner" class="update-banner" role="status" aria-live="polite" hidden></div>
 
-<div id="viewer" hidden><p id="viewMsg" class="view-msg" role="status"></p><iframe id="viewFrame" title="Published page" hidden sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></div>
+<div id="viewer" hidden><p id="viewMsg" class="view-msg" role="status"></p><iframe id="viewFrame" title="Published page" hidden sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></div>
 
 <dialog id="confirmDialog" class="confirm-card" role="alertdialog" aria-labelledby="cfTitle" aria-describedby="cfMsg">
   <h2 id="cfTitle"></h2>
@@ -242,8 +242,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.21';
+const APP_VERSION = 'v1.1.22';
 const RELEASES = [
+  ['v1.1.22', 'Fixed the Hire me button at the top of a published page. It reloaded Folio inside the page and showed This page cannot be loaded right now. It now scrolls down to the hire form. The form button also did nothing because the page frame blocked forms, and that is fixed too.'],
   ['v1.1.21', 'Step 9 is gone. Back up and restore, Download backup and Start with a blank resume are now under the Download button, and the Update the publishing Worker help moved into step 8, Publish online.'],
   ['v1.1.20', 'Download, then Download my site, now opens a window with the steps to put your site online (the HTML file and GitHub Pages) and a Download index.html button. Step 9 is now Back up and restore.'],
   ['v1.1.19', 'After you download your site, the message now points to the steps to put it online. It named the wrong step before.'],
@@ -417,6 +418,12 @@ function hireHtml(d, opt) {
 /* The form script is written once, here, as ordinary code and copied into the page as text. Settings
    reach it only through the JSON block, so no user text is ever part of the script itself. */
 function siteScript() {
+  /* In a frame made from text, a link like #hire is resolved against the parent address and would reload the whole parent page inside the frame. Scroll to the section ourselves. */
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null; if (!a) return;
+    var t = document.getElementById(a.getAttribute('href').slice(1)); e.preventDefault();
+    if (t) { try { t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (x) { t.scrollIntoView(); } }
+  });
   var C = JSON.parse(document.getElementById('cfg').textContent);
   var f = document.getElementById('hireForm');
   if (!f) return;

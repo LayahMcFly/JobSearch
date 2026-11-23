@@ -94,8 +94,12 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
   const V = await open(link); await V.waitForFunction('!document.querySelector("#viewFrame").hidden', null, { timeout: 5000 });
   const vf = await vFrame(V);
     eq('view: visitor in a fresh browser sees the published page, not the editor', (await frameText(V)).includes('Ada Lovelace') && !(await V.isVisible('#panel')));
+  { const f2 = await vFrame(V); await f2.click('a.go'); await V.waitForTimeout(500); const f3 = await vFrame(V);
+    eq('view: top Hire me link scrolls inside the page and does not reload Folio in the frame', f3.url().startsWith('about:srcdoc') && (await f3.textContent('body')).includes('Ada Lovelace') && !(await f3.$('#viewer')), f3.url());
+    await f3.fill('input[name=name]', 'Grace'); await f3.fill('input[name=email]', 'grace@example.com'); await f3.click('button.cta'); await V.waitForTimeout(500);
+    eq('view: pressing the form button does something visible (draft box, thanks or an error)', await f3.evaluate(() => { const d = document.getElementById('draftBox'), m = document.querySelector('#hireForm .msg'); const dn = document.getElementById('hireDone'); return !!((d && !d.hidden) || (m && m.textContent.trim()) || (dn && !dn.hidden)); })); }
   eq('view: visitor sent no Authorization header and no key', seen.filter(s => s.method === 'GET').every(s => !s.auth && !s.url.includes(keyLocal)));
-  eq('view: frame is sandboxed WITHOUT allow-same-origin', !/allow-same-origin/.test(await V.getAttribute('#viewFrame', 'sandbox')));
+  eq('view: frame is sandboxed WITHOUT allow-same-origin, and allows forms so the hire button works', !/allow-same-origin/.test(await V.getAttribute('#viewFrame', 'sandbox')) && /allow-forms/.test(await V.getAttribute('#viewFrame', 'sandbox')));
   eq('view: viewer page is noindex with a restrictive CSP', await V.evaluate(() => /noindex/.test(document.querySelector('#viewFrame').srcdoc) && /connect-src https:\/\/formspree\.io https:\/\/api\.web3forms\.com/.test(document.querySelector('#viewFrame').srcdoc)));
   eq('view: no editor controls and no way to edit', !(await V.$('[data-pub]')) && await vf.evaluate(() => !document.querySelector('input[type=file]') && !document.body.innerText.includes('editKey')));
   eq('view: visitor has none of the owner\'s storage', await V.evaluate(() => localStorage.getItem('folio:v1:pub') === null && localStorage.getItem('folio:v1') === null));
