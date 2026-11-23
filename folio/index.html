@@ -206,7 +206,7 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <div id="updateBanner" class="update-banner" role="status" aria-live="polite" hidden></div>
 
-<div id="viewer" hidden><p id="viewMsg" class="view-msg" role="status"></p><iframe id="viewFrame" title="Published page" hidden sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></div>
+<div id="viewer" hidden><p id="viewMsg" class="view-msg" role="status"></p><iframe id="viewFrame" title="Published page" hidden allow="clipboard-write" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe></div>
 
 <dialog id="confirmDialog" class="confirm-card" role="alertdialog" aria-labelledby="cfTitle" aria-describedby="cfMsg">
   <h2 id="cfTitle"></h2>
@@ -242,8 +242,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.22';
+const APP_VERSION = 'v1.1.23';
 const RELEASES = [
+  ['v1.1.23', 'On a published page, a form error now also appears in a box you can select and copy, and the Copy error button tells you when it could not copy. It said Copied even when the phone blocked copying.'],
   ['v1.1.22', 'Fixed the Hire me button at the top of a published page. It reloaded Folio inside the page and showed This page cannot be loaded right now. It now scrolls down to the hire form. The form button also did nothing because the page frame blocked forms, and that is fixed too.'],
   ['v1.1.21', 'Step 9 is gone. Back up and restore, Download backup and Start with a blank resume are now under the Download button, and the Update the publishing Worker help moved into step 8, Publish online.'],
   ['v1.1.20', 'Download, then Download my site, now opens a window with the steps to put your site online (the HTML file and GitHub Pages) and a Download index.html button. Step 9 is now Back up and restore.'],
@@ -428,7 +429,14 @@ function siteScript() {
   var f = document.getElementById('hireForm');
   if (!f) return;
   var msg = f.querySelector('.msg'), btn = f.querySelector('.cta'), busy = false;
-  function say(t, kind) { msg.className = 'msg' + (kind ? ' ' + kind : ''); msg.textContent = t; if (kind === 'err') { var b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error'; b.onclick = function () { var done = function () { b.textContent = 'Copied'; }; try { navigator.clipboard.writeText(t).then(done, done); } catch (e) { var a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (x) {} a.remove(); done(); } }; msg.appendChild(b); } }
+  function say(t, kind) {
+    msg.className = 'msg' + (kind ? ' ' + kind : ''); msg.textContent = t;
+    if (kind !== 'err') return;
+    var ta = document.createElement('textarea'); ta.className = 'errbox'; ta.readOnly = true; ta.rows = 3; ta.value = t; ta.setAttribute('aria-label', 'Error text, select to copy'); ta.onfocus = function () { ta.select(); };
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error';
+    b.onclick = function () { copyText(t, function (ok) { if (ok) { b.textContent = 'Copied'; } else { b.textContent = 'Select the text and copy it'; ta.focus(); ta.select(); try { ta.setSelectionRange(0, 99999); } catch (x) {} } }); };
+    msg.appendChild(document.createElement('br')); msg.appendChild(ta); msg.appendChild(b);
+  }
   function el(n) { return f.elements[n]; }
   function val(n) { return el(n) ? el(n).value.trim() : ''; }
   function clearBad() { var c = f.querySelectorAll('.q.bad'); for (var i = 0; i < c.length; i++) { c[i].classList.remove('bad'); var e = c[i].querySelector('.qerr'); if (e) e.hidden = true; } }
@@ -582,7 +590,7 @@ fieldset.poll{min-width:0}.poll legend{font-weight:500;padding:0 .2rem;margin-le
 .done{margin-top:1.4rem;border-top:10px solid var(--fill)}.done h3{margin:.2rem 0 .6rem;font-size:1.5rem}.donemsg{margin:0;font-weight:600}.donethanks{margin:.6rem 0 0}.donethanks:empty{display:none}
 .again{font:inherit;font-weight:600;background:none;border:0;color:var(--acc);min-height:48px;padding:0;margin-top:.6rem;cursor:pointer;text-decoration:underline}
 .fine{margin:0;color:var(--muted);font-size:.9rem;padding:0 .2rem}
-.msg{margin:0;font-weight:600;padding:0 .2rem;user-select:text;-webkit-user-select:text}.copyerr{font:inherit;font-size:.85rem;font-weight:700;margin-left:.6rem;padding:.2rem .7rem;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
+.msg{margin:0;font-weight:600;padding:0 .2rem;user-select:text;-webkit-user-select:text}.errbox{display:block;width:100%;margin:.5rem 0 .3rem;font:inherit;font-size:.85rem;font-weight:400;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:.5rem;resize:vertical}.copyerr{font:inherit;font-size:.85rem;font-weight:700;margin-left:.6rem;padding:.2rem .7rem;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer}.msg.err{color:${dark ? '#ff9b8f' : '#a32414'}}.msg.ok,.msg.note{color:var(--ink)}
 .demo-note{margin:0;padding:.7rem .9rem;border:2px dashed var(--ctl);border-radius:10px;background:var(--soft);color:var(--ink)}
 .draft{display:grid;gap:.4rem}.draft textarea{font:inherit;font-weight:400;width:100%;min-height:9rem;color:var(--ink);background:var(--paper);border:2px solid var(--ctl);border-radius:10px;padding:.6rem}
 ::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
@@ -709,7 +717,7 @@ function refresh() {
 function copyText(txt) { const done = () => true; try { if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(txt).then(done, () => legacyCopy(txt)); } catch (e) {} return Promise.resolve(legacyCopy(txt)); }
 function legacyCopy(txt) { const a = document.createElement('textarea'); a.value = txt; a.setAttribute('readonly', ''); a.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px'; document.body.appendChild(a); a.select(); a.setSelectionRange(0, 99999); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} a.remove(); return ok; }
 function toast(msg, isErr) { const t = $('#toast'); t.textContent = msg; if (isErr) { const b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error'; b.dataset.copyerr = '1'; t.appendChild(b); } t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isErr ? 12000 : 3500); }
-document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-copyerr]'); if (!b) return; const box = b.parentElement; const txt = (box.firstChild && box.firstChild.nodeType === 3 ? box.firstChild.nodeValue : box.textContent.replace(b.textContent, '')).trim(); Promise.resolve(copyText(txt)).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy error'; }, 1500); }); });
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-copyerr]'); if (!b) return; const box = b.parentElement; const txt = (box.firstChild && box.firstChild.nodeType === 3 ? box.firstChild.nodeValue : box.textContent.replace(b.textContent, '')).trim(); Promise.resolve(copyText(txt)).then(ok => { b.textContent = ok === false ? 'Could not copy. Select the text instead' : 'Copied'; setTimeout(() => { b.textContent = 'Copy error'; }, 2500); }); });
 function change() { save(); refresh(); if (typeof updatePubStatus === 'function') updatePubStatus(); }
 
 document.addEventListener('input', e => {
