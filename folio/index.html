@@ -228,8 +228,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.18';
+const APP_VERSION = 'v1.1.19';
 const RELEASES = [
+  ['v1.1.19', 'After you download your site, the message now points to step 9 (Download your site and back up), where the steps to put it online are. It said step 8 before.'],
   ['v1.1.18', 'Publish online now shows whether your site is live and matches Folio (Live and up to date, Live but older, or Not live), and rechecks after every update. Step 9 also includes Update the publishing Worker, which a Publish error about page contents points you to.'],
   ['v1.1.17', 'Error messages now have a Copy error button (and the text can be selected), so you can paste the exact words to send for help. This covers publishing errors, pop-up errors and errors on the Hire me form of your site.'],
   ['v1.1.16', 'Pasting a long address into a box no longer leaves the page scrolled sideways: the page cannot pan past its edges, and the box scrolls back to the start when you finish.'],
@@ -751,7 +752,7 @@ function showFieldError(v) {
 }
 $('#exportBtn').addEventListener('click', () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
-  download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to publish are in section 8.');
+  download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to put it online are in step 9, Download your site.');
 });
 function setDl(open, focusBtn) { const b = $('#dlBtn'), m = $('#dlMenu'); m.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) $('#pdfBtn').focus(); else if (focusBtn) b.focus(); }
 $('#dlBtn').addEventListener('click', () => setDl($('#dlMenu').hidden));
