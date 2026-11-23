@@ -199,6 +199,16 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- download site dialog ---- */
+  { const P = await open(HOME); await P.waitForFunction('typeof D !== "undefined"');
+    await P.evaluate(() => { D.email = 'real@mydomain.com'; renderPanel(); });
+    await P.click('#dlBtn'); await P.click('#exportBtn'); await P.waitForTimeout(150);
+    eq('site dialog: Download my site opens a window with the steps and does not download yet', await P.evaluate(() => document.getElementById('siteDialog').open && /GitHub|github/.test(document.getElementById('siteDialog').textContent)));
+    const dl = P.waitForEvent('download', { timeout: 3000 }); await P.click('#siteGo'); const f = await dl;
+    eq('site dialog: its button downloads index.html and closes', f.suggestedFilename() === 'index.html' && await P.evaluate(() => !document.getElementById('siteDialog').open));
+    await P.click('#dlBtn'); await P.click('#exportBtn'); await P.click('#siteCancel');
+    eq('site dialog: Cancel closes without downloading', await P.evaluate(() => !document.getElementById('siteDialog').open)); await P.ctx.close(); }
+
   /* ---- live status ---- */
   { const P = await open(HOME); await P.waitForFunction('typeof D !== "undefined"');
     const run = async (resp) => P.evaluate(async r => { if (!document.getElementById('liveBadge')) { const e = document.createElement('p'); e.id = 'liveBadge'; document.body.appendChild(e); } PUB = { id: 'Ab3dE5gH7jKm', key: 'k', api: 'x', snap: '' }; pubApi = async () => r === 'same' ? { status: 200, json: { data: JSON.parse(snapNow()) } } : r === 'diff' ? { status: 200, json: { data: { D: Object.assign({}, JSON.parse(snapNow()).D, { name: 'Someone else' }), ST: JSON.parse(snapNow()).ST } } } : { status: 404, json: { error: 'not_found' } }; await checkLive(); const b = document.getElementById('liveBadge'); return b.className + '|' + b.textContent; }, resp);

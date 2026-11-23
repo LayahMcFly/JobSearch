@@ -220,6 +220,13 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
   <div class="cf-actions pdf-actions"><button type="button" class="btn" id="pdfCancel">Cancel</button><button type="button" class="btn" id="pdfWhite">Plain white (saves ink)</button><button type="button" class="btn btn-primary" id="pdfPaper">Include paper color</button></div>
 </dialog>
 
+<dialog id="siteDialog" class="confirm-card" aria-labelledby="siteTitle">
+  <h2 id="siteTitle">Download my site</h2>
+  <p>Your site is one HTML file named <b>index.html</b>. Download it, then put it online with GitHub Pages (free):</p>
+  <ol class="steps"><li>Press <b>Download index.html</b> below.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>
+  <div class="cf-actions pdf-actions"><button type="button" class="btn" id="siteCancel">Cancel</button><button type="button" class="btn btn-primary" id="siteGo">Download index.html</button></div>
+</dialog>
+
 <dialog id="notesDialog" class="notes-card" aria-labelledby="notesTitle">
   <div class="panel-head"><h2 id="notesTitle">Folio release notes</h2><button type="button" class="icon-btn" id="notesClose" aria-label="Close Folio release notes">&times;</button></div>
   <div class="notes-scroll"><div class="notes-grid" id="notesBody" role="table" aria-label="Folio release notes by version">
@@ -228,8 +235,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.19';
+const APP_VERSION = 'v1.1.20';
 const RELEASES = [
+  ['v1.1.20', 'Download, then Download my site, now opens a window with the steps to put your site online (the HTML file and GitHub Pages) and a Download index.html button. Step 9 is now Back up and restore.'],
   ['v1.1.19', 'After you download your site, the message now points to step 9 (Download your site and back up), where the steps to put it online are. It said step 8 before.'],
   ['v1.1.18', 'Publish online now shows whether your site is live and matches Folio (Live and up to date, Live but older, or Not live), and rechecks after every update. Step 9 also includes Update the publishing Worker, which a Publish error about page contents points you to.'],
   ['v1.1.17', 'Error messages now have a Copy error button (and the text can be selected), so you can paste the exact words to send for help. This covers publishing errors, pop-up errors and errors on the Hire me form of your site.'],
@@ -670,9 +678,9 @@ function renderPanel() {
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('online', '8. Publish online', onlineBody()) +
-    card('pub', '9. Download your site and back up',
+    card('pub', '9. Back up and restore',
       `<details class="wk"><summary><b>Update the publishing Worker</b> (needed when Publish says the page contents are not valid)</summary><ol class="steps"><li>Open the Worker code on GitHub and tap the copy icon at the top right of the code.<div class="btnrow"><a class="btn" href="https://github.com/LayahMcFly/JobSearch/blob/main/folio/worker/folio-pages.mjs" target="_blank" rel="noopener">Open Worker code</a></div></li><li>On dash.cloudflare.com open <b>Workers &amp; Pages</b>, then <b>folio-pages</b>, then <b>Edit code</b>.</li><li>Select everything in the editor, paste over it and tap <b>Deploy</b>. Your database and Turnstile secret stay as they are.</li><li>Come back here and press Publish again.</li></ol></details>` +
-      `<ol class="steps"><li>Press <b>Download my site</b>. You get a file named <b>index.html</b>.</li><li>On github.com, make a new public repo (for example <b>my-resume</b>).</li><li>Choose <b>Add file</b>, then <b>Upload files</b>, drag in index.html and commit.</li><li>Open <b>Settings</b>, then <b>Pages</b>, set the branch to <b>main</b> and save. Your site appears at <b>yourname.github.io/my-resume</b> in a minute or two.</li></ol>` +
+      `<p class="hint">To get your site as a file, open <b>Download</b> at the top and choose <b>Download my site</b>. The steps to put it online are shown there.</p>` +
       `<div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>` +
       `<p class="hint">Backups hold your resume and style only. They never include publishing access (see step 8).</p>`);
   if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); if (openCards.online && PUB && !liveAuto) { liveAuto = true; checkLive(); } }
@@ -752,8 +760,13 @@ function showFieldError(v) {
 }
 $('#exportBtn').addEventListener('click', () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
-  download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Steps to put it online are in step 9, Download your site.');
+  const d = $('#siteDialog'), trigger = document.activeElement; d.returnValue = '';
+  const onBackdrop = e => { if (e.target === d) d.close('cancel'); };
+  d.addEventListener('close', () => { d.removeEventListener('click', onBackdrop); if (d.returnValue === 'go') { download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Now follow the steps to upload it to GitHub.'); } else if (trigger && trigger.isConnected) trigger.focus(); }, { once: true });
+  d.addEventListener('click', onBackdrop); d.showModal(); $('#siteGo').focus();
 });
+$('#siteCancel').addEventListener('click', () => $('#siteDialog').close('cancel'));
+$('#siteGo').addEventListener('click', () => $('#siteDialog').close('go'));
 function setDl(open, focusBtn) { const b = $('#dlBtn'), m = $('#dlMenu'); m.hidden = !open; b.setAttribute('aria-expanded', String(open)); if (open) $('#pdfBtn').focus(); else if (focusBtn) b.focus(); }
 $('#dlBtn').addEventListener('click', () => setDl($('#dlMenu').hidden));
 $('#dlMenu').addEventListener('click', e => { if (e.target.closest('button')) setDl(false, false); });

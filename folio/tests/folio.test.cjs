@@ -197,7 +197,7 @@ async function inspectPage(p, label, expectScripts) {
       const e = await p.evaluate(() => ({ t: document.querySelector('[data-err=email]').textContent, shown: !document.querySelector('[data-err=email]').hidden, focus: document.activeElement.dataset.f, inv: document.activeElement.getAttribute('aria-invalid'), mode: document.querySelector('[data-err=mode]').textContent }));
       eq(`  ${label}: no download, visible error, field focused and marked invalid`, !dl && e.shown && e.t.length > 10 && e.focus === 'email' && e.inv === 'true' && /Email mode needs/.test(e.mode), JSON.stringify(e));
     }
-    await p.evaluate(() => { D.email = 'real@mydomain.com'; renderPanel(); }); const dlp = p.waitForEvent('download', { timeout: 3000 }); await p.click('#dlBtn'); await p.click('#exportBtn'); const dl = await dlp; eq('  valid address downloads index.html', dl.suggestedFilename() === 'index.html');
+    await p.evaluate(() => { D.email = 'real@mydomain.com'; renderPanel(); }); const dlp = p.waitForEvent('download', { timeout: 3000 }); await p.click('#dlBtn'); await p.click('#exportBtn'); await p.click('#siteGo'); const dl = await dlp; eq('  valid address downloads index.html', dl.suggestedFilename() === 'index.html');
     const f = path.join(tmp, 'email.html'); await dl.saveAs(f); fs.writeFileSync(path.join(tmp, 'email.html.txt'), '');
     const q = await site(p.ctx, fs.readFileSync(f, 'utf8'), 'email-site.html');
     await q.fill('[name=name]', 'V'); await q.fill('[name=email]', 'v@v.com'); await q.check('input[name=need]'); await q.fill('[name=message]', 'Hi there');
@@ -216,7 +216,7 @@ async function inspectPage(p, label, expectScripts) {
     const p = await editor(); await openAll(p);
     for (const [mode, val, ok] of [['formspree', '', false], ['formspree', 'http://formspree.io/f/abc', false], ['formspree', 'https://evil.com/f/abc', false], ['formspree', 'https://formspree.io/f/abc"onclick=1', false], ['formspree', 'https://formspree.io/f/abcdwxyz', true], ['web3forms', 'short', false], ['web3forms', 'x" y', false], ['web3forms', 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', true]]) {
       await p.evaluate(([m, v]) => { D.formMode = m; D.formEndpoint = v; D.email = 'real@mydomain.com'; renderPanel(); }, [mode, val]); let got = false; const h = () => got = true; p.once('download', h);
-      await p.click('#dlBtn'); await p.click('#exportBtn'); await p.waitForTimeout(400); p.off('download', h);
+      await p.click('#dlBtn'); await p.click('#exportBtn'); await p.waitForTimeout(200); if (await p.evaluate(() => document.getElementById('siteDialog').open)) await p.click('#siteGo'); await p.waitForTimeout(300); p.off('download', h);
       const err = await p.evaluate(() => { const e = document.querySelector('[data-err=formEndpoint]'); return e && !e.hidden && e.textContent.length > 5; });
       eq(`  ${mode} "${val.slice(0, 24)}" ${ok ? 'downloads' : 'is blocked with an inline error'}`, ok ? got && !err : !got && err);
     }
