@@ -222,8 +222,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.14';
+const APP_VERSION = 'v1.1.15';
 const RELEASES = [
+  ['v1.1.15', 'The Google Apps Script code is now written with no leading spaces, so phone editors that add their own indentation do not scramble it. The steps also say to paste into an empty editor without typing, and Web3Forms is suggested as the easiest option on a phone.'],
   ['v1.1.14', 'The Google Apps Script steps now say to empty the editor first (a leftover bracket from Google sample code causes a Syntax error), the script starts with a reminder comment, and Copy script reports how many lines it copied.'],
   ['v1.1.13', 'Every dropdown now opens an animated list in the app colors (with a rotating arrow, a check on the chosen item, keyboard and screen reader support) instead of the plain browser list. It follows the reduce-motion setting on your device.'],
   ['v1.1.12', 'New free way to get Hire me messages: Google Apps Script mode emails you directly from your own Google account, with copy-and-paste setup in section 7. Portfolio uploads were tried and removed.'],
@@ -571,22 +572,22 @@ ${fam ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="s
 const FORM_MODES = ['email', 'formspree', 'web3forms', 'gscript'];
 /* The small Google script that emails you. It runs in your own Google account and sends the message to that same account. */
 const GSCRIPT_CODE = `// Folio hire-me mailer. Paste this over EVERYTHING in Code.gs. The script ends at the single } on the last line; delete any } below it.\nfunction doPost(e) {
-  var out = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
-  try {
-    var d = JSON.parse(e.postData.contents);
-    var clean = function (v, n) { return String(v || '').replace(/[\\r\\n]+/g, ' ').slice(0, n); };
-    var email = clean(d.email, 254), ok = /^\\S+@\\S+\\.\\S+$/.test(email);
-    if (!clean(d.name, 120) || !ok) return out({ ok: false, error: 'Missing name or email' });
-    MailApp.sendEmail({
-      to: Session.getEffectiveUser().getEmail(),
-      replyTo: email,
-      subject: 'Hire inquiry from ' + clean(d.name, 100),
-      body: 'Name: ' + clean(d.name, 120) + '\\nEmail: ' + email + '\\nNeed: ' + clean(d.need, 200) + '\\n\\n' + String(d.message || '').slice(0, 1500)
-    });
-    return out({ ok: true });
-  } catch (err) {
-    return out({ ok: false, error: 'Could not send' });
-  }
+var out = function (o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); };
+try {
+var d = JSON.parse(e.postData.contents);
+var clean = function (v, n) { return String(v || '').replace(/[\\r\\n]+/g, ' ').slice(0, n); };
+var email = clean(d.email, 254), ok = /^\\S+@\\S+\\.\\S+$/.test(email);
+if (!clean(d.name, 120) || !ok) return out({ ok: false, error: 'Missing name or email' });
+MailApp.sendEmail({
+to: Session.getEffectiveUser().getEmail(),
+replyTo: email,
+subject: 'Hire inquiry from ' + clean(d.name, 100),
+body: 'Name: ' + clean(d.name, 120) + '\\nEmail: ' + email + '\\nNeed: ' + clean(d.need, 200) + '\\n\\n' + String(d.message || '').slice(0, 1500)
+});
+return out({ ok: true });
+} catch (err) {
+return out({ ok: false, error: 'Could not send' });
+}
 }`;
 function normData(x) {
   x = x && typeof x === 'object' && !Array.isArray(x) ? x : {};
@@ -655,7 +656,7 @@ function renderPanel() {
     card('send', '7. Where form messages go',
       `<span class="fielderr" data-err="mode" role="alert" hidden></span><label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="gscript"${D.formMode === 'gscript' ? ' selected' : ''}>Google Apps Script (free, emails you from your own Google account)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
       (D.formMode === 'email' ? `<p class="hint"><b>What happens:</b> when a visitor presses the button, their own email app opens with a draft addressed to ${esc(D.email || 'your email address')}. <b>The visitor has to press Send themselves.</b> Opening a draft is not sending an email, and neither this page nor Folio can tell whether it was sent, so the page never says "sent". Your address is also shown on the page with a Copy button, and the draft appears in a box to copy, for visitors without an email app. You get a message only if the visitor sends it.</p>`
-        : D.formMode === 'gscript' ? `<ol class="steps"><li>Open <b>script.google.com</b> and sign in with the Google account that should get the emails. Press <b>New project</b>.</li><li><b>Empty the editor completely first</b> (click in the code, select all with Ctrl+A or long-press on a phone, then delete). Google's sample code leaves a stray <b>}</b> that causes a "Syntax error" if it stays. Then press Copy script below and paste. The code must end with one <b>}</b> and nothing after it.</li><li>Press <b>Deploy</b>, then <b>New deployment</b>. Click the gear and choose <b>Web app</b>. Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>. Press <b>Deploy</b>.</li><li>Google asks you to allow it to send email for you. Press <b>Authorize access</b>, choose your account, then <b>Advanced</b>, then <b>Go to project (unsafe)</b>, then <b>Allow</b>. This is your own script, so that warning is normal.</li><li>Copy the <b>Web app URL</b> (it ends in /exec) and paste it below.</li></ol><label class="f">The script<textarea readonly rows="8" id="gsCode">${esc(GSCRIPT_CODE)}</textarea></label><div class="btnrow"><button type="button" class="btn" id="gsCopy">Copy script</button><span class="hint" id="gsCopied" role="status"></span></div>` + F('Web app URL', 'formEndpoint', { ph: 'https://script.google.com/macros/s/.../exec', hint: ' Messages arrive in your Gmail inbox. Free Google accounts can send about 100 of these a day.', err: 'formEndpoint' })
+        : D.formMode === 'gscript' ? `<ol class="steps"><li>Open <b>script.google.com</b> and sign in with the Google account that should get the emails. Press <b>New project</b>.</li><li><b>Empty the editor completely first</b> (click in the code, select all with Ctrl+A or long-press on a phone, then delete). Google's sample code leaves a stray <b>}</b> that causes a "Syntax error" if it stays. Then press Copy script below and paste once. Do not type in the editor. The code must end with one <b>}</b> and nothing after it. The editor on a phone often adds its own brackets and indentation, so a computer is much easier for this. Web3Forms (in the list above) needs no code at all.</li><li>Press <b>Deploy</b>, then <b>New deployment</b>. Click the gear and choose <b>Web app</b>. Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>. Press <b>Deploy</b>.</li><li>Google asks you to allow it to send email for you. Press <b>Authorize access</b>, choose your account, then <b>Advanced</b>, then <b>Go to project (unsafe)</b>, then <b>Allow</b>. This is your own script, so that warning is normal.</li><li>Copy the <b>Web app URL</b> (it ends in /exec) and paste it below.</li></ol><label class="f">The script<textarea readonly rows="8" id="gsCode">${esc(GSCRIPT_CODE)}</textarea></label><div class="btnrow"><button type="button" class="btn" id="gsCopy">Copy script</button><span class="hint" id="gsCopied" role="status"></span></div>` + F('Web app URL', 'formEndpoint', { ph: 'https://script.google.com/macros/s/.../exec', hint: ' Messages arrive in your Gmail inbox. Free Google accounts can send about 100 of these a day.', err: 'formEndpoint' })
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('online', '8. Publish online', onlineBody()) +
