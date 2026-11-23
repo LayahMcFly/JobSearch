@@ -28,8 +28,9 @@
   --danger:#9b2c2c;--radius:12px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{background:var(--bg)}
-body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh}
+html{background:var(--bg);overflow-x:clip}
+body{margin:0;background:var(--bg);color:var(--text);font:1rem/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh;overflow-x:clip;max-width:100vw}
+input,textarea,select{min-width:0;max-width:100%}
 ::selection{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit}
 :focus-visible{outline:3px solid var(--accent-text);outline-offset:2px}
 button,summary,.chip{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
@@ -222,8 +223,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.15';
+const APP_VERSION = 'v1.1.16';
 const RELEASES = [
+  ['v1.1.16', 'Pasting a long address into a box no longer leaves the page scrolled sideways: the page cannot pan past its edges, and the box scrolls back to the start when you finish.'],
   ['v1.1.15', 'The Google Apps Script code is now written with no leading spaces, so phone editors that add their own indentation do not scramble it. The steps also say to paste into an empty editor without typing, and Web3Forms is suggested as the easiest option on a phone.'],
   ['v1.1.14', 'The Google Apps Script steps now say to empty the editor first (a leftover bracket from Google sample code causes a Syntax error), the script starts with a reminder comment, and Copy script reports how many lines it copied.'],
   ['v1.1.13', 'Every dropdown now opens an animated list in the app colors (with a rotating arrow, a check on the chosen item, keyboard and screen reader support) instead of the plain browser list. It follows the reduce-motion setting on your device.'],
@@ -745,6 +747,9 @@ $('#dlBtn').addEventListener('click', () => setDl($('#dlMenu').hidden));
 $('#dlMenu').addEventListener('click', e => { if (e.target.closest('button')) setDl(false, false); });
 document.addEventListener('click', e => { if (!$('#dlMenu').hidden && !e.target.closest('.dl')) setDl(false, false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#dlMenu').hidden) { e.preventDefault(); setDl(false, true); } });
+/* After a long paste (like a Web app address) a phone keeps the box scrolled to the end and can pan the page sideways. Bring the start back into view. */
+const homeText = e => { const t = e.target; if (t && t.tagName === 'INPUT' && /^(text|url|email|tel)$/.test(t.type)) { t.scrollLeft = 0; if (window.scrollX) window.scrollTo(0, window.scrollY); } };
+document.addEventListener('change', homeText); document.addEventListener('focusout', homeText);
 document.addEventListener('click', e => { if (e.target.id !== 'gsCopy') return; const ta = $('#gsCode'), say = t => { const o = $('#gsCopied'); if (o) o.textContent = t; }; const fall = () => { try { ta.focus(); ta.select(); say(document.execCommand('copy') ? 'Copied.' : 'Select the text and copy it yourself.'); } catch (x) { say('Select the text and copy it yourself.'); } }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(GSCRIPT_CODE).then(() => say('Copied ' + GSCRIPT_CODE.split('\n').length + ' lines. Paste into an empty editor.'), fall); else fall(); });
 function askPaperForPdf() {
   return new Promise(resolve => {

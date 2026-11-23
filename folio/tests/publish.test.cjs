@@ -199,6 +199,14 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- long paste does not push the page sideways ---- */
+  { const P = await open(HOME, { viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true }); await P.waitForFunction('typeof D !== "undefined"');
+    await P.evaluate(() => { D.formMode = 'gscript'; openCards.send = true; renderPanel(); }); await P.waitForSelector('input[data-f=formEndpoint]');
+    const url = 'https://script.google.com/macros/s/AKfycb' + 'x'.repeat(160) + '/exec'; const inp = P.locator('input[data-f=formEndpoint]'); await inp.scrollIntoViewIfNeeded(); await inp.click(); await inp.fill(url); await inp.evaluate(e => { e.scrollLeft = 9999; });
+    eq('long paste: the page is not wider than the screen and not scrolled sideways', await P.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth && window.scrollX === 0));
+    await P.evaluate(() => document.querySelector('input[data-f=formEndpoint]').blur()); await P.waitForTimeout(100);
+    eq('long paste: when you leave the box it scrolls back to the start of the address', await inp.evaluate(e => e.scrollLeft === 0)); await P.ctx.close(); }
+
   /* ---- animated dropdowns ---- */
   { const P = await editor(); await P.evaluate(() => { openCards.send = true; renderPanel(); }); await P.waitForSelector('.dd-btn');
     eq('dropdown: the plain browser select is replaced by a themed button and hidden', await P.evaluate(() => { const s = document.querySelector('select[data-f=formMode]'); return s.classList.contains('dd-native') && getComputedStyle(s).display === 'none' && document.querySelector('.dd-btn').getBoundingClientRect().height >= 44; }));
