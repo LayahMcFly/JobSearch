@@ -199,6 +199,22 @@ const KEYRE = /[A-Za-z0-9_-]{43}/;
     eq('hostile published data: no script ran in the viewer, parent storage untouched', !(await HV.evaluate(() => window.__p || localStorage.getItem('pwn'))) && !(await hf.evaluate(() => window.__p).catch(() => 0))); }
   else rec('hostile published data: no script ran in the viewer, parent storage untouched', false, 'could not publish');
 
+  /* ---- animated dropdowns ---- */
+  { const P = await editor(); await P.evaluate(() => { openCards.send = true; renderPanel(); }); await P.waitForSelector('.dd-btn');
+    eq('dropdown: the plain browser select is replaced by a themed button and hidden', await P.evaluate(() => { const s = document.querySelector('select[data-f=formMode]'); return s.classList.contains('dd-native') && getComputedStyle(s).display === 'none' && document.querySelector('.dd-btn').getBoundingClientRect().height >= 44; }));
+    await P.click('.dd-btn'); await P.waitForTimeout(30); const early = await P.evaluate(() => +getComputedStyle(document.querySelector('.dd-list')).opacity); await P.waitForTimeout(350);
+    eq('dropdown: the list fades in rather than appearing at once', early < 1 && await P.evaluate(() => +getComputedStyle(document.querySelector('.dd-list')).opacity === 1 && document.querySelector('.dd-btn').getAttribute('aria-expanded') === 'true'));
+    await P.keyboard.press('ArrowDown'); await P.keyboard.press('Enter'); await P.waitForTimeout(300);
+    eq('dropdown: keyboard choice updates the real select, Folio data and the button text', await P.evaluate(() => D.formMode === document.querySelector('select[data-f=formMode]').value && D.formMode !== 'email' && !document.querySelector('.dd-list')));
+    await P.click('.dd-btn'); await P.waitForTimeout(250); await P.keyboard.press('Escape'); await P.waitForTimeout(300);
+    eq('dropdown: Escape closes it and focus returns to the button', await P.evaluate(() => !document.querySelector('.dd-list') && document.activeElement.classList.contains('dd-btn')));
+    await P.click('.dd-btn'); await P.waitForTimeout(250); await P.click('.dd-opt >> nth=0'); await P.waitForTimeout(300);
+    eq('dropdown: tapping an option picks it', await P.evaluate(() => D.formMode === 'email'));
+    eq('dropdown: setting the value from code updates the button', await P.evaluate(() => { document.querySelector('select[data-f=formMode]').value = 'gscript'; return /Google/.test(document.querySelector('.dd-btn').textContent); }));
+    await P.ctx.close();
+    const rm = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 430, height: 900 } }); await wire(rm); const R = await rm.newPage(); await R.goto(HOME); await R.waitForFunction('typeof D !== "undefined"'); await R.evaluate(() => { openCards.send = true; renderPanel(); }); await R.waitForSelector('.dd-btn'); await R.click('.dd-btn');
+    eq('dropdown: with reduce-motion on, the list has no animation', await R.evaluate(() => getComputedStyle(document.querySelector('.dd-list')).transitionDuration === '0s')); await rm.close(); }
+
   /* ---- one Download menu ---- */
   { const P = await editor(); const vis = async sel => P.evaluate(s => { const e = document.querySelector(s); return !!e && e.getClientRects().length > 0; }, sel);
     eq('download menu: PDF and site buttons are tucked under one Download button', !(await vis('#pdfBtn')) && !(await vis('#exportBtn')) && (await vis('#dlBtn')));

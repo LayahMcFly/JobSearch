@@ -76,6 +76,31 @@ input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);
 .selwrap{position:relative}
 .selwrap select{appearance:none;-webkit-appearance:none;padding-right:2.4rem;cursor:pointer}
 .selwrap::after{content:"";position:absolute;right:1rem;top:50%;width:8px;height:8px;border-right:2.5px solid var(--accent);border-bottom:2.5px solid var(--accent);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+/* Animated dropdowns: every <select> is shown as a themed button that opens an animated list (script at the end of the page).
+   The real <select> stays in the page, hidden, so forms and saved values keep working. */
+.dd{position:relative;width:100%}
+.dd-native{display:none!important}
+.dd-btn{display:flex;align-items:center;justify-content:space-between;gap:.6rem;width:100%;min-height:44px;margin:0;font:inherit;font-weight:400;text-align:left;color:var(--text);padding:.5rem .75rem;border:1.5px solid var(--input-border);border-radius:12px;background:linear-gradient(180deg,var(--field) 0%,var(--field) 55%,var(--tint) 100%);box-shadow:inset 0 1px 3px color-mix(in srgb,var(--text) 10%,transparent);cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.dd-btn:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--input-border))}
+.dd-btn:focus-visible,.dd.dd-is-open .dd-btn{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent),0 2px 10px color-mix(in srgb,var(--accent) 18%,transparent)}
+.dd-btn:disabled{opacity:.6;cursor:not-allowed}
+.dd-val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dd-chev{flex:none;width:.5rem;height:.5rem;margin-right:.15rem;border-right:2.5px solid var(--accent-text,var(--accent));border-bottom:2.5px solid var(--accent-text,var(--accent));transform:translateY(-25%) rotate(45deg);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.dd.dd-is-open .dd-chev{transform:translateY(25%) rotate(225deg)}
+.dd-list{position:fixed;z-index:2000;margin:0;padding:.35rem;list-style:none;overflow-y:auto;overscroll-behavior:contain;background:var(--surface);color:var(--text);border:1.5px solid var(--input-border);border-radius:14px;box-shadow:0 16px 40px color-mix(in srgb,var(--text) 22%,transparent);opacity:0;transform:translateY(-8px) scale(.97);transform-origin:top center;transition:opacity .16s ease,transform .2s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.dd-list.up{transform-origin:bottom center;transform:translateY(8px) scale(.97)}
+.dd-list.dd-open{opacity:1;transform:none;pointer-events:auto}
+.dd-opt{display:flex;align-items:center;gap:.5rem;min-height:44px;padding:.45rem .7rem;border-radius:10px;cursor:pointer;font-weight:400;line-height:1.3}
+.dd-opt.on{background:var(--accent-soft);font-weight:600}
+.dd-opt.on::after{content:"";margin-left:auto;flex:none;width:.4rem;height:.75rem;border:solid var(--accent-text,var(--accent));border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-2px,-2px)}
+.dd-opt.act{background:color-mix(in srgb,var(--accent) 16%,var(--surface))}
+.dd-opt[aria-disabled=true]{color:var(--muted);cursor:not-allowed}
+.dd-grp{padding:.5rem .7rem .15rem;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+@keyframes ddIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+.dd-list.dd-open .dd-opt{animation:ddIn .24s both;animation-delay:calc(var(--i,0)*18ms)}
+@media (prefers-reduced-motion:reduce){.dd-list,.dd-chev,.dd-btn{transition:none!important}.dd-list.dd-open .dd-opt{animation:none!important}}
+.selwrap::after{display:none}
+
 .entry{border:1.5px dashed var(--accent-line);border-radius:10px;padding:.8rem;display:grid;gap:.7rem;background:var(--surface)}
 .entry-head{display:flex;justify-content:space-between;gap:.6rem;align-items:center;font-weight:700}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
@@ -197,8 +222,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.12';
+const APP_VERSION = 'v1.1.13';
 const RELEASES = [
+  ['v1.1.13', 'Every dropdown now opens an animated list in the app colors (with a rotating arrow, a check on the chosen item, keyboard and screen reader support) instead of the plain browser list. It follows the reduce-motion setting on your device.'],
   ['v1.1.12', 'New free way to get Hire me messages: Google Apps Script mode emails you directly from your own Google account, with copy-and-paste setup in section 7. Portfolio uploads were tried and removed.'],
   ['v1.1.11', 'The two download buttons now live under one Download button at the top. Open it to choose Download resume PDF or Download my site.'],
   ['v1.1.10', 'The PDF button now reads Download resume PDF. It asks whether to include the paper color, and warns that painted backgrounds use much more ink when printed. Plain white is the default choice.'],
@@ -979,6 +1005,119 @@ async function checkForUpdate() {
 function watchForUpdate() { if (VIEWER) return; checkForUpdate(); setInterval(checkForUpdate, 5 * 60 * 1000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); }); }
 watchForUpdate();
 
+</script>
+<script>
+/* Animated dropdowns (see the .dd styles). Works for selects that already exist and for ones added or refilled later. */
+(function () {
+  'use strict';
+  const proto = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value'), protoIdx = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'selectedIndex');
+  let current = null, uid = 0;
+  function enhance(sel) {
+    if (sel.__dd || sel.multiple || sel.size > 1) return;
+    sel.__dd = true;
+    const wrap = document.createElement('div'), btn = document.createElement('button'), list = document.createElement('ul'), n = ++uid;
+    wrap.className = 'dd'; btn.type = 'button'; btn.className = 'dd-btn'; btn.id = 'dd-b' + n;
+    btn.setAttribute('role', 'combobox'); btn.setAttribute('aria-haspopup', 'listbox'); btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', 'dd-l' + n);
+    btn.innerHTML = '<span class="dd-val" id="dd-v' + n + '"></span><span class="dd-chev" aria-hidden="true"></span>';
+    list.className = 'dd-list'; list.id = 'dd-l' + n; list.setAttribute('role', 'listbox'); list.tabIndex = -1;
+    sel.parentNode.insertBefore(wrap, sel); wrap.appendChild(btn); wrap.appendChild(sel);
+    sel.classList.add('dd-native'); sel.tabIndex = -1; sel.setAttribute('aria-hidden', 'true');
+    const val = btn.firstChild;
+    const lab = (sel.id && document.querySelector('label[for="' + sel.id.replace(/"/g, '\\"') + '"]')) || sel.closest('label');
+    if (lab) {
+      if (!lab.id) lab.id = 'dd-t' + n;
+      btn.setAttribute('aria-labelledby', lab.id + ' ' + val.id);
+      if (!lab.contains(btn) && !lab.__ddl) { lab.__ddl = true; lab.addEventListener('click', e => { if (!e.target.closest('.dd')) { e.preventDefault(); const b = lab.__ddbtn; if (b) b.focus(); } }); }
+      lab.__ddbtn = btn;
+    }
+    let items = [], act = -1, typed = '', typedAt = 0, pos = null;
+    const sync = () => { const o = sel.options[protoIdx.get.call(sel)]; val.textContent = o ? o.textContent : ' '; btn.disabled = sel.disabled; };
+    Object.defineProperty(sel, 'value', { configurable: true, get() { return proto.get.call(this); }, set(v) { proto.set.call(this, v); sync(); } });
+    Object.defineProperty(sel, 'selectedIndex', { configurable: true, get() { return protoIdx.get.call(this); }, set(v) { protoIdx.set.call(this, v); sync(); } });
+    sel.focus = () => btn.focus();
+    new MutationObserver(sync).observe(sel, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'selected', 'label'], characterData: true });
+    if (sel.form) sel.form.addEventListener('reset', () => setTimeout(sync, 0));
+    sync();
+    const build = () => {
+      list.textContent = ''; items = []; let i = 0;
+      const add = (o, parent) => {
+        if (o.hidden) return; const li = document.createElement('li'); li.className = 'dd-opt'; li.setAttribute('role', 'option'); li.id = list.id + '-' + items.length; li.textContent = o.textContent;
+        const on = o.index === sel.selectedIndex; if (on) li.classList.add('on'); li.setAttribute('aria-selected', String(on)); if (o.disabled || (parent && parent.disabled)) li.setAttribute('aria-disabled', 'true');
+        li.style.setProperty('--i', Math.min(items.length, 10)); li.__idx = o.index; items.push(li); parent.appendChild(li);
+      };
+      for (const c of sel.children) {
+        if (c.tagName === 'OPTGROUP') { const g = document.createElement('li'); g.className = 'dd-grp'; g.setAttribute('role', 'presentation'); g.textContent = c.label; list.appendChild(g); for (const o of c.children) add(o, list); }
+        else if (c.tagName === 'OPTION') add(c, list);
+      }
+    };
+    const place = () => {
+      const r = btn.getBoundingClientRect(), vh = window.innerHeight, below = vh - r.bottom - 10, above = r.top - 10;
+      list.style.maxHeight = 'none'; list.style.width = r.width + 'px'; const want = Math.min(list.scrollHeight + 4, 340);
+      const up = below < Math.min(want, 180) && above > below, room = Math.max(120, up ? above : below);
+      list.style.maxHeight = Math.min(want, room) + 'px'; list.classList.toggle('up', up);
+      const h = Math.min(want, room); list.style.left = Math.max(6, Math.min(r.left, window.innerWidth - r.width - 6)) + 'px'; list.style.top = (up ? r.top - h - 6 : r.bottom + 6) + 'px';
+    };
+    const setAct = (i, scroll) => {
+      if (act >= 0 && items[act]) items[act].classList.remove('act'); act = i; const li = items[i]; if (!li) { btn.removeAttribute('aria-activedescendant'); return; }
+      li.classList.add('act'); btn.setAttribute('aria-activedescendant', li.id);
+      if (scroll) { const t = li.offsetTop, b = t + li.offsetHeight; if (t < list.scrollTop + 4) list.scrollTop = Math.max(0, t - 8); else if (b > list.scrollTop + list.clientHeight - 4) list.scrollTop = b - list.clientHeight + 8; }
+    };
+    const enabled = (i, d) => { for (let k = i; k >= 0 && k < items.length; k += d) if (items[k].getAttribute('aria-disabled') !== 'true') return k; return -1; };
+    const api = {
+      sel,
+      close(instant) {
+        if (current !== api) return; current = null;
+        btn.setAttribute('aria-expanded', 'false'); btn.removeAttribute('aria-activedescendant'); wrap.classList.remove('dd-is-open'); list.classList.remove('dd-open');
+        document.removeEventListener('pointerdown', onOut, true); window.removeEventListener('resize', onMove); window.removeEventListener('scroll', onScroll, true);
+        const gone = () => { if (!list.classList.contains('dd-open') && list.parentNode) list.remove(); };
+        if (instant) gone(); else setTimeout(gone, 230);
+      },
+      open() {
+        if (btn.disabled || current === api) return; if (current) current.close(true);
+        build(); const host = sel.closest('dialog[open]') || document.body; host.appendChild(list); place(); current = api;
+        btn.setAttribute('aria-expanded', 'true'); wrap.classList.add('dd-is-open'); void list.offsetWidth; list.classList.add('dd-open');
+        const cur = items.findIndex(li => li.__idx === sel.selectedIndex); setAct(cur >= 0 ? cur : enabled(0, 1), true);
+        document.addEventListener('pointerdown', onOut, true); window.addEventListener('resize', onMove); window.addEventListener('scroll', onScroll, true);
+      },
+      choose(i) {
+        const li = items[i]; if (!li || li.getAttribute('aria-disabled') === 'true') return;
+        const changed = sel.selectedIndex !== li.__idx; sel.selectedIndex = li.__idx; api.close(); btn.focus();
+        if (changed) { sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+      }
+    };
+    const onOut = e => { if (!list.contains(e.target) && !wrap.contains(e.target)) api.close(); };
+    const onMove = () => { if (current === api) place(); };
+    const onScroll = e => { if (current !== api || list.contains(e.target)) return; const r = btn.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) api.close(true); else place(); };
+    btn.addEventListener('click', () => { current === api ? api.close() : api.open(); });
+    list.addEventListener('click', e => { const li = e.target.closest('.dd-opt'); if (li) api.choose(items.indexOf(li)); });
+    list.addEventListener('pointermove', e => { const li = e.target.closest('.dd-opt'); if (li && li.getAttribute('aria-disabled') !== 'true') { const i = items.indexOf(li); if (i !== act) setAct(i, false); } });
+    list.addEventListener('mousedown', e => e.preventDefault());
+    btn.addEventListener('keydown', e => {
+      const k = e.key, isOpen = current === api;
+      if (k === 'Tab') { if (isOpen) api.close(true); return; }
+      if (!isOpen) { if (k === 'ArrowDown' || k === 'ArrowUp' || k === 'Enter' || k === ' ') { e.preventDefault(); api.open(); } return; }
+      if (k === 'Escape') { e.preventDefault(); e.stopPropagation(); api.close(); }
+      else if (k === 'ArrowDown') { e.preventDefault(); const i = enabled(act + 1, 1); if (i >= 0) setAct(i, true); }
+      else if (k === 'ArrowUp') { e.preventDefault(); const i = enabled(act - 1, -1); if (i >= 0) setAct(i, true); }
+      else if (k === 'Home') { e.preventDefault(); const i = enabled(0, 1); if (i >= 0) setAct(i, true); }
+      else if (k === 'End') { e.preventDefault(); const i = enabled(items.length - 1, -1); if (i >= 0) setAct(i, true); }
+      else if (k === 'Enter' || k === ' ') { e.preventDefault(); api.choose(act); }
+      else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const now = Date.now(); typed = (now - typedAt > 700 ? '' : typed) + k.toLowerCase(); typedAt = now;
+        const from = typed.length === 1 ? act + 1 : act; let i = items.findIndex((li, x) => x >= from && li.textContent.trim().toLowerCase().startsWith(typed) && li.getAttribute('aria-disabled') !== 'true');
+        if (i < 0) i = items.findIndex(li => li.textContent.trim().toLowerCase().startsWith(typed) && li.getAttribute('aria-disabled') !== 'true'); if (i >= 0) setAct(i, true);
+      }
+    });
+    btn.addEventListener('blur', () => { if (current === api) setTimeout(() => { if (current === api && document.activeElement !== btn && !list.contains(document.activeElement)) api.close(); }, 0); });
+    wrap.__dd = api;
+  }
+  const scan = root => { if (root.nodeType !== 1) return; if (root.tagName === 'SELECT') enhance(root); else if (root.querySelectorAll) root.querySelectorAll('select').forEach(enhance); };
+  const start = () => {
+    scan(document.documentElement);
+    new MutationObserver(ms => { for (const m of ms) m.addedNodes.forEach(scan); if (current && !document.contains(current.sel)) current.close(true); }).observe(document.documentElement, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
 </script>
 </body>
 </html>
