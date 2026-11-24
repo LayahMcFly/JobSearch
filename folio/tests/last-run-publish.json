@@ -1,6 +1,6 @@
 {
- "at": "2026-11-22T21:32:28.718Z",
- "passed": 62,
+ "at": "2026-11-24T03:48:04.168Z",
+ "passed": 115,
  "failed": 0,
  "results": [
   {
@@ -10,6 +10,11 @@
   },
   {
    "name": "config in folio/index.html holds only a public site key (no secret-looking values)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "footer: shows the current version and the release list starts with it",
    "ok": true,
    "note": ""
   },
@@ -36,7 +41,7 @@
   {
    "name": "publish: link has the form /folio/?id=<12 chars>",
    "ok": true,
-   "note": "http://x.test/folio/?id=tKgbpRJkKbrK"
+   "note": "http://x.test/folio/?id=XZuJXciar6HU"
   },
   {
    "name": "publish: Turnstile rendered with the public site key and action folio-publish",
@@ -54,7 +59,57 @@
    "note": ""
   },
   {
-   "name": "publish: Publish button stays disabled until the consent box and the human check are both done",
+   "name": "publish: pressing Publish too early explains what is missing and sends nothing",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "publish: the human-check status line shows waiting, then complete",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check error 110200: explained in plain words, stays on screen, pressing Publish repeats the reason (no circular message), nothing sent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check error 400020: explained in plain words, stays on screen, pressing Publish repeats the reason (no circular message), nothing sent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check error 110100: explained in plain words, stays on screen, pressing Publish repeats the reason (no circular message), nothing sent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check error 300030: explained in plain words, stays on screen, pressing Publish repeats the reason (no circular message), nothing sent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check error 600010: explained in plain words, stays on screen, pressing Publish repeats the reason (no circular message), nothing sent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check error 999999: explained in plain words, stays on screen, pressing Publish repeats the reason (no circular message), nothing sent",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check cannot load (blocked script): says so and names blockers",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check: Try again after a blocked load recovers without reloading the page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "human check: render() throwing for a bad site key is explained as an invalid key",
    "ok": true,
    "note": ""
   },
@@ -79,12 +134,27 @@
    "note": ""
   },
   {
+   "name": "view: top Hire me link scrolls inside the page and does not reload Folio in the frame",
+   "ok": true,
+   "note": "about:srcdoc"
+  },
+  {
+   "name": "view: pressing the form button does something visible (draft box, thanks or an error)",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "view: a form error also shows in a selectable box with a Copy error button",
+   "ok": true,
+   "note": ""
+  },
+  {
    "name": "view: visitor sent no Authorization header and no key",
    "ok": true,
    "note": ""
   },
   {
-   "name": "view: frame is sandboxed WITHOUT allow-same-origin",
+   "name": "view: frame is sandboxed WITHOUT allow-same-origin, and allows forms so the hire button works",
    "ok": true,
    "note": ""
   },
@@ -300,6 +370,201 @@
   },
   {
    "name": "hostile published data: no script ran in the viewer, parent storage untouched",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "site dialog: Download my site opens a window with the steps and does not download yet",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "site dialog: its button downloads index.html and closes",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "site dialog: Cancel closes without downloading",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "live status: matching page says live and up to date",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "live status: different page says live but older, tells you to update",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "live status: missing page says not live",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "copy error: publishing error copies only its own text",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "copy error: pop-up error copies its text without the button label",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "copy error: normal pop-ups have no copy button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "long paste: the page is not wider than the screen and not scrolled sideways",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "long paste: when you leave the box it scrolls back to the start of the address",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: the plain browser select is replaced by a themed button and hidden",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: the list fades in rather than appearing at once",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: keyboard choice updates the real select, Folio data and the button text",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: Escape closes it and focus returns to the button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: tapping an option picks it",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: setting the value from code updates the button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "dropdown: with reduce-motion on, the list has no animation",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "download menu: PDF and site buttons are tucked under one Download button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "download menu: opens with both choices and reports expanded",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "download menu: Escape closes it and returns focus to Download",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "download menu: a tap outside closes it",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "download menu: PDF choice asks about paper color first",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google script: sends one email to the account owner with the visitor as reply-to",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google script: line breaks in the name cannot inject mail headers",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google script: missing name, bad email or bad JSON sends nothing and says so",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google mode: the card shows the steps, the script and a Copy button",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google mode: a wrong address is stopped with a plain reason",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google mode: the real address is accepted",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google mode: the form sends plain text (no preflight), one request, and success shows the recorded page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google mode: when the script reports a failure, the page says so and keeps the answers",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "google mode: the published page may contact Google script addresses only for this",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "paper look: resume sheet has a grain overlay that never blocks clicks",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "paper look: overlay is off when printing",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "form looks like a Google Form: question cards, radio choices, required markers, Clear form",
+   "ok": true,
+   "note": "{\"cards\":5,\"radios\":4,\"clear\":true,\"req\":4}"
+  },
+  {
+   "name": "form: empty submit marks the first question as required",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "form: typing clears the required message",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "form: Clear form empties the answers",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "paper look: dark paper uses a light-on-dark grain",
    "ok": true,
    "note": ""
   },

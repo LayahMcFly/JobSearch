@@ -242,8 +242,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.1.25';
+const APP_VERSION = 'v1.2.0';
 const RELEASES = [
+  ['v1.2.0', 'AI magic: describe your skills, experience and pricing in your own words and Claude writes the resume and hire-me text from only what you say. You review the draft before it replaces anything, and Undo brings your old version back. Each service also has an optional extra charge, such as + $0.66 per minute, shown on the page. Needs the updated publishing Worker (1.1.0) and a Claude key on it.'],
   ['v1.1.25', 'Hire me emails now say they came from your Folio page: the subject starts with [Folio] and the message begins with a line saying where it was sent from. With Google Apps Script, copy the script again from step 7 and deploy a new version.'],
   ['v1.1.24', 'When a published form cannot reach Google Apps Script or Web3Forms, the error now tells the page owner what to check.'],
   ['v1.1.23', 'On a published page, a form error now also appears in a box you can select and copy, and the Copy error button tells you when it could not copy. It said Copied even when the phone blocked copying.'],
@@ -294,8 +295,8 @@ const SAMPLE = {
   skills: 'SEO writing, Brand voice, Editorial guidelines, Research, Interviewing, Copy editing',
   links: [{ label: 'Portfolio', url: 'https://example.com/portfolio' }],
   services: [
-    { title: 'SEO article', desc: '1,500 words, researched, with sources and an outline you approve first.', price: 'From $250' },
-    { title: 'Brand voice guide', desc: 'A short guide your whole team can write from.', price: 'From $900' }
+    { title: 'SEO article', desc: '1,500 words, researched, with sources and an outline you approve first.', price: 'From $250', extraPer: '', extraPrice: '' },
+    { title: 'Brand voice guide', desc: 'A short guide your whole team can write from.', price: 'From $900', extraPer: '', extraPrice: '' }
   ],
   availability: 'Taking new clients in January', ctaLabel: 'Hire me', formTitle: 'Tell me about your project',
   pollQuestion: 'What do you need help with?', pollOptions: 'Articles or blog posts\nWebsite copy\nBrand voice\nSomething else',
@@ -392,7 +393,7 @@ function resumeHtml(d) {
       </div></div></section>`;
 }
 function hireHtml(d, opt) {
-  const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}</div>`).join('');
+  const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}${s.extraPrice && s.extraPer ? `<span class="extra">+ ${esc(s.extraPrice)} per ${esc(String(s.extraPer).replace(/^per\s+/i, ''))}</span>` : ''}</div>`).join('');
   const opts = lines(d.pollOptions), mail = validEmail(d.email), email = String(d.email || '').trim();
   const poll = opts.length ? `<fieldset class="q poll"><legend>${esc(d.pollQuestion || 'What do you need?')}<i class="req" aria-hidden="true"> *</i></legend><div class="pollopts">${opts.map((o, i) => `<label class="pill"><input type="radio" name="need" value="${esc(o)}"${i === 0 ? ' required' : ''}><span class="dotr" aria-hidden="true"></span><span class="ot">${esc(o)}</span></label>`).join('')}</div><p class="qerr" hidden>This is a required question</p></fieldset>` : '';
   const emailMode = d.formMode === 'email';
@@ -566,7 +567,7 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .hire{max-width:860px;margin:1.2rem auto 3rem;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
 .hire-in{padding:2.2rem 2.6rem}@media (max-width:640px){.hire-in{padding:1.6rem 1.2rem}}
 .hire h2{font-size:1.8rem}.avail{display:inline-flex;align-items:center;gap:.5rem;background:var(--soft);padding:.25rem .8rem;border-radius:999px;margin:.6rem 0 0;font-size:.92em}.dot{width:9px;height:9px;border-radius:50%;background:#2f9e5b}
-.svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}
+.svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.extra{display:block;color:var(--muted);font-size:.92em;margin-top:.2rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}
 .direct{margin:1rem 0 0;color:var(--muted)}.direct a{color:var(--acc)}
 .copy{font:inherit;font-weight:600;min-height:44px;padding:.4rem 1rem;border-radius:999px;border:1.5px solid var(--ctl);background:var(--paper);color:var(--acc);cursor:pointer;margin:.3rem .4rem .3rem 0}
 .copied{font-size:.9rem;color:var(--muted)}
@@ -638,7 +639,7 @@ function normData(x) {
   const strs = { name: 120, headline: 200, email: 254, phone: 60, location: 120, website: 300, summary: 2000, skills: 2000, availability: 200, ctaLabel: 60, formTitle: 200, pollQuestion: 200, pollOptions: 1500, formEndpoint: 300, thanks: 400 };
   for (const k in strs) o[k] = own(x, k) ? (typeof x[k] === 'string' ? x[k].slice(0, strs[k]) : '') : SAMPLE[k];
   o.formMode = own(x, 'formMode') && FORM_MODES.includes(x.formMode) ? x.formMode : SAMPLE.formMode;
-  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60 }, 20] };
+  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20] };
   for (const k in lists) {
     const [shape, max] = lists[k];
     o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
@@ -660,6 +661,89 @@ const F = (label, path, o) => { o = o || {}; const v = path.split('.').reduce((x
 const LF = (list, i, k, label, o) => { o = o || {}; const v = D[list][i][k];
   return `<label class="f">${label}${o.area ? `<textarea data-l="${list}" data-i="${i}" data-k="${k}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}">${esc(v)}</textarea>` : `<input type="text" data-l="${list}" data-i="${i}" data-k="${k}" value="${esc(v)}" placeholder="${esc(o.ph || '')}">`}</label>`; };
 const entry = (list, i, title, inner) => `<div class="entry"><div class="entry-head"><span>${esc(title || 'New')}</span><button type="button" class="btn btn-small btn-danger" data-rm="${list}:${i}" aria-label="Remove ${esc(title || 'entry')}">Remove</button></div>${inner}</div>`;
+/* ---------- AI magic ---------- */
+let aiText = '', aiBusy = false, aiToken = '', aiWidget = null, aiDraft = null, aiMsg = null, aiUndo = null;
+const AI_PLACEHOLDER = 'Example: I write SEO articles and brand voice guides for B2B software companies. 6 years freelance, before that 3 years as an editor at Acme Media. I charge $250 for a 1,500 word article, and an extra $0.66 per minute for recorded interviews. Available from January.';
+function aiPreview() {
+  const d = aiDraft; if (!d) return '';
+  const svc = s => esc(s.title || 'Service') + (s.price ? ': ' + esc(s.price) : '') + (s.extraPrice && s.extraPer ? ' (+ ' + esc(s.extraPrice) + ' per ' + esc(String(s.extraPer).replace(/^per\s+/i, '')) + ')' : '');
+  return `<div class="entry" id="aiDraftBox"><b>${esc(d.name || 'Your name')}</b>${d.headline ? ' · ' + esc(d.headline) : ''}
+    ${d.summary ? `<p>${esc(d.summary)}</p>` : ''}${d.skills ? `<p class="hint"><b>Skills:</b> ${esc(d.skills)}</p>` : ''}
+    <p class="hint">${d.experience.length} job${d.experience.length === 1 ? '' : 's'}, ${d.education.length} education entr${d.education.length === 1 ? 'y' : 'ies'}, ${d.services.length} service${d.services.length === 1 ? '' : 's'}.</p>
+    ${d.services.length ? `<ul>${d.services.map(s => `<li>${svc(s)}</li>`).join('')}</ul>` : ''}
+    <p class="hint">Using this draft replaces your name, headline, summary, skills, jobs, education and services with the draft. Your email, phone, location, links and form settings stay as they are. You can undo it.</p>
+    <div class="btnrow"><button type="button" class="btn btn-primary" id="aiUse">Use this draft</button><button type="button" class="btn" id="aiNo">Discard</button></div></div>`;
+}
+function aiLiveHtml() {
+  const m = aiMsg ? `<p class="pubmsg ${aiMsg.kind}" role="${aiMsg.kind === 'err' ? 'alert' : 'status'}">${esc(aiMsg.text)}${aiMsg.kind === 'err' ? '<button type="button" class="copyerr" data-copyerr>Copy error</button>' : ''}</p>` : '';
+  return m + aiPreview() + (aiUndo ? '<div class="btnrow"><button type="button" class="btn" id="aiUndo">Undo the AI draft</button></div>' : '');
+}
+const setAi = (kind, text) => { aiMsg = text ? { kind, text } : null; const el = $('#aiLive'); if (el) el.innerHTML = aiLiveHtml(); };
+const aiBody = () => !PUBLISH.api || !PUBLISH.siteKey ? '<p class="hint">AI magic needs the online service, which is not set up in this copy of Folio.</p>' :
+  `<p class="hint">Describe your skills, experience and pricing in your own words. Claude writes the resume and hire-me text from only what you say, and invents nothing. You review the draft before it replaces anything.</p>
+   <label class="f">Tell me about you<small> Jobs and dates, what you do, who you help, what you charge, and extras such as "$0.66 more per minute".</small><textarea id="aiText" rows="9" maxlength="6000" placeholder="${esc(AI_PLACEHOLDER)}">${esc(aiText)}</textarea></label>
+   <p class="hint" id="aiCount">${aiText.length} of 6,000 characters</p>
+   <div id="aiTsBox" class="tsbox" aria-label="Human check" style="margin:.7rem 0"></div>
+   <div class="btnrow" style="margin:.9rem 0 .6rem"><button type="button" class="btn btn-primary" id="aiGo"${aiBusy ? ' disabled' : ''}>Write my resume</button></div>
+   <div id="aiLive" aria-live="polite">${aiLiveHtml()}</div>
+   <p class="hint">Your text is sent to Claude through the Folio service to write the draft. It is not saved there. Up to 3 drafts an hour.</p>`;
+async function mountAiTs() {
+  const box = $('#aiTsBox'); if (!box || !PUBLISH.siteKey || box.dataset.mounting) return; box.dataset.mounting = '1'; aiToken = ''; aiWidget = null;
+  try {
+    await loadTurnstile(); const again = $('#aiTsBox'); if (!again || again !== box) return;
+    aiWidget = window.turnstile.render(box, { sitekey: PUBLISH.siteKey, action: 'folio-ai', callback: t => { aiToken = t; }, 'expired-callback': () => { aiToken = ''; }, 'error-callback': () => { aiToken = ''; } });
+  } catch (e) { setAi('err', 'The human check could not load from Cloudflare, so AI magic cannot run. Check your connection and reopen this card.'); }
+}
+function aiFail(res) {
+  const j = res.json || {}, c = j.error || '';
+  if (!res.status) return 'Could not reach the Folio service. Check your connection and try again. Nothing was changed.';
+  switch (c) {
+    case 'ai_not_set_up': return 'AI magic is not turned on yet. The publishing Worker needs a secret named CLAUDE_API_KEY.';
+    case 'ai_paused': return 'AI magic is paused right now. Try again later.';
+    case 'ai_key': return 'Claude refused the key stored on the Worker (HTTP ' + (j.status || '?') + '). The key may be wrong or turned off.';
+    case 'ai_billing': return 'Claude would not run the request (HTTP ' + (j.status || '?') + '). The API account may be out of credit or at its spend limit.';
+    case 'ai_busy': return 'Claude is busy or rate limited right now. Wait a minute and try again.';
+    case 'ai_timeout': return 'Claude took too long to answer. Try again with a shorter description.';
+    case 'ai_unreadable': return 'Claude answered, but the answer could not be turned into a resume. Try again, with a few more details.';
+    case 'too_short': return 'Write a little more first: a few sentences about your work, your experience and your pricing.';
+    case 'too_long': return 'That is too long. The limit is 6,000 characters.';
+    case 'rate_limited': return 'You have used your AI drafts for now. Try again in about ' + Math.max(1, Math.ceil((j.retryAfterSeconds || 60) / 60)) + ' minutes.';
+    case 'busy': return 'AI magic has reached its daily limit for everyone. Try again tomorrow.';
+    case 'verification_required': case 'verification_failed': return 'The human check was not accepted. Wait for it to finish and try again.';
+    case 'verification_unavailable': return 'The human check service is not answering right now. Try again in a few minutes.';
+    case 'origin_not_allowed': return 'The Folio service does not accept requests from this website address.';
+    case 'not_found': return 'The Folio service does not have AI magic yet. Update the publishing Worker to version 1.1.0.';
+    default: return 'The Folio service returned an error (' + res.status + (c ? ', ' + c : '') + ').';
+  }
+}
+async function aiRun() {
+  if (aiBusy) return; const t = aiText.trim();
+  if (t.length < 40) return setAi('err', 'Write a little more first: a few sentences about your work, your experience and your pricing.');
+  if (!aiToken) return setAi('err', 'The human check has not finished yet. Wait for it to show as complete, then press the button again.');
+  aiBusy = true; aiDraft = null; const go = $('#aiGo'); if (go) go.disabled = true; setAi('note', 'Claude is writing your draft. This takes about 15 seconds.');
+  const token = aiToken; aiToken = '';
+  const res = await pubApi('POST', '/api/ai', { body: { text: t, turnstile: token }, timeout: 70000 });
+  try { if (aiWidget !== null && window.turnstile) window.turnstile.reset(aiWidget); } catch (e) {}
+  aiBusy = false; const go2 = $('#aiGo'); if (go2) go2.disabled = false;
+  const d = res.status === 200 && res.json && res.json.draft;
+  if (d && Array.isArray(d.experience) && Array.isArray(d.education) && Array.isArray(d.services) && Array.isArray(d.links)) { aiDraft = d; setAi('ok', 'Draft ready. Read it below, then choose.'); }
+  else setAi('err', aiFail(res));
+}
+function aiApply() {
+  const d = aiDraft; if (!d) return; aiUndo = JSON.parse(JSON.stringify(D));
+  for (const k of ['name', 'headline', 'summary', 'skills', 'availability', 'pollQuestion', 'pollOptions']) if (d[k]) D[k] = d[k];
+  for (const k of ['experience', 'education', 'services', 'links']) if (d[k].length) D[k] = d[k];
+  D = normData(D); aiDraft = null; aiMsg = { kind: 'ok', text: 'Draft applied. Read it over, then edit anything in the sections below.' }; save(); renderPanel(); refresh();
+}
+document.addEventListener('input', e => { if (e.target.id !== 'aiText') return; aiText = e.target.value; const c = $('#aiCount'); if (c) c.textContent = aiText.length.toLocaleString('en-US') + ' of 6,000 characters'; });
+document.addEventListener('click', e => {
+  const id = e.target && e.target.id;
+  if (id === 'aiGo') aiRun();
+  else if (id === 'aiUse') aiApply();
+  else if (id === 'aiNo') { aiDraft = null; setAi('', ''); }
+  else if (id === 'aiUndo' && aiUndo) { D = normData(aiUndo); aiUndo = null; aiMsg = { kind: 'ok', text: 'Your earlier version is back.' }; save(); renderPanel(); refresh(); }
+});
+
 let openCards = { about: true };
 function miniLayout(k) {
   const L = { modern: '<i class="sb"></i><u style="left:38%;top:12px;right:8%"></u><u style="left:38%;top:22px;right:20%"></u><u style="left:38%;top:32px;right:8%"></u><u style="left:38%;top:42px;right:26%"></u>',
@@ -675,6 +759,7 @@ function renderPanel() {
   const keep = document.activeElement && document.activeElement.closest('#panel') ? null : null;
   const card = (id, title, inner) => `<details class="card" data-card="${id}"${openCards[id] ? ' open' : ''}><summary>${title}</summary><div class="card-body">${inner}</div></details>`;
   $('#panel').innerHTML =
+    card('ai', 'AI magic: write it for me', aiBody()) +
     card('about', '1. About you', F('Full name', 'name') + F('Headline', 'headline', { ph: 'What you do, in a few words' }) +
       `<div class="row2">${F('Email', 'email', { type: 'email', err: 'email' })}${F('Phone (optional)', 'phone', { type: 'tel' })}</div><div class="row2">${F('Location', 'location')}${F('Website (optional)', 'website', { ph: 'yoursite.com' })}</div>` +
       F('Profile', 'summary', { area: true, rows: 4, hint: ' Two or three sentences on who you help and how.' })) +
@@ -692,7 +777,7 @@ function renderPanel() {
       `<div><b>Paper</b><div class="choices" style="margin-top:.5rem">${Object.entries(PAPERS).map(([k, p]) => `<button type="button" class="choice" data-st="paper" data-v="${k}" aria-pressed="${ST.paper === k}"><span class="aa" aria-hidden="true" style="--mp:${p[1]};--mk:${p[2]};--mc:${ST.color}"><em style="font-family:${FONTS[ST.font] ? FONTS[ST.font][3] : 'serif'}">Aa</em><small>Aa</small></span><b>${p[0]}</b><span>${k === 'dark' ? 'Light text on dark' : 'Dark text'}</span></button>`).join('')}</div></div>` + `<p class="hint" id="colorNote" aria-live="polite">${esc(colorNote(ST.color, ST.paper))}</p>`) +
     card('hire', '6. Hire-me section',
       F('Availability note', 'availability', { ph: 'Taking new clients in January' }) +
-      D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
+      D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div><div class="row2">${LF('services', i, 'extraPrice', 'Extra charge (optional)', { ph: '$0.66' })}${LF('services', i, 'extraPer', 'For each', { ph: 'minute' })}</div><p class="hint">Shows as "+ $0.66 per minute" on the page.</p>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
       `<button type="button" class="btn" data-add="services">Add a service</button>` +
       F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) +
       `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message shown once the form service accepts a message', 'thanks')) +
@@ -703,6 +788,7 @@ function renderPanel() {
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('online', '8. Publish online', onlineBody() + (PUBLISH.api ? WK_HTML : ''));
+  if (openCards.ai) mountAiTs();
   if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); if (openCards.online && PUB && !liveAuto) { liveAuto = true; checkLive(); } }
 }
 
@@ -729,11 +815,11 @@ document.addEventListener('input', e => {
   else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); document.querySelectorAll('.mini,.aa').forEach(m => m.style.setProperty('--mc', ST.color)); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
-document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); } }, true);
+document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); if (c.dataset.card === 'ai' && c.open) mountAiTs(); } }, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
-  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '' }); renderPanel(); change(); }
+  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '', extraPer: '', extraPrice: '' }); renderPanel(); change(); }
   else if (b.dataset.rm) {
     const [k, i] = b.dataset.rm.split(':'), rec = D[k][+i], nm = rec.role || rec.school || rec.label || rec.title || 'this entry';
     confirmDialog({ title: 'Remove this entry?', message: `"${nm}" will be removed from your resume. This cannot be undone unless you have a backup.`, ok: 'Remove' }).then(yes => {
@@ -856,7 +942,7 @@ const pubLink = id => { const u = new URL(location.href); u.search = ''; u.hash 
 const waitText = s => s >= 7200 ? 'about ' + Math.round(s / 3600) + ' hours' : s >= 120 ? 'about ' + Math.round(s / 60) + ' minutes' : 'a minute';
 
 async function pubApi(method, path, o) {
-  o = o || {}; const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+  o = o || {}; const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), o.timeout || 25000);
   try {
     const headers = {}; if (o.body !== undefined) headers['Content-Type'] = 'application/json'; if (o.key) headers.Authorization = 'Bearer ' + o.key;
     const r = await fetch(PUBLISH.api + path, { method, headers, body: o.body === undefined ? undefined : JSON.stringify(o.body), signal: ctl.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });

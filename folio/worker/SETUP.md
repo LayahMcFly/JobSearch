@@ -70,3 +70,15 @@ Worker 1.0.1 only adds one accepted value (`gscript`) to the list of hire-form m
 - **Google Apps Script** (Folio section 7): a small script in your own Google account emails you each message. Free, about 100 emails a day. Folio shows the script and the steps.
 - **Web3Forms** or **Formspree**: free tiers with a form address or key.
 - **Email app draft** (default): sends nothing by itself. The visitor has to press Send in their own email app.
+
+## 10. AI magic (optional, Worker 1.1.0 and Folio v1.2.0)
+
+AI magic lets a visitor describe their skills, experience and pricing and get a draft resume and hire-me text written by Claude. It needs **one more secret** on the `folio-pages` Worker. Without it everything else works as before and the AI card says it is not turned on.
+
+1. Replace the Worker code with the current `folio/worker/folio-pages.mjs` (version 1.1.0) and Deploy.
+2. Worker > Settings > Variables and Secrets > Add. Type **Secret**, name `CLAUDE_API_KEY`, value = a Claude API key (the same kind the Job Search Worker uses). Deploy.
+3. Folio's Turnstile widget must allow the action `folio-ai` as well as `folio-publish` (Managed widgets accept any action, so nothing to change).
+4. Optional settings (Type: Text): `AI_MODEL` (default `claude-haiku-5-5`), `AI_PAUSED` set to `true` to stop AI requests at once, `RL_AI_IP_HOUR` (3), `RL_AI_IP_DAY` (8), `RL_AI_GLOBAL_DAY` (150).
+
+**Cost.** Each draft is one Claude API call billed to the key's account. The limits above cap it: 3 per hour and 8 per day per visitor, 150 per day for everyone. Set `AI_PAUSED` to `true` to stop it immediately.
+**Safety.** A visitor's text is sent to Claude as data. The reply is cut down to Folio's exact fields and lengths before it reaches the browser, links must start with https, and the visitor reviews the draft before anything changes. The Claude key never leaves the Worker.

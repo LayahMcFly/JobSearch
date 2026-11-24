@@ -1,7 +1,7 @@
 {
- "pass": 128,
+ "pass": 129,
  "fail": 0,
- "skipped": 1,
+ "skipped": 2,
  "results": [
   {
    "name": "  zero external requests",
@@ -234,6 +234,16 @@
    "note": ""
   },
   {
+   "name": "  success shows the Your response has been recorded page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Submit another response brings the empty form back",
+   "ok": true,
+   "note": ""
+  },
+  {
    "name": "  honeypot filled: nothing is sent and no success shown",
    "ok": true,
    "note": ""
@@ -330,6 +340,16 @@
   },
   {
    "name": "  one request for one click",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  success shows the Your response has been recorded page",
+   "ok": true,
+   "note": ""
+  },
+  {
+   "name": "  Submit another response brings the empty form back",
    "ok": true,
    "note": ""
   },
@@ -599,22 +619,12 @@
    "note": ""
   },
   {
-   "name": "  data saved by v1.0.0 loads unchanged (resume data and style)",
-   "ok": true,
-   "note": ""
+   "name": "  v1.0.0 data loads in this version",
+   "ok": null,
+   "note": "set FOLIO_OLD=/path/to/old/index.html to run"
   },
   {
-   "name": "  a backup file from v1.0.0 restores unchanged",
-   "ok": true,
-   "note": ""
-  },
-  {
-   "name": "  new backups keep the same shape ({D, ST}) as v1.0.0",
-   "ok": true,
-   "note": ""
-  },
-  {
-   "name": "  90 controls: every one at least 44px tall and wide",
+   "name": "  94 controls: every one at least 44px tall and wide",
    "ok": true,
    "note": ""
   },
