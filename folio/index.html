@@ -231,6 +231,10 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
   <h2 id="backupTitle">Back up and restore</h2>
   <p>Backups hold your resume and style only. They never include publishing access. Restore brings a backup back into Folio.</p>
   <div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>
+  <h3 style="margin:1rem 0 .3rem">Browser storage</h3>
+  <p class="hint">Every app on this website address shares one small storage allowance in your browser. When it is full, Folio keeps a second copy of your work so nothing is lost. Check storage shows which app is using the space.</p>
+  <div class="btnrow"><button type="button" class="btn" id="storeCheck">Check storage</button></div>
+  <div id="storeOut" class="keybox" hidden></div>
   <div class="cf-actions"><button type="button" class="btn" id="backupClose">Close</button></div>
 </dialog>
 
@@ -242,8 +246,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.2.1';
 const RELEASES = [
+  ['v1.2.1', 'Saving is sturdier. When your browser\'s storage for this website address is full (every app here shares one small allowance), Folio now keeps your work, and your private edit key, in a second place, so your latest changes are no longer lost on reload. Download, then Back up and restore, has a new Check storage button that shows which app is using the space and can clear PureFinds\' saved store lists.'],
   ['v1.2.0', 'AI magic: describe your skills, experience and pricing in your own words and Claude writes the resume and hire-me text from only what you say. You review the draft before it replaces anything, and Undo brings your old version back. Each service also has an optional extra charge, such as + $0.66 per minute, shown on the page. Needs the updated publishing Worker (1.1.0) and a Claude key on it.'],
   ['v1.1.25', 'Hire me emails now say they came from your Folio page: the subject starts with [Folio] and the message begins with a line saying where it was sent from. With Google Apps Script, copy the script again from step 7 and deploy a new version.'],
   ['v1.1.24', 'When a published form cannot reach Google Apps Script or Web3Forms, the error now tells the page owner what to check.'],
@@ -304,8 +309,32 @@ const SAMPLE = {
 };
 const STYLE0 = { layout: 'modern', font: 'editorial', color: '#8a3f1f', paper: 'white' };
 let D = JSON.parse(JSON.stringify(SAMPLE)), ST = Object.assign({}, STYLE0);
-let saveTimer = 0;
-function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ D, ST })); } catch (e) { toast('Could not save in this browser. Download a backup.', true); } }, 250); }
+/* Saved work lives in two places: the browser's small localStorage (shared by every app on this website address, about 5,000 KB in all)
+   and IndexedDB, which has far more room. Both are written every time. The newer copy wins when Folio opens. */
+const IDB_NAME = 'folio-store';
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('timed out')), ms))]);
+const idb = (mode, fn) => new Promise((resolve, reject) => {
+  let r; try { r = indexedDB.open(IDB_NAME, 1); } catch (e) { return reject(e); }
+  r.onupgradeneeded = () => { try { r.result.createObjectStore('kv'); } catch (e) {} };
+  r.onerror = () => reject(r.error || new Error('indexedDB blocked'));
+  r.onblocked = () => reject(new Error('indexedDB blocked'));
+  r.onsuccess = () => { const db = r.result; let out;
+    try { const tx = db.transaction('kv', mode), q = fn(tx.objectStore('kv')); if (q) q.onsuccess = () => { out = q.result; };
+      tx.oncomplete = () => { db.close(); resolve(out); }; tx.onerror = tx.onabort = () => { db.close(); reject(tx.error || new Error('indexedDB write failed')); };
+    } catch (e) { try { db.close(); } catch (e2) {} reject(e); } };
+});
+const idbSet = (k, v) => withTimeout(idb('readwrite', os => { os.put(v, k); }), 4000);
+const idbGet = k => withTimeout(idb('readonly', os => os.get(k)), 4000);
+const idbDel = k => withTimeout(idb('readwrite', os => { os.delete(k); }), 4000);
+let saveTimer = 0, touched = false, storeNoted = false;
+function save() { touched = true; clearTimeout(saveTimer); saveTimer = setTimeout(async () => {
+  const at = Date.now(), rec = { D, ST, at }; let ls = true, ix = true, why = '';
+  try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { ls = false; why = String((e && e.name) || e); }
+  try { await idbSet('draft', JSON.parse(JSON.stringify(rec))); } catch (e) { ix = false; why += (why ? ' and ' : '') + String((e && e.message) || e); }
+  if (ls) return;
+  if (ix) { if (!storeNoted) { storeNoted = true; toast('This website address has run out of browser storage, so Folio saved your work in a second place instead. Open Download, then Back up and restore, then Check storage to see what is using the space.', false, 9000); } return; }
+  toast('Could not save in this browser (' + why + '). Download a backup now. Then open Download, Back up and restore, Check storage to see what is using the space.', true);
+}, 250); }
 
 /* ---------- 2. style choices ---------- */
 const LAYOUTS = [
@@ -651,7 +680,8 @@ function normStyle(x) {
   return { layout: LAYOUTS.some(l => l[0] === x.layout) ? x.layout : STYLE0.layout, font: own(FONTS, x.font) ? x.font : STYLE0.font,
     color: hexOk(x.color) ? x.color.toLowerCase() : STYLE0.color, paper: own(PAPERS, x.paper) ? x.paper : STYLE0.paper };
 }
-if (!VIEWER) try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && typeof saved === 'object' && saved.D) { D = normData(saved.D); ST = normStyle(saved.ST); } } catch (e) {}
+let loadedAt = 0;
+if (!VIEWER) try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && typeof saved === 'object' && saved.D) { D = normData(saved.D); ST = normStyle(saved.ST); loadedAt = Number(saved.at) || 0; } } catch (e) {}
 
 /* ---------- 4. editor panels ---------- */
 const F = (label, path, o) => { o = o || {}; const v = path.split('.').reduce((x, k) => x && x[k], D);
@@ -804,7 +834,7 @@ function refresh() {
 }
 function copyText(txt) { const done = () => true; try { if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(txt).then(done, () => legacyCopy(txt)); } catch (e) {} return Promise.resolve(legacyCopy(txt)); }
 function legacyCopy(txt) { const a = document.createElement('textarea'); a.value = txt; a.setAttribute('readonly', ''); a.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px'; document.body.appendChild(a); a.select(); a.setSelectionRange(0, 99999); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} a.remove(); return ok; }
-function toast(msg, isErr) { const t = $('#toast'); t.textContent = msg; if (isErr) { const b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error'; b.dataset.copyerr = '1'; t.appendChild(b); } t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isErr ? 12000 : 3500); }
+function toast(msg, isErr, ms) { const t = $('#toast'); t.textContent = msg; if (isErr) { const b = document.createElement('button'); b.type = 'button'; b.className = 'copyerr'; b.textContent = 'Copy error'; b.dataset.copyerr = '1'; t.appendChild(b); } t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), isErr ? 12000 : (ms || 3500)); }
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-copyerr]'); if (!b) return; const box = b.parentElement; const txt = (box.firstChild && box.firstChild.nodeType === 3 ? box.firstChild.nodeValue : box.textContent.replace(b.textContent, '')).trim(); Promise.resolve(copyText(txt)).then(ok => { b.textContent = ok === false ? 'Could not copy. Select the text instead' : 'Copied'; setTimeout(() => { b.textContent = 'Copy error'; }, 2500); }); });
 function change() { save(); refresh(); if (typeof updatePubStatus === 'function') updatePubStatus(); }
 
@@ -936,7 +966,9 @@ $('#cfOk').addEventListener('click', () => $('#confirmDialog').close('ok'));
 const PUBKEY = 'folio:v1:pub', ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/, KEY_RE = /^[A-Za-z0-9_-]{43}$/;
 let tsFailed = false, tsReason = '', PUB = null, pubMsg = null, pubBusy = false, pubConsent = false, tsToken = '', tsWidget = null, tsLoading = null;
 try { const p = JSON.parse(localStorage.getItem(PUBKEY) || 'null'); if (p && ID_RE.test(p.id) && KEY_RE.test(p.key) && p.api === PUBLISH.api) PUB = { id: p.id, key: p.key, api: p.api, at: Number(p.at) || 0, snap: String(p.snap || ''), saved: !!p.saved }; } catch (e) {}
-const savePub = () => { try { if (PUB) localStorage.setItem(PUBKEY, JSON.stringify(PUB)); else localStorage.removeItem(PUBKEY); } catch (e) {} };
+const savePub = () => { try { if (PUB) localStorage.setItem(PUBKEY, JSON.stringify(PUB)); else localStorage.removeItem(PUBKEY); } catch (e) {}
+  // a second copy, so a full browser storage never costs you your private edit key
+  try { (PUB ? idbSet('pub', JSON.parse(JSON.stringify(PUB))) : idbDel('pub')).catch(() => {}); } catch (e) {} };
 const snapNow = () => JSON.stringify({ D: normData(D), ST: normStyle(ST) });
 const pubLink = id => { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('id', id); return u.toString(); };
 const waitText = s => s >= 7200 ? 'about ' + Math.round(s / 3600) + ' hours' : s >= 120 ? 'about ' + Math.round(s / 60) + ' minutes' : 'a minute';
@@ -1126,6 +1158,59 @@ async function startViewer() {
   if (st.theme === 'purple') { setIcon('#6b3fa0'); }
   if (st.theme === 'purple') { const P = { 'bg': '#f6f1fb', 'surface': '#fdfbff', 'surface-2': '#ece3f6', 'text': '#261d33', 'muted': '#594c6b', 'border': '#dacdea', 'accent': '#6b3fa0', 'accent-hover': '#552f82', 'accent-glow': '#8a5cc4', 'accent-text': '#6b3fa0', 'accent-soft': '#efe6fa', 'accent-line': '#d3bff0', 'tint': '#faf6fe', 'input-border': '#8a7aa0' }; for (const k in P) document.documentElement.style.setProperty('--' + k, P[k]); }
 })();
+
+/* ---------- browser storage check ---------- */
+const APP_OF = k => /^folio:/.test(k) ? 'Folio' : /^pf_/.test(k) ? 'PureFinds' : /^jst:/.test(k) ? 'Job Search Tracker' : /petal/i.test(k) ? 'Petal' : 'Another page on this address';
+const DISPOSABLE = /^pf_(scan|etsy|kroger|beauty|off)\d*(\||$)/; // PureFinds' saved store lists. It downloads them again by itself.
+const kb = n => (n / 1000 >= 10 ? Math.round(n / 1000) : Math.round(n / 100) / 10).toLocaleString('en-US') + ' KB';
+function storageReport() {
+  const rows = []; let total = 0;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), n = k.length + String(localStorage.getItem(k) || '').length; total += n; rows.push({ key: k, n, app: APP_OF(k), cache: DISPOSABLE.test(k) }); } }
+  catch (e) { return { err: String((e && e.message) || e) }; }
+  rows.sort((a, b) => b.n - a.n);
+  const byApp = {}; rows.forEach(r => { byApp[r.app] = (byApp[r.app] || 0) + r.n; });
+  return { total, rows, byApp, cacheN: rows.filter(r => r.cache).reduce((s, r) => s + r.n, 0), cacheKeys: rows.filter(r => r.cache).length };
+}
+function storageText(rp) {
+  if (rp.err) return 'Folio v' + APP_VERSION.slice(1) + ' storage check on ' + location.hostname + '\nThe browser would not let Folio look at its storage: ' + rp.err;
+  const lines = ['Folio ' + APP_VERSION + ' storage check on ' + location.hostname, 'Used: ' + kb(rp.total) + ' in ' + rp.rows.length + ' saved items. Browsers usually allow about 5,000 KB per website address.', '', 'By app:'];
+  Object.entries(rp.byApp).sort((a, b) => b[1] - a[1]).forEach(([a, n]) => lines.push('  ' + a + ': ' + kb(n)));
+  lines.push('', 'Largest items:'); rp.rows.slice(0, 8).forEach(r => lines.push('  ' + kb(r.n) + '  ' + r.key.slice(0, 48) + '  (' + r.app + (r.cache ? ', re-downloadable' : '') + ')'));
+  return lines.join('\n');
+}
+let lastStoreText = '';
+function runStorageCheck() {
+  const rp = storageReport(), out = $('#storeOut'); if (!out) return; lastStoreText = storageText(rp);
+  const full = !rp.err && rp.total > 4000000;
+  out.hidden = false;
+  out.innerHTML = '<pre class="hint" style="white-space:pre-wrap;margin:0 0 .6rem">' + esc(lastStoreText) + '</pre>' + (full ? '<p class="hint"><b>This address is close to its limit.</b> Folio is keeping its second copy for you.</p>' : '')
+    + '<div class="btnrow"><button type="button" class="btn" data-store="copy">Copy report</button>' + (rp.cacheN > 0 ? '<button type="button" class="btn" data-store="free">Clear PureFinds saved store lists (' + esc(kb(rp.cacheN)) + ')</button>' : '') + '</div>';
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('#storeCheck,[data-store]'); if (!b) return;
+  if (b.id === 'storeCheck') return runStorageCheck();
+  if (b.dataset.store === 'copy') { const ok = await copyText(lastStoreText); toast(ok === false ? 'Select the report and copy it.' : 'Report copied.'); return; }
+  if (b.dataset.store === 'free') {
+    const rp = storageReport(); if (rp.err) return;
+    const yes = await confirmDialog({ title: 'Clear PureFinds saved store lists?', message: 'These are copies of store catalogs that PureFinds saved in your browser (' + kb(rp.cacheN) + '). PureFinds downloads them again the next time you open it. Your PureFinds favorites and settings, and everything in your other apps, stay as they are.', ok: 'Clear them' });
+    if (!yes) return;
+    let n = 0; rp.rows.filter(r => r.cache).forEach(r => { try { localStorage.removeItem(r.key); n += r.n; } catch (err) {} });
+    toast('Freed about ' + kb(n) + '.'); runStorageCheck(); save();
+  }
+});
+// Open the second saved copy and use it when it is newer than the one in localStorage (it is, when localStorage was full)
+if (!VIEWER) {
+  idbGet('draft').then(rec => {
+    if (!rec || typeof rec !== 'object' || !rec.D || touched || !(Number(rec.at) > loadedAt)) return;
+    D = normData(rec.D); ST = normStyle(rec.ST); loadedAt = Number(rec.at); renderPanel(); refresh(); toast('Folio restored your latest work from its second saved copy.');
+  }).catch(() => {});
+  idbGet('pub').then(p => {
+    if (!p || typeof p !== 'object' || !ID_RE.test(p.id) || !KEY_RE.test(p.key) || p.api !== PUBLISH.api) return;
+    if (PUB && Number(PUB.at) >= Number(p.at)) return;
+    PUB = { id: p.id, key: p.key, api: p.api, at: Number(p.at) || 0, snap: String(p.snap || ''), saved: !!p.saved }; renderPanel(); if (typeof updatePubStatus === 'function') updatePubStatus();
+  }).catch(() => {});
+}
+
 $('#ver').textContent = 'Folio ' + APP_VERSION;
 $('#notesBody').insertAdjacentHTML('beforeend', RELEASES.map(([v, t]) => `<div class="nv" role="cell">${esc(v)}</div><div role="cell">${esc(t)}</div>`).join(''));
 $('#notesBtn').addEventListener('click', () => $('#notesDialog').showModal());
