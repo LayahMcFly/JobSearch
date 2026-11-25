@@ -122,7 +122,7 @@ input[type=color]{width:52px;height:44px;padding:2px;border-radius:50%;border:1.
 .hint{color:var(--muted);font-size:.88rem;margin:0}
 .steps{margin:0;padding-left:1.2rem;display:grid;gap:.45rem}
 .btnrow{display:flex;flex-wrap:wrap;gap:.6rem}
-.toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#2a241f;color:#fff;padding:.7rem 1.1rem;border-radius:12px;z-index:50;max-width:92vw;display:none}
+.toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:#2a241f;color:#fff;padding:.7rem 1.1rem;border-radius:12px;z-index:50;width:max-content;max-width:min(92vw,520px);line-height:1.45;display:none}
 .toast.show{display:block}
 .toast,.pubmsg{user-select:text;-webkit-user-select:text}
 .livebadge{margin:.6rem 0;padding:.6rem .9rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-weight:600}.livebadge.ok{color:#1b5e2e;border-color:#1b5e2e}.livebadge.warn{color:#8a5a00;border-color:#8a5a00}.livebadge.bad{color:var(--danger);border-color:var(--danger)}
@@ -246,8 +246,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.2.1';
+const APP_VERSION = 'v1.2.2';
 const RELEASES = [
+  ['v1.2.2', 'The notice that browser storage is full is now wide and readable, and names the app using the most space.'],
   ['v1.2.1', 'Saving is sturdier. When your browser\'s storage for this website address is full (every app here shares one small allowance), Folio now keeps your work, and your private edit key, in a second place, so your latest changes are no longer lost on reload. Download, then Back up and restore, has a new Check storage button that shows which app is using the space and can clear PureFinds\' saved store lists.'],
   ['v1.2.0', 'AI magic: describe your skills, experience and pricing in your own words and Claude writes the resume and hire-me text from only what you say. You review the draft before it replaces anything, and Undo brings your old version back. Each service also has an optional extra charge, such as + $0.66 per minute, shown on the page. Needs the updated publishing Worker (1.1.0) and a Claude key on it.'],
   ['v1.1.25', 'Hire me emails now say they came from your Folio page: the subject starts with [Folio] and the message begins with a line saying where it was sent from. With Google Apps Script, copy the script again from step 7 and deploy a new version.'],
@@ -332,7 +333,8 @@ function save() { touched = true; clearTimeout(saveTimer); saveTimer = setTimeou
   try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { ls = false; why = String((e && e.name) || e); }
   try { await idbSet('draft', JSON.parse(JSON.stringify(rec))); } catch (e) { ix = false; why += (why ? ' and ' : '') + String((e && e.message) || e); }
   if (ls) return;
-  if (ix) { if (!storeNoted) { storeNoted = true; toast('This website address has run out of browser storage, so Folio saved your work in a second place instead. Open Download, then Back up and restore, then Check storage to see what is using the space.', false, 9000); } return; }
+  if (ix) { if (!storeNoted) { storeNoted = true; let who = ''; try { const rp = storageReport(), top = Object.entries(rp.byApp || {}).sort((a, b) => b[1] - a[1])[0]; if (top) who = ' (mostly ' + top[0] + ', ' + kb(top[1]) + ')'; } catch (e) {}
+    toast('Browser storage for this website address is full' + who + '. Folio saved your work in a second place instead. Download, then Back up and restore, then Check storage shows what you can clear.', false, 10000); } return; }
   toast('Could not save in this browser (' + why + '). Download a backup now. Then open Download, Back up and restore, Check storage to see what is using the space.', true);
 }, 250); }
 
