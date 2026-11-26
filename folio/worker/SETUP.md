@@ -82,3 +82,13 @@ AI magic lets a visitor describe their skills, experience and pricing and get a 
 
 **Cost.** Each draft is one Claude API call billed to the key's account. The limits above cap it: 3 per hour and 8 per day per visitor, 150 per day for everyone. Set `AI_PAUSED` to `true` to stop it immediately.
 **Safety.** A visitor's text is sent to Claude as data. The reply is cut down to Folio's exact fields and lengths before it reaches the browser, links must start with https, and the visitor reviews the draft before anything changes. The Claude key never leaves the Worker.
+
+## 11. Import a resume (Folio v1.3.0, Worker 1.2.0)
+
+Folio can read resumes you upload (PDF, Word .docx or text, one or several, or pasted text) and fill in the editor. It works with **no setup at all**: the files are read in the browser and Folio's built-in reader does the work. It is free and less exact.
+
+For a more exact read, Folio asks Claude through the Worker. That needs:
+1. Worker **1.2.0** (it adds an import mode to `POST /api/ai`, up to 40,000 characters of resume text). With Worker 1.1.0 the page says the Worker needs updating and uses the built-in reader instead.
+2. The same `CLAUDE_API_KEY` secret that AI magic uses, with API credit on it. Import shares AI magic's limits (3 per hour and 8 per day per visitor, 150 per day for everyone). If the key is missing, out of credit or refused, Folio says so and uses the built-in reader, and stops asking Claude for the rest of that visit.
+
+PDF files are read with pdf.js 3.11.174 from cdnjs.cloudflare.com, downloaded once, only when someone chooses a PDF. Word files are read with the browser's own decompressor. Nothing is uploaded unless Claude is used, and then only the extracted text is sent, and it is not saved.

@@ -167,6 +167,12 @@ html.viewer body>*:not(#viewer):not(script){display:none!important}
 .view-msg{max-width:34rem;margin:22vh auto 0;padding:1.5rem;text-align:center;font:1.05rem/1.6 var(--font-body,system-ui,sans-serif);color:#2a241f}
 /* publishing card */
 .pubmsg{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-weight:600}.pubmsg.err{color:var(--danger);border-color:var(--danger)}.pubmsg.ok{color:#1b5e2e;border-color:#1b5e2e}
+.implist{list-style:none;margin:.2rem 0;padding:0;display:grid;gap:.4rem}
+.implist li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.55rem .8rem;border:1.5px solid var(--border);border-radius:10px;background:var(--surface)}
+.implist .nm{font-weight:600;overflow-wrap:anywhere;flex:1 1 11rem}
+.implist .st{font-size:.88rem;color:var(--muted);flex:1 1 9rem}.implist .st.err{color:var(--danger)}
+.impbox{display:grid;gap:.8rem}.impbox.drag{outline:2px dashed var(--accent);outline-offset:6px;border-radius:12px}
+#impDraftBox ul{margin:.3rem 0 0 1.1rem;padding:0}#impDraftBox li{margin:.15rem 0}
 .keybox{margin:1rem 0;padding:.9rem;border:1px dashed var(--border);border-radius:12px;background:var(--surface-2)}.keybox p{margin:.4rem 0 .7rem}
 .check{display:flex;gap:.8rem;align-items:flex-start;min-height:44px;padding:.5rem 0;cursor:pointer}.check input{flex:none;appearance:none;-webkit-appearance:none;display:grid;place-content:center;width:44px;height:44px;margin:0;border:1.5px solid var(--input-border);border-radius:12px;background:var(--surface);cursor:pointer}.check input::before{content:'';width:1.2rem;height:1.2rem;border-radius:5px;background:var(--accent);transform:scale(0);transition:transform .12s}.check input:checked::before{transform:scale(1)}.check input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}.check span{align-self:center}
 .btn[hidden]{display:none}
@@ -246,8 +252,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.2.2';
+const APP_VERSION = 'v1.3.0';
 const RELEASES = [
+  ['v1.3.0', 'Import a resume: choose one or several files (PDF, Word or text) or paste the text, and Folio reads them, merges them into one, and fills in your name, contact details, profile, jobs, education, skills and links. You see the result first, and Undo brings your old version back. Claude does the reading when it is available. Otherwise Folio\'s built-in reader does it, free but less exact.'],
   ['v1.2.2', 'The notice that browser storage is full is now wide and readable, and names the app using the most space.'],
   ['v1.2.1', 'Saving is sturdier. When your browser\'s storage for this website address is full (every app here shares one small allowance), Folio now keeps your work, and your private edit key, in a second place, so your latest changes are no longer lost on reload. Download, then Back up and restore, has a new Check storage button that shows which app is using the space and can clear PureFinds\' saved store lists.'],
   ['v1.2.0', 'AI magic: describe your skills, experience and pricing in your own words and Claude writes the resume and hire-me text from only what you say. You review the draft before it replaces anything, and Undo brings your old version back. Each service also has an optional extra charge, such as + $0.66 per minute, shown on the page. Needs the updated publishing Worker (1.1.0) and a Claude key on it.'],
@@ -693,6 +700,431 @@ const F = (label, path, o) => { o = o || {}; const v = path.split('.').reduce((x
 const LF = (list, i, k, label, o) => { o = o || {}; const v = D[list][i][k];
   return `<label class="f">${label}${o.area ? `<textarea data-l="${list}" data-i="${i}" data-k="${k}" rows="${o.rows || 4}" placeholder="${esc(o.ph || '')}">${esc(v)}</textarea>` : `<input type="text" data-l="${list}" data-i="${i}" data-k="${k}" value="${esc(v)}" placeholder="${esc(o.ph || '')}">`}</label>`; };
 const entry = (list, i, title, inner) => `<div class="entry"><div class="entry-head"><span>${esc(title || 'New')}</span><button type="button" class="btn btn-small btn-danger" data-rm="${list}:${i}" aria-label="Remove ${esc(title || 'entry')}">Remove</button></div>${inner}</div>`;
+/* ---------- Import a resume: read files, read the text, fill in the resume ---------- */
+const IMP_MAX_FILES = 6, IMP_MAX_BYTES = 8 * 1024 * 1024, IMP_MAX_CHARS = 40000;
+const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/'; // loaded only when a PDF is chosen
+let pdfjsLoading = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (pdfjsLoading) return pdfjsLoading;
+  pdfjsLoading = new Promise((ok, no) => {
+    const s = document.createElement('script'); s.src = PDFJS_BASE + 'pdf.min.js'; s.async = true;
+    s.onload = () => { if (window.pdfjsLib) { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; ok(window.pdfjsLib); } else { pdfjsLoading = null; no(new Error('The PDF reader did not start.')); } };
+    s.onerror = () => { pdfjsLoading = null; no(new Error('The PDF reader could not be downloaded. Check your connection, or save the resume as a Word or text file.')); };
+    document.head.appendChild(s);
+  });
+  return pdfjsLoading;
+}
+const LIGS = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl' };
+const tidyText = t => String(t || '').replace(/[ﬀ-ﬄ]/g, c => LIGS[c]).replace(/\r\n?/g, '\n').replace(/[   ]/g, ' ').replace(/[​-‍⁠﻿]/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+/* PDF: group the page's text pieces into lines. A sidebar template (two columns) is read left column first, then right. */
+function pdfRows(items) {
+  const rows = [];
+  items.slice().sort((a, b) => b.y - a.y || a.x - b.x).forEach(it => {
+    const row = rows.find(r => Math.abs(r.y - it.y) <= Math.max(2, Math.min(r.h, it.h) * 0.45));
+    if (row) { row.items.push(it); row.h = Math.max(row.h, it.h); } else rows.push({ y: it.y, h: it.h, items: [it] });
+  });
+  rows.sort((a, b) => b.y - a.y); rows.forEach(r => r.items.sort((a, b) => a.x - b.x));
+  return rows;
+}
+const rowText = r => { let line = '', end = null;
+  r.items.forEach(it => { if (end !== null) { const gap = it.x - end; if (gap > r.h * 2.5) line += ' | '; else if (gap > r.h * 0.12 && !/\s$/.test(line) && !/^\s/.test(it.s)) line += ' '; } line += it.s; end = it.x + it.w; });
+  return line.replace(/\s+/g, ' ').replace(/^\|\s*|\s*\|$/g, '').trim(); };
+function pdfPageLines(items, pageW, pageH) {
+  // A sidebar template has two columns with an empty vertical gutter between them. Read the column with the biggest text (the name) first.
+  const body = items.filter(i => i.y > pageH * 0.08 && i.y < pageH * 0.88), step = pageW * 0.01, cov = new Array(102).fill(0);
+  body.forEach(i => { for (let b = Math.max(0, Math.floor(i.x / step)); b <= Math.floor((i.x + i.w) / step) && b <= 101; b++) cov[b]++; });
+  let best = null;
+  for (let b = 15; b <= 72;) { if (cov[b] === 0) { let e = b; while (e <= 72 && cov[e] === 0) e++; if (e - b >= 3 && (!best || e - b > best.len)) best = { s: b, len: e - b }; b = e; } else b++; }
+  if (best) {
+    const splitX = (best.s + best.len / 2) * step;
+    if (pdfRows(body.filter(i => i.x + i.w / 2 < splitX)).length >= 8 && pdfRows(body.filter(i => i.x + i.w / 2 >= splitX)).length >= 8) {
+      const L = items.filter(i => i.x < splitX), R = items.filter(i => i.x >= splitX), big = a => Math.max(0, ...a.map(i => i.h));
+      const left = pdfRows(L).map(rowText), right = pdfRows(R).map(rowText);
+      return (big(R) > big(L) ? right.concat(left) : left.concat(right)).filter(Boolean);
+    }
+  }
+  return pdfRows(items).map(rowText).filter(Boolean);
+}
+async function pdfToText(buf) {
+  const lib = await loadPdfJs(); let doc;
+  try { doc = await lib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise; }
+  catch (e) { throw new Error(e && e.name === 'PasswordException' ? 'This PDF is password protected. Save a copy without the password and try again.' : 'That PDF could not be opened. It may be damaged.'); }
+  const pages = [];
+  for (let n = 1; n <= Math.min(doc.numPages, 10); n++) {
+    const page = await doc.getPage(n), vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent();
+    const items = tc.items.filter(i => typeof i.str === 'string' && i.str.trim()).map(i => ({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width || 0, h: Math.abs(i.height || i.transform[3] || 10) || 10 }));
+    pages.push(pdfPageLines(items, vp.width, vp.height).join('\n'));
+  }
+  return pages.join('\n\n');
+}
+
+/* Word (.docx): a zip file. Read word/document.xml with the browser's own decompressor. No library. */
+const xl = n => n.localName || '';
+const xkids = n => [...n.childNodes].filter(c => c.nodeType === 1);
+function docxParaText(p) {
+  let out = '';
+  (function walk(n) { xkids(n).forEach(c => { const t = xl(c);
+    if (t === 'Fallback' || t === 'pPr' || t === 'rPr') return;
+    if (t === 't') out += c.textContent; else if (t === 'tab') out += ' | '; else if (t === 'br' || t === 'cr') out += '\n'; else if (t === 'noBreakHyphen') out += '-';
+    else if (t === 'p') out += '\n' + docxParaText(c); else walk(c); }); })(p);
+  return out;
+}
+function docxBlocks(parent, lines) {
+  xkids(parent).forEach(c => { const t = xl(c);
+    if (t === 'p') {
+      const txt = docxParaText(c).replace(/[ \t]*\n[ \t]*/g, '\n').replace(/^[\s|]+|[\s|]+$/g, '').trim(); if (!txt) { lines.push(''); return; }
+      const ppr = xkids(c).find(n => xl(n) === 'pPr'), kids = ppr ? xkids(ppr) : [];
+      const bullet = kids.some(n => xl(n) === 'numPr') || kids.some(n => xl(n) === 'pStyle' && /list/i.test(n.getAttribute('w:val') || n.getAttribute('val') || ''));
+      lines.push((bullet ? '• ' : '') + txt);
+    } else if (t === 'tbl') {
+      const rows = xkids(c).filter(n => xl(n) === 'tr');
+      if (rows.length === 1) xkids(rows[0]).filter(n => xl(n) === 'tc').forEach(tc => { docxBlocks(tc, lines); lines.push(''); }); // a layout table: one cell after another
+      else rows.forEach(r => { const cells = xkids(r).filter(n => xl(n) === 'tc').map(tc => { const l = []; docxBlocks(tc, l); return l.filter(Boolean).join(' ').trim(); }).filter(Boolean); if (cells.length) lines.push(cells.join(' | ')); });
+    } else if (t === 'sdt' || t === 'sdtContent' || t === 'customXml' || t === 'ins') docxBlocks(c, lines);
+  });
+}
+async function docxToText(buf) {
+  if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot open Word files. Save the resume as a PDF or text file instead.');
+  const u8 = new Uint8Array(buf), dv = new DataView(buf); let e = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+  if (e < 0) throw new Error('That does not look like a Word (.docx) file.');
+  const count = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true), entry = null;
+  for (let k = 0; k < count && p + 46 <= u8.length; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    if (new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nlen)) === 'word/document.xml') { entry = { method, csize, off }; break; }
+    p += 46 + nlen + xlen + clen;
+  }
+  if (!entry) throw new Error('That does not look like a Word (.docx) file.');
+  const lh = entry.off, start = lh + 30 + dv.getUint16(lh + 26, true) + dv.getUint16(lh + 28, true), raw = u8.subarray(start, start + entry.csize);
+  let xml;
+  if (entry.method === 0) xml = new TextDecoder().decode(raw);
+  else if (entry.method === 8) { const buf2 = await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer(); if (buf2.byteLength > 30e6) throw new Error('That Word file is too large to read.'); xml = new TextDecoder().decode(buf2); }
+  else throw new Error('That Word file uses a format Folio cannot open. Save it as a PDF or text file.');
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('That Word file could not be read. It may be damaged.');
+  const body = xkids(doc.documentElement).find(n => xl(n) === 'body'); const lines = []; if (body) docxBlocks(body, lines);
+  return lines.join('\n');
+}
+function mdToText(t) { return String(t).replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/\*\*|__|`/g, '').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '$1 $2'); }
+async function readResumeFile(f) {
+  const ext = (String(f.name).toLowerCase().match(/\.([a-z0-9]+)$/) || [, ''])[1];
+  if (f.size > IMP_MAX_BYTES) throw new Error('That file is larger than 8 MB.');
+  if (!f.size) throw new Error('That file is empty.');
+  let text = '';
+  if (ext === 'pdf' || f.type === 'application/pdf') text = await pdfToText(await f.arrayBuffer());
+  else if (ext === 'docx') text = await docxToText(await f.arrayBuffer());
+  else if (ext === 'txt' || ext === 'text' || f.type === 'text/plain') text = await f.text();
+  else if (ext === 'md' || ext === 'markdown') text = mdToText(await f.text());
+  else if (ext === 'doc') throw new Error('Old Word (.doc) files cannot be read. In Word choose Save As, then .docx or PDF.');
+  else if (/^(jpe?g|png|gif|webp|heic|tiff?)$/.test(ext) || /^image\//.test(f.type)) throw new Error('Photos and scans cannot be read. Use the PDF or Word file, or paste the text.');
+  else throw new Error('This file type is not supported yet. Save the resume as PDF, Word (.docx) or text.');
+  text = tidyText(text);
+  if (text.length < 40) throw new Error(ext === 'pdf' ? 'This PDF has no text Folio can read. It may be a scan or a photo. Use a PDF saved from Word or Google Docs, or paste the text.' : 'No text was found in this file.');
+  return text;
+}
+
+/* ---------- the built-in reader: no AI, no cost, less exact ---------- */
+const MONTH_RX = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?', YEAR_RX = '(?:19|20)\\d{2}';
+const DTOK_RX = '(?:' + MONTH_RX + '\\s+(?:\\d{1,2},?\\s+)?' + YEAR_RX + '|\\d{1,2}\\/' + YEAR_RX + '|' + YEAR_RX + ')';
+const RANGE_RX = new RegExp(DTOK_RX + '\\s*(?:[-–—‐]|\\bto\\b|\\buntil\\b)\\s*(?:' + DTOK_RX + '|Present|Current|Now|Ongoing|Today)\\b', 'i');
+const BUL_RX = /^\s*(?:[•●▪■◦‣∙·*]|[-–—](?=\s))\s*/;
+const EMAIL_RX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, PHONE_RX = /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/;
+const URL_RX = /\b(?:https?:\/\/|www\.)[^\s<>()|,;]+|\b(?:linkedin\.com\/(?:in|company)|github\.com|behance\.net|dribbble\.com|medium\.com|twitter\.com|x\.com|instagram\.com|substack\.com)\/[^\s<>()|,;]+/gi;
+const BARE_RX = /\b[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|me|dev|design|studio|blog|info|site|online|us|ca|uk|app|page|work|art|agency|press)(?:\/[^\s<>()|,;]*)?/gi;
+const HEADS = [
+  ['summary', /^(?:professional\s+|career\s+|executive\s+)?(?:summary|profile|objective|overview)(?:\s+statement)?$|^about(?:\s+me)?$|^personal\s+statement$/i],
+  ['experience', /^(?:(?:relevant|professional|work|related|employment|career)\s+)*(?:experience|history)$|^employment$/i],
+  ['education', /^education(?:\s+(?:and|&)\s+training)?$|^academic\s+(?:background|history|qualifications)$|^qualifications$/i],
+  ['skills', /^(?:(?:core|key|technical|professional|relevant|areas\s+of)\s+)*(?:skills|competencies|expertise|strengths)$|^skills\s*(?:&|and)\s*\w+$|^tools(?:\s+(?:&|and)\s+technologies)?$|^technologies$/i],
+  ['links', /^(?:links|websites?|portfolio|online\s+presence|social(?:\s+media)?)$/i],
+  ['contact', /^(?:contact(?:\s+(?:info(?:rmation)?|details|me))?|details|get\s+in\s+touch)$/i],
+  ['skip', /^(?:certifications?|licenses?|awards?(?:\s+(?:and|&)\s+honors?)?|honors?|achievements?|publications?|languages?|interests|hobbies|volunteer(?:ing)?(?:\s+experience)?|references?|projects?|affiliations?|memberships?|courses?|training(?:\s+and\s+certifications?)?|certifications?\s+(?:and|&)\s+training|additional\s+information|activities)$/i]
+];
+function headingKey(line) {
+  const t = String(line || '').replace(/[:：]\s*$/, '').replace(/^[\s#*_=\-–—•▪■]+|[\s*_=\-–—•▪■]+$/g, '').trim();
+  if (!t || t.length > 42) return '';
+  for (const [k, rx] of HEADS) if (rx.test(t)) return k;
+  return '';
+}
+const titleCase = s => String(s).toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
+const NAMEISH_RX = /^[A-Za-z][A-Za-z.'’-]*(?:\s+[A-Za-z][A-Za-z.'’-]*){1,4}(?:,\s*[A-Za-z.]{2,8})?$/;
+const LOCATION_RX = /^(?:[A-Z][A-Za-z.'’ -]+,\s*(?:[A-Z]{2}|[A-Z][A-Za-z ]+)(?:\s+\d{5}(?:-\d{4})?)?|(?:Remote|Hybrid)(?:\s*\(.*\))?)$/;
+const ROLE_RX = /\b(?:manager|writer|editor|engineer|developer|designer|director|specialist|analyst|consultant|coordinator|strategist|assistant|lead|intern|associate|officer|president|founder|owner|freelance|freelancer|contractor|producer|architect|administrator|representative|supervisor|teacher|instructor|nurse|accountant|copywriter|marketer|scientist|researcher|technician|head|vp|chief|partner|principal|agent|advisor|adviser|clerk|cashier|barista|driver|sales)\b/i;
+const SCHOOL_RX = /\b(?:university|college|institute|school|academy|polytechnic|conservatory)\b/i;
+const DEGREE_RX = /\b(?:bachelor(?:'?s)?|master(?:'?s)?|doctor(?:ate)?|associate(?:'?s)?|diploma|certificate|degree|ph\.?d|mba|mfa|b\.?s\.?c?|b\.?a\.?|m\.?s\.?c?|m\.?a\.?|a\.?a\.?s?|b\.?f\.?a|b\.?b\.?a|j\.?d)(?=\W|$)/i;
+const SOCIAL_RX = /(?:linkedin|github|twitter|x\.com|instagram|behance|dribbble|medium|substack)/i;
+function cleanUrl(u) { u = String(u).replace(/[.,;:)\]]+$/, ''); return u; }
+function urlLabel(u) {
+  const h = (u.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0] || '').toLowerCase();
+  const map = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub', 'twitter.com': 'X', 'x.com': 'X', 'instagram.com': 'Instagram', 'behance.net': 'Behance', 'dribbble.com': 'Dribbble', 'medium.com': 'Medium', 'substack.com': 'Substack' };
+  return map[h] || h;
+}
+function parseSkills(lines) {
+  const out = [], seen = new Set();
+  lines.forEach(l => { if (!l) return; l = l.replace(BUL_RX, ''); const m = l.match(/^([A-Za-z &\/+-]{2,30}):\s*(.+)$/); if (m) l = m[2];
+    l.split(/\s*[,;•|·●▪]\s*|\s{2,}/).forEach(s => { s = s.replace(BUL_RX, '').trim(); if (!s || s.length > 60) return; const k = s.toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(s); } }); });
+  return out.join(', ');
+}
+function splitHeader(head) {
+  const clean = s => String(s).replace(/^[\s|,–—-]+|[\s|,–—-]+$/g, '').trim();
+  let role = '', company = '';
+  if (head.length >= 2) { let a = clean(head[0]), b = clean(head[1]); if (!ROLE_RX.test(a) && ROLE_RX.test(b)) [a, b] = [b, a]; role = a; company = b; }
+  else if (head.length === 1) {
+    const h = clean(head[0]); let m = h.match(/^(.+?)\s+(?:[|–—·•@]|at|-)\s+(.+)$/i);
+    if (!m) { const c = h.match(/^(.+?),\s+(.+)$/); if (c && (ROLE_RX.test(c[1]) !== ROLE_RX.test(c[2]))) m = c; }
+    if (m) { let a = clean(m[1]), b = clean(m[2]); if (!ROLE_RX.test(a) && ROLE_RX.test(b)) [a, b] = [b, a]; role = a; company = b; } else role = h;
+  }
+  return { role: role.slice(0, 120), company: company.slice(0, 120) };
+}
+function bulletsFrom(lines) {
+  const out = []; let cur = -1;
+  lines.forEach(raw => {
+    if (!raw) { cur = -1; return; }
+    const isB = BUL_RX.test(raw), t = raw.replace(BUL_RX, '').trim(); if (!t) return;
+    if (isB) { out.push(t); cur = out.length - 1; }
+    else if (cur >= 0 && (/^[a-z(]/.test(t) || !/[.!?:;]$/.test(out[cur]))) out[cur] += ' ' + t;
+    else { out.push(t); cur = out.length - 1; }
+  });
+  return out.join('\n');
+}
+function parseJobs(lines) {
+  const L = lines.map(t => ({ t, bullet: BUL_RX.test(t) })), dateIdx = [];
+  const sentenceLike = t => /[.;]$/.test(t) && t.split(' ').length > 5;
+  const isHead = o => o && o.t && !o.bullet && o.t.length <= 100 && !/^[a-z]/.test(o.t) && !sentenceLike(o.t) && !RANGE_RX.test(o.t);
+  L.forEach((o, i) => { if (!o.t || o.bullet) return; const m = o.t.match(RANGE_RX); if (!m) return; const rest = o.t.replace(m[0], ' ').replace(/[|,–—-]+/g, ' ').trim(); if (rest.length <= 100) dateIdx.push(i); });
+  const jobs = [];
+  if (!dateIdx.length) { // no dates anywhere: treat each block separated by a blank line as one job
+    let block = []; const flush = () => { if (block.length) { const h = splitHeader([block[0]]); jobs.push({ role: h.role, company: h.company, dates: '', bullets: bulletsFrom(block.slice(1)) }); } block = []; };
+    lines.forEach(l => { if (!l) flush(); else block.push(l); }); flush(); return jobs.filter(j => j.role || j.bullets);
+  }
+  const entries = dateIdx.map((d, k) => {
+    const m = L[d].t.match(RANGE_RX), rest = L[d].t.replace(m[0], ' ').replace(/^[\s|,–—-]+|[\s|,–—-]+$/g, '').trim(), head = []; let s = d, after = 0;
+    const room = rest ? 1 : 2, floor = k ? dateIdx[k - 1] : -1;
+    for (let j = d - 1; j > floor && head.length < room; j--) { if (!isHead(L[j])) break; head.unshift(L[j].t); s = j; }
+    if (rest) head.push(rest);
+    if (!head.length && isHead(L[d + 1])) { head.push(L[d + 1].t); after = 1; }
+    return { head, s, d, after, dates: m[0].replace(/\s+/g, ' ').trim() };
+  });
+  entries.forEach((e, k) => { const end = k + 1 < entries.length ? entries[k + 1].s : L.length; const h = splitHeader(e.head); jobs.push({ role: h.role, company: h.company, dates: e.dates, bullets: bulletsFrom(L.slice(e.d + 1 + e.after, end).map(o => o.t)) }); });
+  return jobs.filter(j => j.role || j.company || j.bullets);
+}
+function parseEducation(lines) {
+  const out = []; let cur = null; const push = () => { if (cur && (cur.school || cur.degree)) out.push(cur); cur = null; };
+  lines.forEach(raw => {
+    let l = raw.replace(BUL_RX, '').trim(); if (!l) return; let dates = '';
+    const r = l.match(RANGE_RX) || l.match(new RegExp('\\b' + YEAR_RX + '\\b')); if (r) { dates = r[0]; l = l.replace(r[0], ' '); }
+    l = l.replace(/^[\s|,–—-]+|[\s|,–—-]+$/g, '').replace(/\s{2,}/g, ' ').trim();
+    const hasS = SCHOOL_RX.test(l), hasD = DEGREE_RX.test(l);
+    if (l && !hasS && !hasD && cur && cur.school && /\b(?:of|at|for|and|the|&)$/i.test(cur.school) && l.length <= 40) { cur.school += ' ' + l; if (!cur.dates && dates) cur.dates = dates; return; }
+    if (!l || (!hasS && !hasD)) { if (cur && !cur.dates && dates) cur.dates = dates; return; }
+    let school = '', degree = '';
+    if (hasS && hasD) { const sp = l.split(/\s*[,|–—]\s*|\s+-\s+/); school = sp.filter(x => SCHOOL_RX.test(x)).join(', ') || l; degree = sp.filter(x => !SCHOOL_RX.test(x) && DEGREE_RX.test(x)).join(', '); }
+    else if (hasS) school = l; else degree = l;
+    if (school && cur && cur.school) push(); if (degree && !school && cur && cur.degree) push();
+    cur = cur || { school: '', degree: '', dates: '' }; if (school) cur.school = school.slice(0, 120); if (degree) cur.degree = degree.slice(0, 120); if (dates && !cur.dates) cur.dates = dates;
+  });
+  push(); return out;
+}
+function parseResume(raw) {
+  const all = tidyText(raw).split('\n').map(l => l.replace(/\s+/g, ' ').trim());
+  const out = { name: '', headline: '', email: '', phone: '', location: '', website: '', summary: '', skills: '', experience: [], education: [], links: [], skipped: '', warnings: [] };
+  const marks = []; all.forEach((l, i) => { const k = headingKey(l); if (k) marks.push({ i, k, title: l.replace(/[:：]\s*$/, '') }); });
+  let headEnd = Math.min(all.length, 12); if (marks.length) headEnd = marks[0].i; else { const cut = all.findIndex((l, i) => i >= 2 && (l === '' || RANGE_RX.test(l))); if (cut > 0) headEnd = cut; }
+  const header = all.slice(0, headEnd), sec = {};
+  marks.forEach((m, n) => { const end = n + 1 < marks.length ? marks[n + 1].i : all.length; (sec[m.k] = sec[m.k] || []).push(...all.slice(m.i + 1, end)); });
+  out.skipped = [...new Set(marks.filter(m => m.k === 'skip').map(m => titleCase(m.title)))].join(', ');
+  const contactLines = sec.contact || [], hdr = header.concat(contactLines).join('\n'), em = hdr.match(EMAIL_RX) || all.join('\n').match(EMAIL_RX); out.email = em ? em[0] : '';
+  const ph = hdr.match(PHONE_RX) || all.slice(0, 20).join('\n').match(PHONE_RX); out.phone = ph ? ph[0].trim() : '';
+  // header: name first, then headline, location, links
+  const urls = []; let cands = [], firstDone = false, summaryGuess = [];
+  header.concat(contactLines).forEach(line => {
+    if (!line) return;
+    const words = line.split(' ').length;
+    if (words >= 14 && firstDone) { summaryGuess.push(line); return; }
+    const parts = line.replace(EMAIL_RX, ' | ').split(/\s*[|•·●▪]\s*|\s{3,}/).map(p => p.trim()).filter(Boolean);
+    parts.forEach((p, pi) => {
+      const u = p.match(URL_RX); if (u) { u.forEach(x => urls.push(cleanUrl(x))); p = p.replace(URL_RX, ' ').trim(); }
+      const b = p.match(BARE_RX); if (b && !/@/.test(p)) { b.forEach(x => urls.push(cleanUrl(x))); p = p.replace(BARE_RX, ' ').trim(); }
+      if (!p || PHONE_RX.test(p) || /@/.test(p)) return;
+      if (!firstDone && pi === 0 && !/\d/.test(p) && p.split(' ').length <= 6) { out.name = /[a-z]/.test(p) ? p : titleCase(p); firstDone = true; return; }
+      if (!out.location && LOCATION_RX.test(p)) { out.location = p; return; }
+      cands.push(p);
+    });
+  });
+  if (!out.name) { const c = cands.find(x => NAMEISH_RX.test(x)); if (c) { out.name = c; cands = cands.filter(x => x !== c); } }
+  out.headline = (cands.find(x => x.length <= 120 && !/[.!?]$/.test(x)) || '').slice(0, 200);
+  const sumLines = (sec.summary || []).filter(Boolean);
+  out.summary = (sumLines.length ? sumLines.join(' ') : summaryGuess.join(' ')).slice(0, 2000);
+  out.skills = parseSkills(sec.skills || []).slice(0, 2000);
+  let jobLines = sec.experience;
+  if (!jobLines) { const after = all.slice(headEnd); if (after.some(l => RANGE_RX.test(l))) { jobLines = after; out.warnings.push('No "Experience" heading was found, so Folio looked for jobs by their dates.'); } }
+  out.experience = jobLines ? parseJobs(jobLines).slice(0, 30) : [];
+  out.education = parseEducation(sec.education || []).slice(0, 20);
+  // links and website
+  (sec.links || []).forEach(l => { (l.match(URL_RX) || []).forEach(x => urls.push(cleanUrl(x))); (l.replace(EMAIL_RX, ' ').match(BARE_RX) || []).forEach(x => urls.push(cleanUrl(x))); });
+  all.join('\n').replace(EMAIL_RX, ' ').replace(/https?:\/\/\S+/g, m => { urls.push(cleanUrl(m)); return ' '; });
+  const seen = new Set(); urls.forEach(u => { const k = u.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''); if (!k || seen.has(k)) return; seen.add(k);
+    const full = /^https?:\/\//i.test(u) ? u : 'https://' + u;
+    if (SOCIAL_RX.test(u)) out.links.push({ label: urlLabel(u), url: full.slice(0, 300) }); else if (!out.website) out.website = u.slice(0, 300); else out.links.push({ label: urlLabel(u), url: full.slice(0, 300) }); });
+  out.links = out.links.slice(0, 20);
+  if (!out.name) out.warnings.push('Folio could not tell which line is your name.');
+  if (!out.experience.length) out.warnings.push('No jobs were found. Check the Experience section, or paste the text under an "Experience" heading.');
+  return out;
+}
+function mergeParsed(ds) {
+  if (ds.length === 1) return ds[0];
+  const first = k => { for (const d of ds) if (d[k]) return d[k]; return ''; };
+  const out = { name: first('name'), headline: first('headline'), email: first('email'), phone: first('phone'), location: first('location'), website: first('website'), summary: ds.map(d => d.summary).sort((a, b) => b.length - a.length)[0] || '', skills: '', experience: [], education: [], links: [], skipped: '', warnings: [] };
+  const seen = new Set(), sk = []; ds.forEach(d => String(d.skills || '').split(',').forEach(s => { s = s.trim(); const k = s.toLowerCase(); if (s && !seen.has(k)) { seen.add(k); sk.push(s); } })); out.skills = sk.join(', ');
+  const nm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(), yrs = s => (String(s).match(/(?:19|20)\d{2}/g) || []).map(Number);
+  const sameCo = (a, b) => { a = nm(a); b = nm(b); return a && b && (a === b || a.includes(b) || b.includes(a)); };
+  const roleOverlap = (a, b) => { const x = new Set(nm(a).split(' ')); return nm(b).split(' ').some(w => w.length > 3 && x.has(w)); };
+  ds.forEach(d => d.experience.forEach(e => {
+    const hit = out.experience.find(x => (sameCo(x.company, e.company) && (roleOverlap(x.role, e.role) || (yrs(x.dates)[0] && yrs(x.dates)[0] === yrs(e.dates)[0]))) || (!x.company && !e.company && nm(x.role) === nm(e.role) && yrs(x.dates)[0] === yrs(e.dates)[0]));
+    if (!hit) { out.experience.push(Object.assign({}, e)); return; }
+    const have = new Set(hit.bullets.split('\n').map(b => nm(b).slice(0, 60))), add = e.bullets.split('\n').filter(b => b && !have.has(nm(b).slice(0, 60)));
+    if (add.length) hit.bullets = [hit.bullets].concat(add).filter(Boolean).join('\n');
+    if (!hit.dates) hit.dates = e.dates;
+  }));
+  const top = e => { const y = yrs(e.dates); return /present|current|now/i.test(e.dates) ? 9999 : (y.length ? Math.max(...y) : 0); };
+  if (out.experience.every(e => e.dates)) out.experience.sort((a, b) => top(b) - top(a));
+  const share = (a, b) => { const x = new Set(nm(a).split(' ').filter(w => w.length > 3)); return nm(b).split(' ').some(w => w.length > 3 && x.has(w)); };
+  ds.forEach(d => d.education.forEach(e => { if (!out.education.some(x => nm(x.school) === nm(e.school) && (!x.degree || !e.degree || nm(x.degree) === nm(e.degree) || share(x.degree, e.degree) || (x.dates && x.dates === e.dates)))) out.education.push(Object.assign({}, e)); }));
+  const lk = new Set(); ds.forEach(d => d.links.forEach(l => { const k = l.url.toLowerCase(); if (!lk.has(k)) { lk.add(k); out.links.push(l); } }));
+  out.skipped = [...new Set(ds.flatMap(d => String(d.skipped || '').split(', ').filter(Boolean)))].join(', ');
+  out.warnings = [...new Set(ds.flatMap(d => d.warnings))];
+  out.experience = out.experience.slice(0, 30); out.education = out.education.slice(0, 20); out.links = out.links.slice(0, 20);
+  return out;
+}
+function cleanImported(x) {
+  x = x && typeof x === 'object' ? x : {};
+  const s = (v, n) => typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, n) : '';
+  const list = (a, shape, max) => (Array.isArray(a) ? a : []).filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = s(e[f], shape[f]); return r; }).filter(r => Object.values(r).some(Boolean));
+  const o = { name: s(x.name, 120), headline: s(x.headline, 200), email: s(x.email, 254), phone: s(x.phone, 60), location: s(x.location, 120), website: s(x.website, 300), summary: s(x.summary, 2000), skills: s(x.skills, 2000), skipped: s(x.skipped, 300), warnings: [] };
+  if (o.email && !EMAIL_RX.test(o.email)) o.email = '';
+  o.experience = list(x.experience, { role: 120, company: 120, dates: 60, bullets: 4000 }, 30);
+  o.education = list(x.education, { school: 120, degree: 120, dates: 60 }, 20);
+  o.links = list(x.links, { label: 80, url: 300 }, 20).filter(l => /^https?:\/\//i.test(l.url));
+  return o;
+}
+
+/* ---------- the Import card ---------- */
+let impFiles = [], impSeq = 0, impPaste = '', impBusy = false, impDraft = null, impMsg = null, impUndo = null, impToken = '', impWidget = null, impUseAi = true, impAiOff = false;
+const impFileSize = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+function impListHtml() {
+  if (!impFiles.length) return '';
+  return '<ul class="implist">' + impFiles.map(f => `<li><span class="nm">${esc(f.name)}</span><span class="st${f.status === 'err' ? ' err' : ''}">${f.status === 'reading' ? 'Reading…' : f.status === 'ok' ? 'Read, ' + f.words.toLocaleString('en-US') + ' words (' + esc(impFileSize(f.size)) + ')' : esc(f.msg)}</span><button type="button" class="btn" data-impdel="${f.id}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`).join('') + '</ul>';
+}
+function impPreviewHtml() {
+  const d = impDraft; if (!d) return '';
+  const jobs = d.experience.slice(0, 8).map(e => `<li>${esc([e.role, e.company].filter(Boolean).join(' at ') || 'Job')}${e.dates ? ' (' + esc(e.dates) + ')' : ''}${e.bullets ? ', ' + e.bullets.split('\n').length + ' bullet' + (e.bullets.split('\n').length === 1 ? '' : 's') : ''}</li>`).join('') + (d.experience.length > 8 ? `<li>and ${d.experience.length - 8} more</li>` : '');
+  const edu = d.education.map(e => `<li>${esc([e.degree, e.school].filter(Boolean).join(', '))}${e.dates ? ' (' + esc(e.dates) + ')' : ''}</li>`).join('');
+  const contact = [d.email, d.phone, d.location, d.website].filter(Boolean).map(esc).join(' · ');
+  const skillN = d.skills ? d.skills.split(',').filter(s => s.trim()).length : 0;
+  return `<div class="entry" id="impDraftBox"><div><b>${esc(d.name || 'Name not found')}</b>${d.headline ? '<br>' + esc(d.headline) : ''}</div>
+    ${contact ? `<p class="hint">${contact}</p>` : ''}${d.summary ? `<p>${esc(d.summary.length > 260 ? d.summary.slice(0, 260) + '…' : d.summary)}</p>` : ''}
+    <p class="hint"><b>Read by ${d.reader === 'claude' ? 'Claude' : 'Folio\'s built-in reader. It is less exact, so check each part.'}</b></p>
+    ${d.experience.length ? `<div><b>Jobs (${d.experience.length})</b><ul>${jobs}</ul></div>` : ''}
+    ${d.education.length ? `<div><b>Education (${d.education.length})</b><ul>${edu}</ul></div>` : ''}
+    <p class="hint">${skillN ? skillN + ' skills' : 'No skills found'} · ${d.links.length} link${d.links.length === 1 ? '' : 's'}</p>
+    ${d.skipped ? `<p class="hint">Not copied, because Folio has no place for them: ${esc(d.skipped)}.</p>` : ''}
+    ${d.warnings.length ? `<p class="hint"><b>Check this:</b> ${d.warnings.map(esc).join(' ')}</p>` : ''}
+    <p class="hint">Using this replaces your name, contact details, profile, skills, jobs, education and links, but only the parts that were found. Your services, poll question and form settings stay. You can undo it.</p>
+    <div class="btnrow"><button type="button" class="btn btn-primary" id="impUse">Use this</button><button type="button" class="btn" id="impNo">Discard</button></div></div>`;
+}
+function impLiveHtml() {
+  const m = impMsg ? `<p class="pubmsg ${impMsg.kind}" role="${impMsg.kind === 'err' ? 'alert' : 'status'}">${esc(impMsg.text)}${impMsg.kind === 'err' ? '<button type="button" class="copyerr" data-copyerr>Copy error</button>' : ''}</p>` : '';
+  return m + impPreviewHtml() + (impUndo ? '<div class="btnrow"><button type="button" class="btn" id="impUndo">Undo the import</button></div>' : '');
+}
+const setImp = (kind, text) => { impMsg = text ? { kind, text } : null; const el = $('#impLive'); if (el) el.innerHTML = impLiveHtml(); };
+const canImpAi = () => !!(PUBLISH.api && PUBLISH.siteKey);
+const impBody = () => `<div class="impbox" id="impBox"><p class="hint">Choose one or more resumes (PDF, Word or text). Folio reads them, merges them into one, and fills in your name, contact details, profile, jobs, education, skills and links. You see the result before anything changes.</p>
+  <div class="btnrow"><label class="btn" style="cursor:pointer">Choose resume files<input type="file" id="impFile" multiple accept=".pdf,.docx,.txt,.md,.markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden></label></div>
+  <div id="impList">${impListHtml()}</div>
+  <label class="f">Or paste your resume text<textarea id="impPaste" rows="6" maxlength="40000" placeholder="Paste the text of your resume here">${esc(impPaste)}</textarea></label>
+  ${canImpAi() ? `<label class="check"><input type="checkbox" id="impAi"${impUseAi && !impAiOff ? ' checked' : ''}><span>Use Claude for a more exact read. If Claude is not available, Folio reads it with its built-in reader.</span></label>${impUseAi && !impAiOff ? '<div id="impTsBox" class="tsbox" aria-label="Human check" style="margin:.7rem 0"></div>' : ''}` : ''}
+  <div class="btnrow" style="margin:.9rem 0 .6rem"><button type="button" class="btn btn-primary" id="impGo"${impBusy ? ' disabled' : ''}>Read my resume</button></div>
+  <div id="impLive" aria-live="polite">${impLiveHtml()}</div>
+  <p class="hint">Your files are read in your browser. If Claude is used, the text is sent to Claude through the Folio service to read it, and it is not saved there. PDF files use a free PDF reader that is downloaded once when you choose a PDF.</p></div>`;
+async function mountImpTs() {
+  const box = $('#impTsBox'); if (!box || !PUBLISH.siteKey || box.dataset.mounting) return; box.dataset.mounting = '1'; impToken = ''; impWidget = null;
+  try {
+    await loadTurnstile(); const again = $('#impTsBox'); if (!again || again !== box) return;
+    impWidget = window.turnstile.render(box, { sitekey: PUBLISH.siteKey, action: 'folio-ai', callback: t => { impToken = t; }, 'expired-callback': () => { impToken = ''; }, 'error-callback': () => { impToken = ''; } });
+  } catch (e) { /* the built-in reader still works without the human check */ }
+}
+async function addImportFiles(list) {
+  for (const f of [...list]) {
+    if (impFiles.length >= IMP_MAX_FILES) { setImp('err', 'You can import up to ' + IMP_MAX_FILES + ' files at a time.'); break; }
+    const rec = { id: ++impSeq, name: f.name, size: f.size, status: 'reading', text: '', words: 0, msg: '' }; impFiles.push(rec); const el = $('#impList'); if (el) el.innerHTML = impListHtml();
+    try { rec.text = await readResumeFile(f); rec.words = rec.text.split(/\s+/).filter(Boolean).length; rec.status = 'ok'; } catch (e) { rec.status = 'err'; rec.msg = String((e && e.message) || e); }
+    const el2 = $('#impList'); if (el2) el2.innerHTML = impListHtml();
+  }
+}
+function impAiWhy(res) {
+  const c = (res.json || {}).error || '';
+  if (c === 'bad_request') return 'The Folio service has not been updated to read resumes with Claude yet (it needs Worker 1.2.0).';
+  if (c === 'too_long') return 'The resumes are too long for Claude to read at once.';
+  return aiFail(res);
+}
+async function impRun() {
+  if (impBusy) return;
+  if (impFiles.some(f => f.status === 'reading')) return setImp('note', 'Folio is still reading a file. Try again in a moment.');
+  const docs = impFiles.filter(f => f.status === 'ok' && f.text).map(f => ({ name: f.name, text: f.text })), pasted = tidyText(impPaste);
+  if (pasted.length >= 20) docs.push({ name: 'Pasted text', text: pasted });
+  if (!docs.length) return setImp('err', 'Choose a resume file or paste your resume text first.');
+  impBusy = true; impDraft = null; const go = $('#impGo'); if (go) go.disabled = true;
+  let draft = null, why = '';
+  const total = docs.reduce((n, d) => n + d.text.length, 0);
+  if (canImpAi() && impUseAi && !impAiOff) {
+    if (total > IMP_MAX_CHARS) why = 'The resumes are too long for Claude to read at once.';
+    else if (!impToken) why = 'The human check had not finished, so Claude could not be used. Wait for the check to finish if you want Claude to read it.';
+    else {
+      setImp('note', 'Claude is reading your resume. This takes about 20 seconds.');
+      const text = docs.length > 1 ? docs.map((d, i) => '=== Resume ' + (i + 1) + ': ' + d.name + ' ===\n' + d.text).join('\n\n') : docs[0].text, token = impToken; impToken = '';
+      const res = await pubApi('POST', '/api/ai', { body: { text, turnstile: token, mode: 'import' }, timeout: 100000 });
+      try { if (impWidget !== null && window.turnstile) window.turnstile.reset(impWidget); } catch (e) {}
+      if (res.status === 200 && res.json && res.json.draft && typeof res.json.draft === 'object') { draft = cleanImported(Object.assign({}, res.json.draft, { skipped: res.json.skipped || res.json.draft.skipped })); draft.reader = 'claude'; }
+      else { why = impAiWhy(res); if (/^(ai_key|ai_billing|ai_not_set_up|ai_paused)$/.test((res.json || {}).error || '')) impAiOff = true; }
+    }
+  }
+  if (!draft) { try { draft = mergeParsed(docs.map(d => parseResume(d.text))); draft.reader = 'built-in'; } catch (e) { draft = null; why = (why ? why + ' ' : '') + 'The built-in reader failed: ' + String((e && e.message) || e); } }
+  impBusy = false;
+  if (!draft || (!draft.name && !draft.experience.length && !draft.summary && !draft.education.length)) { setImp('err', (why ? why + ' ' : '') + 'Folio could not find a resume in that text. Check the files, or paste the text.'); const g2 = $('#impGo'); if (g2) g2.disabled = false; return; }
+  impDraft = draft; const g3 = $('#impGo'); if (g3) g3.disabled = false;
+  setImp(why ? 'note' : 'ok', why ? why + ' Folio used its built-in reader instead.' : 'Done. Read it below, then choose.');
+  if (impAiOff && canImpAi()) renderPanel();
+}
+function impApply() {
+  const d = impDraft; if (!d) return; impUndo = JSON.parse(JSON.stringify(D));
+  ['name', 'headline', 'email', 'phone', 'location', 'website', 'summary', 'skills'].forEach(k => { if (d[k]) D[k] = d[k]; });
+  ['experience', 'education', 'links'].forEach(k => { if (d[k] && d[k].length) D[k] = d[k].map(e => Object.assign({}, e)); });
+  D = normData(D); impDraft = null; impMsg = { kind: 'ok', text: 'Imported. Read it over, then edit anything in the sections below.' }; save(); renderPanel(); refresh();
+}
+document.addEventListener('change', e => {
+  const t = e.target; if (!t || !t.id) return;
+  if (t.id === 'impFile') { const files = [...t.files]; t.value = ''; addImportFiles(files); }
+  else if (t.id === 'impAi') { impUseAi = t.checked; renderPanel(); }
+});
+document.addEventListener('input', e => { if (e.target && e.target.id === 'impPaste') impPaste = e.target.value; });
+document.addEventListener('click', e => {
+  const t = e.target && e.target.closest ? e.target.closest('button') : null; if (!t) return;
+  if (t.id === 'impGo') impRun();
+  else if (t.id === 'impUse') impApply();
+  else if (t.id === 'impNo') { impDraft = null; setImp('', ''); }
+  else if (t.id === 'impUndo' && impUndo) { D = normData(impUndo); impUndo = null; impMsg = { kind: 'ok', text: 'Your earlier version is back.' }; save(); renderPanel(); refresh(); }
+  else if (t.dataset && t.dataset.impdel) { impFiles = impFiles.filter(f => String(f.id) !== t.dataset.impdel); const el = $('#impList'); if (el) el.innerHTML = impListHtml(); }
+});
+['dragover', 'drop', 'dragleave'].forEach(ev => document.addEventListener(ev, e => {
+  const box = e.target && e.target.closest ? e.target.closest('#impBox') : null; if (!box) return;
+  const files = e.dataTransfer && e.dataTransfer.types && [...e.dataTransfer.types].includes('Files'); if (!files) return;
+  e.preventDefault(); box.classList.toggle('drag', ev === 'dragover');
+  if (ev === 'drop') addImportFiles([...e.dataTransfer.files]);
+}));
+
 /* ---------- AI magic ---------- */
 let aiText = '', aiBusy = false, aiToken = '', aiWidget = null, aiDraft = null, aiMsg = null, aiUndo = null;
 const AI_PLACEHOLDER = 'Example: I write SEO articles and brand voice guides for B2B software companies. 6 years freelance, before that 3 years as an editor at Acme Media. I charge $250 for a 1,500 word article, and an extra $0.66 per minute for recorded interviews. Available from January.';
@@ -791,6 +1223,7 @@ function renderPanel() {
   const keep = document.activeElement && document.activeElement.closest('#panel') ? null : null;
   const card = (id, title, inner) => `<details class="card" data-card="${id}"${openCards[id] ? ' open' : ''}><summary>${title}</summary><div class="card-body">${inner}</div></details>`;
   $('#panel').innerHTML =
+    card('import', 'Import a resume', impBody()) +
     card('ai', 'AI magic: write it for me', aiBody()) +
     card('about', '1. About you', F('Full name', 'name') + F('Headline', 'headline', { ph: 'What you do, in a few words' }) +
       `<div class="row2">${F('Email', 'email', { type: 'email', err: 'email' })}${F('Phone (optional)', 'phone', { type: 'tel' })}</div><div class="row2">${F('Location', 'location')}${F('Website (optional)', 'website', { ph: 'yoursite.com' })}</div>` +
@@ -821,6 +1254,7 @@ function renderPanel() {
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
     card('online', '8. Publish online', onlineBody() + (PUBLISH.api ? WK_HTML : ''));
   if (openCards.ai) mountAiTs();
+  if (openCards.import) mountImpTs();
   if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); if (openCards.online && PUB && !liveAuto) { liveAuto = true; checkLive(); } }
 }
 
@@ -847,7 +1281,7 @@ document.addEventListener('input', e => {
   else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); document.querySelectorAll('.mini,.aa').forEach(m => m.style.setProperty('--mc', ST.color)); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
-document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); if (c.dataset.card === 'ai' && c.open) mountAiTs(); } }, true);
+document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); if (c.dataset.card === 'ai' && c.open) mountAiTs(); if (c.dataset.card === 'import' && c.open) mountImpTs(); } }, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
