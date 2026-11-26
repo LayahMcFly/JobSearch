@@ -167,6 +167,7 @@ html.viewer body>*:not(#viewer):not(script){display:none!important}
 .view-msg{max-width:34rem;margin:22vh auto 0;padding:1.5rem;text-align:center;font:1.05rem/1.6 var(--font-body,system-ui,sans-serif);color:#2a241f}
 /* publishing card */
 .pubmsg{margin:.6rem 0;padding:.7rem .9rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);font-weight:600}.pubmsg.err{color:var(--danger);border-color:var(--danger)}.pubmsg.ok{color:#1b5e2e;border-color:#1b5e2e}
+.pimg{display:grid;gap:.5rem;margin:.2rem 0 .6rem}.pimg .lbl{font-weight:600}.pthumb{width:100%;max-width:320px;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1.5px solid var(--border);background:var(--surface-2)}.hint.bad{color:var(--danger)}
 .implist{list-style:none;margin:.2rem 0;padding:0;display:grid;gap:.4rem}
 .implist li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.55rem .8rem;border:1.5px solid var(--border);border-radius:10px;background:var(--surface)}
 .implist .nm{font-weight:600;overflow-wrap:anywhere;flex:1 1 11rem}
@@ -237,6 +238,7 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
   <h2 id="backupTitle">Back up and restore</h2>
   <p>Backups hold your resume and style only. They never include publishing access. Restore brings a backup back into Folio.</p>
   <div class="btnrow"><button type="button" class="btn" id="backupBtn">Download backup</button><label class="btn" style="cursor:pointer">Restore backup<input type="file" id="restoreFile" accept="application/json" hidden></label><button type="button" class="btn btn-danger" id="resetBtn">Start with a blank resume</button></div>
+  <p class="hint">Project images that are not published yet are not part of a backup. Publish them first, or choose them again after restoring.</p>
   <h3 style="margin:1rem 0 .3rem">Browser storage</h3>
   <p class="hint">Every app on this website address shares one small storage allowance in your browser. When it is full, Folio keeps a second copy of your work so nothing is lost. Check storage shows which app is using the space.</p>
   <div class="btnrow"><button type="button" class="btn" id="storeCheck">Check storage</button></div>
@@ -252,8 +254,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.4.0';
 const RELEASES = [
+  ['v1.4.0', 'A Projects section: add examples of your work with a title, description, link, a picture (up to 15 MB) and a Vimeo video. Projects show on your published page between your resume and the hire-me section. Pictures stay in your browser until you publish, then upload to your Folio service. Image uploads need the free folio-media storage connected to the Worker (Worker 1.3.0). Projects, links and Vimeo videos work without it.'],
   ['v1.3.0', 'Import a resume: choose one or several files (PDF, Word or text) or paste the text, and Folio reads them, merges them into one, and fills in your name, contact details, profile, jobs, education, skills and links. You see the result first, and Undo brings your old version back. Claude does the reading when it is available. Otherwise Folio\'s built-in reader does it, free but less exact.'],
   ['v1.2.2', 'The notice that browser storage is full is now wide and readable, and names the app using the most space.'],
   ['v1.2.1', 'Saving is sturdier. When your browser\'s storage for this website address is full (every app here shares one small allowance), Folio now keeps your work, and your private edit key, in a second place, so your latest changes are no longer lost on reload. Download, then Back up and restore, has a new Check storage button that shows which app is using the space and can clear PureFinds\' saved store lists.'],
@@ -307,6 +310,7 @@ const SAMPLE = {
   education: [{ school: 'Example State University', degree: 'B.A. English', dates: '2013 to 2017' }],
   skills: 'SEO writing, Brand voice, Editorial guidelines, Research, Interviewing, Copy editing',
   links: [{ label: 'Portfolio', url: 'https://example.com/portfolio' }],
+  projects: [],
   services: [
     { title: 'SEO article', desc: '1,500 words, researched, with sources and an outline you approve first.', price: 'From $250', extraPer: '', extraPrice: '' },
     { title: 'Brand voice guide', desc: 'A short guide your whole team can write from.', price: 'From $900', extraPer: '', extraPrice: '' }
@@ -466,6 +470,13 @@ function siteScript() {
     var t = document.getElementById(a.getAttribute('href').slice(1)); e.preventDefault();
     if (t) { try { t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (x) { t.scrollIntoView(); } }
   });
+  /* A video is not loaded until it is played. Only a Vimeo player address made from digits ever gets here. */
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.play') : null; if (!b) return;
+    var box = b.closest('.vid'), u = box ? box.getAttribute('data-embed') : ''; if (!/^https:\/\/player\.vimeo\.com\/video\/\d+\?/.test(u || '')) return;
+    var f = document.createElement('iframe'); f.src = u + '&autoplay=1'; f.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture'); f.setAttribute('allowfullscreen', ''); f.title = box.getAttribute('data-title') || 'Video';
+    box.innerHTML = ''; box.appendChild(f);
+  });
   var C = JSON.parse(document.getElementById('cfg').textContent);
   var f = document.getElementById('hireForm');
   if (!f) return;
@@ -565,8 +576,46 @@ function siteScript() {
   });
 }
 
+/* ---------- Projects: Vimeo links, images and the section on the page ---------- */
+const MEDIA_ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/, MAX_IMAGE = 15 * 1024 * 1024;
+const WEB_THUMBS = {}, IMG_META = {}; // pictures chosen in this browser that are not published yet: a small copy for previews, and name, size and type
+/* A Vimeo address in any common form becomes { id, h (the code unlisted videos have), url, embed }, or null. Only digits and hex ever reach a page. */
+function vimeoRef(s) {
+  s = String(s || '').trim(); if (!s) return null;
+  const m = s.match(/^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/(.+)$/i); if (!m) return null;
+  let rest = m[1].split('#')[0], qs = ''; const qi = rest.indexOf('?'); if (qi >= 0) { qs = rest.slice(qi + 1); rest = rest.slice(0, qi); }
+  const parts = rest.split('/').filter(Boolean); let id = '', h = '';
+  for (let i = 0; i < parts.length; i++) if (/^\d{5,12}$/.test(parts[i])) { id = parts[i]; if (/^[0-9a-f]{8,16}$/i.test(parts[i + 1] || '')) h = parts[i + 1].toLowerCase(); break; }
+  if (!id) return null;
+  const hq = new URLSearchParams(qs).get('h'); if (!h && hq && /^[0-9a-f]{8,16}$/i.test(hq)) h = hq.toLowerCase();
+  return { id, h, url: 'https://vimeo.com/' + id + (h ? '/' + h : ''), embed: 'https://player.vimeo.com/video/' + id + '?' + (h ? 'h=' + h + '&' : '') + 'dnt=1&title=0&byline=0&portrait=0' };
+}
+const vimeoHint = s => !String(s || '').trim() ? 'Paste the address of a video on Vimeo. Folio does not upload videos. For an unlisted video, paste the full link, including the code after the number.'
+  : vimeoRef(s) ? 'Found Vimeo video ' + vimeoRef(s).id + '. Visitors can play it on your page.' : 'That does not look like a Vimeo link. Paste the address from vimeo.com, such as https://vimeo.com/123456789.';
+/* What each project shows on the page. Published images come from the Folio service; pictures not published yet show their small local copy. */
+function projectView(d, base) {
+  return (d.projects || []).map(p => {
+    const v = vimeoRef(p.video), real = MEDIA_ID_RE.test(p.image || '') && base ? p.image : '', loc = /^local:([a-z0-9]{8})$/.exec(p.image || ''), thumb = loc ? (WEB_THUMBS[loc[1]] || '') : '';
+    const src = real ? base + '/api/media/' + real : thumb, link = (safeUrl(p.url).match(/^https?:/i) || [])[0] ? safeUrl(p.url) : '';
+    return { p, v, src, full: real ? src : '', link, has: !!(p.title || p.desc || src || v || link) };
+  }).filter(x => x.has);
+}
+function projectsHtml(items) {
+  if (!items.length) return '';
+  const cards = items.map(({ p, v, src, full, link }) => {
+    const alt = esc(p.alt || p.title || 'Project image'); let media = '';
+    if (v) media = `<div class="pm vid" data-embed="${esc(v.embed)}" data-title="${esc(p.title || 'Video')}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async">` : ''}<button type="button" class="play" aria-label="Play video${p.title ? ': ' + esc(p.title) : ''}"><svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></button></div>`;
+    else if (src) media = full ? `<a class="pm" href="${esc(full)}" target="_blank" rel="noopener noreferrer" aria-label="Open the full image${p.title ? ' of ' + esc(p.title) : ''}"><img src="${esc(src)}" alt="${alt}" loading="lazy" decoding="async"></a>` : `<div class="pm"><img src="${esc(src)}" alt="${alt}"></div>`;
+    const links = [link && `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">View project</a>`, v && `<a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">Watch on Vimeo</a>`].filter(Boolean).join('');
+    return `<article class="proj">${media}<div class="pb">${p.title ? `<h3>${esc(p.title)}</h3>` : ''}${p.desc ? `<p>${esc(p.desc)}</p>` : ''}${links ? `<p class="pl">${links}</p>` : ''}</div></article>`;
+  }).join('');
+  return `<section class="work no-print" id="work"><div class="work-in"><h2>Projects</h2><div class="projs">${cards}</div></div></section>`;
+}
 function buildSite(d, st, opt) {
   opt = opt || {};
+  const mediaBase = opt.mediaBase !== undefined ? opt.mediaBase : (typeof PUBLISH !== 'undefined' && PUBLISH.api ? PUBLISH.api : ''), pv = opt.resumeOnly ? [] : projectView(d, mediaBase);
+  let mediaOrigin = ''; try { mediaOrigin = mediaBase ? new URL(mediaBase).origin : ''; } catch (e) {}
+  const imgSrc = 'data:' + (pv.some(x => x.full) && mediaOrigin ? ' ' + mediaOrigin : '') + (pv.some(x => x.v) ? '; frame-src https://player.vimeo.com' : '');
   const layout = LAYOUTS.some(l => l[0] === st.layout) ? st.layout : STYLE0.layout;
   const fontKey = own(FONTS, st.font) ? st.font : STYLE0.font, f = FONTS[fontKey];
   const paperKey = own(PAPERS, st.paper) ? st.paper : STYLE0.paper, dark = paperKey === 'dark';
@@ -606,6 +655,17 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .hire-in{padding:2.2rem 2.6rem}@media (max-width:640px){.hire-in{padding:1.6rem 1.2rem}}
 .hire h2{font-size:1.8rem}.avail{display:inline-flex;align-items:center;gap:.5rem;background:var(--soft);padding:.25rem .8rem;border-radius:999px;margin:.6rem 0 0;font-size:.92em}.dot{width:9px;height:9px;border-radius:50%;background:#2f9e5b}
 .svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.extra{display:block;color:var(--muted);font-size:.92em;margin-top:.2rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}
+.work{max-width:860px;margin:1.2rem auto;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
+.work-in{padding:2.2rem 2.6rem}@media (max-width:640px){.work-in{padding:1.6rem 1.2rem}}.work h2{font-size:1.8rem}
+.projs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-top:1.2rem}
+.proj{border:1.5px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;background:var(--paper)}
+.pm{position:relative;display:block;aspect-ratio:16/9;background:var(--soft);overflow:hidden}.pm img{width:100%;height:100%;object-fit:cover;display:block}.pm iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.vid{background:linear-gradient(135deg,var(--fill),var(--acc))}.vid img{position:absolute;inset:0}
+.play{position:absolute;inset:0;margin:auto;width:72px;height:72px;border-radius:50%;border:0;background:var(--fill);color:var(--on);cursor:pointer;display:grid;place-items:center;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+.pb{padding:.9rem 1rem 1rem;display:grid;gap:.4rem;align-content:start}.pb h3{font-size:1.1rem;margin:0}.pb p{margin:0;color:var(--muted);font-size:.95em}
+.pl{display:flex;flex-wrap:wrap;gap:.2rem 1rem}.pl a{font-weight:600;min-height:44px;display:inline-flex;align-items:center}
+.tpl-elegant .work h2{text-align:center;text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+.tb{display:flex;align-items:center;gap:.3rem}.tb .alt{font-weight:600;color:var(--ink);text-decoration:none;min-height:44px;display:inline-flex;align-items:center;padding:0 .8rem;border-radius:999px}.tb .alt:hover{text-decoration:underline}
 .direct{margin:1rem 0 0;color:var(--muted)}.direct a{color:var(--acc)}
 .copy{font:inherit;font-weight:600;min-height:44px;padding:.4rem 1rem;border-radius:999px;border:1.5px solid var(--ctl);background:var(--paper);color:var(--acc);cursor:pointer;margin:.3rem .4rem .3rem 0}
 .copied{font-size:.9rem;color:var(--muted)}
@@ -637,9 +697,9 @@ fieldset.poll{min-width:0}.poll legend{font-weight:500;padding:0 .2rem;margin-le
 ::selection{background:color-mix(in srgb,var(--acc) 35%,transparent)}
 @media print{${opt.printPaper ? 'html,body{background:var(--paper)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.sheet{background:var(--paper)}' : ':root{' + palVars(print) + '}body{background:#fff}'}.no-print,.topbar{display:none!important}.sheet::after{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0}.resume{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .job,.bul li{break-inside:avoid}section h3,.side h3,.hd{break-after:avoid}@page{margin:10mm}}`;
-  const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></div>`) +
-    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
-  const csp = opt.viewer ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://formspree.io https://api.web3forms.com https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'"><meta name="robots" content="noindex,nofollow">` : opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; form-action 'none'; base-uri 'none'">` : '';
+  const body = (opt.resumeOnly ? '' : `<div class="topbar"><b>${esc(d.name || 'Your Name')}</b><span class="tb">${pv.length ? '<a class="alt" href="#work">Projects</a>' : ''}<a class="go" href="#hire">${esc(d.ctaLabel || 'Hire me')}</a></span></div>`) +
+    `<main><div class="sheet">${resumeHtml(d)}</div>${opt.resumeOnly ? '' : projectsHtml(pv)}${opt.resumeOnly ? '' : hireHtml(d, opt)}</main>`;
+  const csp = opt.viewer ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src ${imgSrc}; connect-src https://formspree.io https://api.web3forms.com https://script.google.com https://script.googleusercontent.com; form-action 'none'; base-uri 'none'"><meta name="robots" content="noindex,nofollow">` : opt.preview ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src ${imgSrc}; form-action 'none'; base-uri 'none'">` : '';
   // The closing tags are written as <\/script> so this page's own HTML parser never sees a real closing tag inside this code.
   const script = opt.resumeOnly ? '' : `<script type="application/json" id="cfg">${cfg}<\/script><script>(${siteScript.toString()})();<\/script>`;
   return `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -677,11 +737,16 @@ function normData(x) {
   const strs = { name: 120, headline: 200, email: 254, phone: 60, location: 120, website: 300, summary: 2000, skills: 2000, availability: 200, ctaLabel: 60, formTitle: 200, pollQuestion: 200, pollOptions: 1500, formEndpoint: 300, thanks: 400 };
   for (const k in strs) o[k] = own(x, k) ? (typeof x[k] === 'string' ? x[k].slice(0, strs[k]) : '') : SAMPLE[k];
   o.formMode = own(x, 'formMode') && FORM_MODES.includes(x.formMode) ? x.formMode : SAMPLE.formMode;
-  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20] };
+  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20], projects: [{ title: 100, desc: 600, url: 300, video: 300, image: 20, alt: 160 }, 12] };
   for (const k in lists) {
     const [shape, max] = lists[k];
     o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
   }
+  return normProjects(o);
+}
+function normProjects(o) { // an image is either a published id or a picture chosen in this browser; a Vimeo link and a web address are written in one standard form
+  o.projects = o.projects.map(p => { const v = vimeoRef(p.video), u = safeUrl(p.url);
+    return Object.assign(p, { image: /^(?:[2-9A-HJ-NP-Za-km-z]{12}|local:[a-z0-9]{8})$/.test(p.image) ? p.image : '', video: v ? v.url : p.video, url: /^https?:/i.test(u) ? u : p.url }); });
   return o;
 }
 function normStyle(x) {
@@ -1208,6 +1273,82 @@ document.addEventListener('click', e => {
   else if (id === 'aiUndo' && aiUndo) { D = normData(aiUndo); aiUndo = null; aiMsg = { kind: 'ok', text: 'Your earlier version is back.' }; save(); renderPanel(); refresh(); }
 });
 
+/* ---------- Projects: the editor card, pictures kept in this browser until you publish, and the upload ---------- */
+const localRef = p => (/^local:([a-z0-9]{8})$/.exec((p && p.image) || '') || [])[1];
+const rid8 = () => { const a = new Uint8Array(8); crypto.getRandomValues(a); return [...a].map(x => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join(''); };
+const idbSetBig = (k, v) => withTimeout(idb('readwrite', os => { os.put(v, k); }), 30000);
+function sniffImageType(b) {
+  if (b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image/jpeg';
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 && b[4] === 0x0D && b[5] === 0x0A && b[6] === 0x1A && b[7] === 0x0A) return 'image/png';
+  if (b.length > 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 && (b[4] === 0x37 || b[4] === 0x39) && b[5] === 0x61) return 'image/gif';
+  if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  return '';
+}
+/* A small copy (at most 1600 pixels) for the preview, and for a downloaded site. The original, up to 15 MB, is what gets uploaded. */
+async function makeWebCopy(file) {
+  const bmp = await createImageBitmap(file), s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)), w = Math.max(1, Math.round(bmp.width * s)), h = Math.max(1, Math.round(bmp.height * s));
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(bmp, 0, 0, w, h); if (bmp.close) bmp.close();
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function dropLocalImage(ref) { const m = /^local:([a-z0-9]{8})$/.exec(ref || ''); if (!m) return; delete IMG_META[m[1]]; delete WEB_THUMBS[m[1]]; try { idbDel('img:' + m[1]).catch(() => {}); } catch (e) {} }
+async function loadLocalImages() { // after a reload: bring the small copies back for the pictures that are not published yet
+  let any = false;
+  for (const p of D.projects) { const l = localRef(p); if (!l || WEB_THUMBS[l] || l in IMG_META) continue;
+    try { const rec = await idbGet('img:' + l); if (rec && rec.blob) { IMG_META[l] = { name: rec.name, size: rec.size, type: rec.type }; WEB_THUMBS[l] = rec.web || ''; any = true; } else { IMG_META[l] = null; any = true; } } catch (e) { IMG_META[l] = null; any = true; } }
+  if (any) { if (openCards.projects) renderPanel(); refresh(); }
+}
+let mediaOn = null;
+async function checkMedia() {
+  if (mediaOn !== null || !PUBLISH.api) return; const r = await pubApi('GET', '/api/status'); if (r.status === 200 && r.json) mediaOn = !!r.json.media; const el = $('#mediaNote'); if (el) el.innerHTML = mediaNoteHtml();
+}
+const mediaNoteHtml = () => mediaOn === false ? '<p class="pubmsg err" role="note">Image uploads are not turned on for your Folio service yet. Projects, links and Vimeo videos work without it. To add images, connect the free storage called folio-media to the Worker: open the Worker, then Settings, then Bindings, then Add, choose KV namespace, name the variable MEDIA and pick folio-media. Then Deploy.</p>' : '';
+const projectFields = (p, i) => {
+  const lid = localRef(p), real = MEDIA_ID_RE.test(p.image || ''), meta = lid ? IMG_META[lid] : null, thumb = lid ? (WEB_THUMBS[lid] || '') : real && PUBLISH.api ? PUBLISH.api + '/api/media/' + p.image : '';
+  const status = lid ? (meta ? esc(meta.name) + ', ' + impFileSize(meta.size) + '. It uploads when you press Publish or Update.' : 'This picture is no longer saved in this browser. Choose it again.') : real ? 'Uploaded to your Folio service.' : 'No image yet.';
+  return LF('projects', i, 'title', 'Project title', { ph: 'Brand voice guide for a software company' }) + LF('projects', i, 'desc', 'What it is and what you did', { area: true, rows: 3 }) + LF('projects', i, 'url', 'Link to the project (optional)', { ph: 'https://' }) +
+    `<div class="pimg"><span class="lbl">Image</span><p class="hint">JPEG, PNG, WebP or GIF, up to 15 MB.</p>${thumb ? `<img class="pthumb" src="${esc(thumb)}" alt="Preview of the chosen image">` : ''}
+    <div class="btnrow"><label class="btn" style="cursor:pointer">${p.image ? 'Replace image' : 'Choose image'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-pimg="${i}" hidden></label>${p.image ? `<button type="button" class="btn" data-pimgrm="${i}">Remove image</button>` : ''}</div>
+    <p class="hint" id="pimgSt${i}" role="status">${status}</p></div>` + (p.image ? LF('projects', i, 'alt', 'Describe the image for people who cannot see it', { ph: 'Cover of the brand voice guide' }) : '') +
+    LF('projects', i, 'video', 'Vimeo link (optional)', { ph: 'https://vimeo.com/123456789' }) + `<p class="hint" id="pvid${i}">${esc(vimeoHint(p.video))}</p>`;
+};
+const projectsBody = () => `<p class="hint">Show examples of your work. Give each project a picture, a Vimeo video, or both. They appear on your published page between your resume and the hire-me section.</p>` +
+  D.projects.map((p, i) => entry('projects', i, p.title, projectFields(p, i))).join('') + (D.projects.length < 12 ? `<button type="button" class="btn" data-add="projects">Add a project</button>` : '<p class="hint">You can add up to 12 projects.</p>') + `<div id="mediaNote">${mediaNoteHtml()}</div>`;
+document.addEventListener('input', e => { const t = e.target; if (t.dataset && t.dataset.l === 'projects' && t.dataset.k === 'video') { const el = $('#pvid' + t.dataset.i); if (el) el.textContent = vimeoHint(t.value); } });
+document.addEventListener('change', async e => {
+  const t = e.target; if (!t || !t.dataset || t.dataset.pimg === undefined) return;
+  const i = +t.dataset.pimg, file = t.files && t.files[0], rec = D.projects[i]; t.value = ''; if (!file || !rec) return;
+  const say = (m, bad) => { const el = $('#pimgSt' + i); if (el) { el.textContent = m; el.classList.toggle('bad', !!bad); } };
+  if (file.size > MAX_IMAGE) return say('That image is ' + impFileSize(file.size) + '. The limit is 15 MB. Save a smaller copy, for example a JPEG at a lower quality, and choose it again.', true);
+  say('Reading the image…');
+  let type = ''; try { type = sniffImageType(new Uint8Array(await file.slice(0, 16).arrayBuffer())); } catch (err) { return say('Folio could not read that file.', true); }
+  if (!type) return say('That is not a JPEG, PNG, WebP or GIF image. iPhone HEIC photos and SVG files are not supported. Export the picture as JPEG or PNG first.', true);
+  let web; try { web = await makeWebCopy(file); } catch (err) { return say('Folio could not open that image. It may be damaged.', true); }
+  const lid = rid8();
+  try { await idbSetBig('img:' + lid, { blob: file, type, name: file.name, size: file.size, web }); } catch (err) { return say('This browser could not keep the image, probably because its storage is full. Free some space and try again.', true); }
+  dropLocalImage(rec.image); IMG_META[lid] = { name: file.name, size: file.size, type }; WEB_THUMBS[lid] = web; rec.image = 'local:' + lid; renderPanel(); change();
+});
+const mediaFailText = (status, j) => { const e = (j || {}).error, w = j && j.retryAfterSeconds ? ' Try again in ' + waitText(j.retryAfterSeconds) + '.' : '';
+  if (!status) return 'No answer from the service. Check your connection.';
+  return ({ media_not_set_up: 'Image storage is not turned on for your Folio service yet.', image_too_large: 'The service says the image is over 15 MB.', image_type: 'The service does not accept that kind of file.', not_an_image: 'The service did not accept that file as an image.', too_many_images: 'A page can have up to 12 images.', page_image_space: 'This page has used all of its image space (100 MB).', media_full: 'The free image storage is full.', media_unavailable: 'The image storage did not answer. Try again.', rate_limited: 'Too many uploads.' + w, forbidden: 'The edit key does not match this page.', edit_key_required: 'The edit key is missing.' })[e] || 'The service returned an error (' + status + ').'; };
+/* Uploads the pictures that are only in this browser, one at a time, and swaps each reference for the id the service gives back. */
+async function uploadImages(pageId, key) {
+  const out = { ok: 0, failed: [], fatal: '' }, todo = D.projects.filter(localRef); let n = 0;
+  for (const p of todo) {
+    n++; const lid = localRef(p), title = p.title || 'Untitled project'; setPubMsg('note', 'Uploading image ' + n + ' of ' + todo.length + '…');
+    let rec = null; try { rec = await idbGet('img:' + lid); } catch (e) {}
+    if (!rec || !rec.blob) { out.failed.push({ title, why: 'The picture is no longer saved in this browser. Choose it again.' }); continue; }
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 240000); let r = null, j = null;
+    try { r = await fetch(PUBLISH.api + '/api/pages/' + pageId + '/media', { method: 'PUT', headers: { 'Content-Type': rec.type, Authorization: 'Bearer ' + key }, body: rec.blob, signal: ctl.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' }); j = await r.json().catch(() => null); }
+    catch (e) { r = null; } finally { clearTimeout(timer); }
+    if (r && r.status === 201 && j && MEDIA_ID_RE.test(String(j.id))) { p.image = j.id; out.ok++; dropLocalImage('local:' + lid); }
+    else { out.failed.push({ title, why: mediaFailText(r ? r.status : 0, j) }); if (j && (j.error === 'media_not_set_up' || j.error === 'media_full')) { out.fatal = j.error; break; } }
+  }
+  if (out.ok) save();
+  return out;
+}
+const imagesNote = up => !up ? '' : (up.ok ? ' ' + up.ok + ' image' + (up.ok === 1 ? '' : 's') + ' uploaded.' : '') + (up.failed.length ? ' ' + up.failed.length + ' image' + (up.failed.length === 1 ? ' was' : 's were') + ' not uploaded: ' + up.failed.map(f => '"' + f.title + '": ' + f.why).join(' ') + (up.fatal === 'media_not_set_up' ? ' The page is published without them. Turn on image storage (see the note in the Projects card), then press Update published page.' : ' Press Update published page to try again.') : '');
+const serverData = snap => { const j = JSON.parse(snap); j.D.projects = (j.D.projects || []).map(p => localRef(p) ? Object.assign({}, p, { image: '' }) : p); return j; };
+const stripLocal = d => Object.assign({}, d, { projects: (d.projects || []).map(p => localRef(p) ? Object.assign({}, p, { image: '', alt: '' }) : p) });
 let openCards = { about: true };
 function miniLayout(k) {
   const L = { modern: '<i class="sb"></i><u style="left:38%;top:12px;right:8%"></u><u style="left:38%;top:22px;right:20%"></u><u style="left:38%;top:32px;right:8%"></u><u style="left:38%;top:42px;right:26%"></u>',
@@ -1235,24 +1376,25 @@ function renderPanel() {
       `${LF('education', i, 'degree', 'Degree or course')}<div class="row2">${LF('education', i, 'school', 'School')}${LF('education', i, 'dates', 'Dates')}</div>`)).join('') + `<button type="button" class="btn" data-add="education">Add education</button>`) +
     card('skills', '4. Skills and links', F('Skills', 'skills', { area: true, rows: 3, hint: ' Separate with commas.' }) +
       D.links.map((l, i) => entry('links', i, l.label, `<div class="row2">${LF('links', i, 'label', 'Label')}${LF('links', i, 'url', 'Address')}</div>`)).join('') + `<button type="button" class="btn" data-add="links">Add a link</button>`) +
-    card('style', '5. Style, fonts and colors',
+    card('projects', '5. Projects', projectsBody()) +
+    card('style', '6. Style, fonts and colors',
       `<div><b>Layout</b><div class="choices" style="margin-top:.5rem">${LAYOUTS.map(([k, n, d]) => `<button type="button" class="choice" data-st="layout" data-v="${k}" aria-pressed="${ST.layout === k}">${miniLayout(k)}<b>${n}</b><span>${d}</span></button>`).join('')}</div></div>` +
       `<div><b>Fonts</b><div class="choices" style="margin-top:.5rem">${Object.entries(FONTS).map(([k, f]) => `<button type="button" class="choice" data-st="font" data-v="${k}" aria-pressed="${ST.font === k}"><span class="aa" aria-hidden="true"><em style="font-family:${f[3]}">Aa</em><small style="font-family:${f[4]}">Aa</small></span><b style="font-family:${f[3]}">${f[0]}</b><span>${f[1]}${f[1] !== f[2] ? ' + ' + f[2] : ''}</span></button>`).join('')}</div><p class="hint" style="margin-top:.4rem">Large Aa is the heading font, small Aa is the text font. Folio loads no outside fonts while you edit, so a font your device lacks may show as a stand-in here. The preview, PDF and published page use the real one.</p></div>` +
       `<div><b>Color</b><div class="swatches" style="margin-top:.5rem">${COLORS.map(c => `<button type="button" class="sw" style="background:${c}" data-st="color" data-v="${c}" aria-pressed="${ST.color.toLowerCase() === c}" aria-label="Color ${c}"></button>`).join('')}<label class="f" style="display:flex;align-items:center;gap:.5rem">Custom <input type="color" data-st-input="color" value="${esc(ST.color)}"></label></div></div>` +
       `<div><b>Paper</b><div class="choices" style="margin-top:.5rem">${Object.entries(PAPERS).map(([k, p]) => `<button type="button" class="choice" data-st="paper" data-v="${k}" aria-pressed="${ST.paper === k}"><span class="aa" aria-hidden="true" style="--mp:${p[1]};--mk:${p[2]};--mc:${ST.color}"><em style="font-family:${FONTS[ST.font] ? FONTS[ST.font][3] : 'serif'}">Aa</em><small>Aa</small></span><b>${p[0]}</b><span>${k === 'dark' ? 'Light text on dark' : 'Dark text'}</span></button>`).join('')}</div></div>` + `<p class="hint" id="colorNote" aria-live="polite">${esc(colorNote(ST.color, ST.paper))}</p>`) +
-    card('hire', '6. Hire-me section',
+    card('hire', '7. Hire-me section',
       F('Availability note', 'availability', { ph: 'Taking new clients in January' }) +
       D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div><div class="row2">${LF('services', i, 'extraPrice', 'Extra charge (optional)', { ph: '$0.66' })}${LF('services', i, 'extraPer', 'For each', { ph: 'minute' })}</div><p class="hint">Shows as "+ $0.66 per minute" on the page.</p>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
       `<button type="button" class="btn" data-add="services">Add a service</button>` +
       F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) +
       `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message shown once the form service accepts a message', 'thanks')) +
-    card('send', '7. Where form messages go',
+    card('send', '8. Where form messages go',
       `<span class="fielderr" data-err="mode" role="alert" hidden></span><label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="gscript"${D.formMode === 'gscript' ? ' selected' : ''}>Google Apps Script (free, emails you from your own Google account)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
       (D.formMode === 'email' ? `<p class="hint"><b>What happens:</b> when a visitor presses the button, their own email app opens with a draft addressed to ${esc(D.email || 'your email address')}. <b>The visitor has to press Send themselves.</b> Opening a draft is not sending an email, and neither this page nor Folio can tell whether it was sent, so the page never says "sent". Your address is also shown on the page with a Copy button, and the draft appears in a box to copy, for visitors without an email app. You get a message only if the visitor sends it.</p>`
         : D.formMode === 'gscript' ? `<ol class="steps"><li>Open <b>script.google.com</b> and sign in with the Google account that should get the emails. Press <b>New project</b>.</li><li><b>Empty the editor completely first</b> (click in the code, select all with Ctrl+A or long-press on a phone, then delete). Google's sample code leaves a stray <b>}</b> that causes a "Syntax error" if it stays. Then press Copy script below and paste once. Do not type in the editor. The code must end with one <b>}</b> and nothing after it. The editor on a phone often adds its own brackets and indentation, so a computer is much easier for this. Web3Forms (in the list above) needs no code at all.</li><li>Press <b>Deploy</b>, then <b>New deployment</b>. Click the gear and choose <b>Web app</b>. Set <b>Execute as: Me</b> and <b>Who has access: Anyone</b>. Press <b>Deploy</b>.</li><li>Google asks you to allow it to send email for you. Press <b>Authorize access</b>, choose your account, then <b>Advanced</b>, then <b>Go to project (unsafe)</b>, then <b>Allow</b>. This is your own script, so that warning is normal.</li><li>Copy the <b>Web app URL</b> (it ends in /exec) and paste it below.</li></ol><label class="f">The script<textarea readonly rows="8" id="gsCode">${esc(GSCRIPT_CODE)}</textarea></label><div class="btnrow"><button type="button" class="btn" id="gsCopy">Copy script</button><span class="hint" id="gsCopied" role="status"></span></div>` + F('Web app URL', 'formEndpoint', { ph: 'https://script.google.com/macros/s/.../exec', hint: ' Messages arrive in your Gmail inbox. Free Google accounts can send about 100 of these a day.', err: 'formEndpoint' })
         : D.formMode === 'formspree' ? F('Formspree form address', 'formEndpoint', { ph: 'https://formspree.io/f/abcdwxyz', hint: ' Make a free form at formspree.io, then paste its address.', err: 'formEndpoint' })
         : F('Web3Forms access key', 'formEndpoint', { ph: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', hint: ' Get a free key at web3forms.com by entering your email.', err: 'formEndpoint' }))) +
-    card('online', '8. Publish online', onlineBody() + (PUBLISH.api ? WK_HTML : ''));
+    card('online', '9. Publish online', onlineBody() + (PUBLISH.api ? WK_HTML : ''));
   if (openCards.ai) mountAiTs();
   if (openCards.import) mountImpTs();
   if (typeof PUB !== 'undefined') { if (openCards.online) mountTurnstile(); updatePubStatus(); refreshPubButtons(); if (openCards.online && PUB && !liveAuto) { liveAuto = true; checkLive(); } }
@@ -1281,19 +1423,20 @@ document.addEventListener('input', e => {
   else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); document.querySelectorAll('.mini,.aa').forEach(m => m.style.setProperty('--mc', ST.color)); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
-document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); if (c.dataset.card === 'ai' && c.open) mountAiTs(); if (c.dataset.card === 'import' && c.open) mountImpTs(); } }, true);
+document.addEventListener('toggle', e => { const c = e.target.closest && e.target.closest('details.card'); if (c) { openCards[c.dataset.card] = c.open; if (c.dataset.card === 'online' && c.open && typeof mountTurnstile === 'function') mountTurnstile(); if (c.dataset.card === 'ai' && c.open) mountAiTs(); if (c.dataset.card === 'import' && c.open) mountImpTs(); if (c.dataset.card === 'projects' && c.open) checkMedia(); } }, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
-  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '', extraPer: '', extraPrice: '' }); renderPanel(); change(); }
+  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'projects' ? { title: '', desc: '', url: '', video: '', image: '', alt: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '', extraPer: '', extraPrice: '' }); renderPanel(); change(); }
   else if (b.dataset.rm) {
     const [k, i] = b.dataset.rm.split(':'), rec = D[k][+i], nm = rec.role || rec.school || rec.label || rec.title || 'this entry';
     confirmDialog({ title: 'Remove this entry?', message: `"${nm}" will be removed from your resume. This cannot be undone unless you have a backup.`, ok: 'Remove' }).then(yes => {
       if (!yes || D[k][+i] !== rec) return;
-      D[k].splice(+i, 1); renderPanel(); change();
+      D[k].splice(+i, 1); if (k === 'projects') dropLocalImage(rec.image); renderPanel(); change();
       const next = document.querySelector(`[data-add="${k}"]`); if (next) next.focus();
     });
   }
+  else if (b.dataset.pimgrm !== undefined) { const rec = D.projects[+b.dataset.pimgrm]; if (rec) { dropLocalImage(rec.image); rec.image = ''; rec.alt = ''; renderPanel(); change(); } }
   else if (b.dataset.seg) { document.body.dataset.show = b.dataset.seg; document.querySelectorAll('[data-seg]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (b.dataset.seg === 'preview') refresh(); }
   else if (b.dataset.view) { view = b.dataset.view; document.querySelectorAll('[data-view]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); refresh(); }
 });
@@ -1304,6 +1447,9 @@ function download(name, text, type) { const a = document.createElement('a'); a.h
 const RESERVED_MAIL = /@(example\.(com|org|net)|test|invalid|localhost)$/i;
 function validateExport() {
   const mail = String(D.email || '').trim(), ep = String(D.formEndpoint || '').trim();
+  for (const p of D.projects) { const nm = p.title || 'A project';
+    if (String(p.video || '').trim() && !vimeoRef(p.video)) return { field: 'projects', card: 'projects', msg: nm + ': the Vimeo link does not look right. Paste the address from vimeo.com, such as https://vimeo.com/123456789.', mode: nm + ': the Vimeo link does not look right (step 5).' };
+    if (String(p.url || '').trim() && !/^https?:/i.test(safeUrl(p.url))) return { field: 'projects', card: 'projects', msg: nm + ': the project link must be a web address.', mode: nm + ': the project link must be a web address (step 5).' }; }
   if (D.formMode === 'email') {
     if (!mail) return { field: 'email', card: 'about', msg: 'Add your email address. In email mode every draft is addressed to it.', mode: 'Email mode needs your email address (step 1).' };
     if (!validEmail(mail)) return { field: 'email', card: 'about', msg: 'This does not look like an email address. Use the form name@yourdomain.com.', mode: 'Email mode needs a valid email address (step 1).' };
@@ -1334,7 +1480,7 @@ $('#exportBtn').addEventListener('click', () => {
   const problem = validateExport(); if (problem) { showFieldError(problem); return; }
   const d = $('#siteDialog'), trigger = document.activeElement; d.returnValue = '';
   const onBackdrop = e => { if (e.target === d) d.close('cancel'); };
-  d.addEventListener('close', () => { d.removeEventListener('click', onBackdrop); if (d.returnValue === 'go') { download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Now follow the steps to upload it to GitHub.'); } else if (trigger && trigger.isConnected) trigger.focus(); }, { once: true });
+  d.addEventListener('close', () => { d.removeEventListener('click', onBackdrop); if (d.returnValue === 'go') { download('index.html', buildSite(D, ST), 'text/html'); toast('Downloaded index.html. Now follow the steps to upload it to GitHub.' + (D.projects.some(p => MEDIA_ID_RE.test(p.image)) ? ' Your published project images load from your Folio service, so keep the page published.' : ''), false, D.projects.some(p => MEDIA_ID_RE.test(p.image)) ? 9000 : 0); } else if (trigger && trigger.isConnected) trigger.focus(); }, { once: true });
   d.addEventListener('click', onBackdrop); d.showModal(); $('#siteGo').focus();
 });
 $('#backupMenuBtn').addEventListener('click', () => { const d = $('#backupDialog'); if (!d.open) d.showModal(); });
@@ -1369,7 +1515,7 @@ $('#pdfBtn').addEventListener('click', async () => {
   fr.onload = go; fr.srcdoc = buildSite(D, ST, { resumeOnly: true, printPaper: choice === 'paper' });
 });
 document.addEventListener('click', e => {
-  if (e.target.id === 'backupBtn') download('folio-backup.json', JSON.stringify({ D, ST }, null, 2), 'application/json');
+  if (e.target.id === 'backupBtn') download('folio-backup.json', JSON.stringify({ D: stripLocal(D), ST }, null, 2), 'application/json');
   if (e.target.id === 'resetBtn') confirmDialog({ title: 'Start with a blank resume?', message: 'This clears your resume, services and form settings in Folio. Download a backup first if you want to keep this one.', ok: 'Clear everything' }).then(yes => {
     if (!yes) return;
     D = Object.assign(JSON.parse(JSON.stringify(SAMPLE)), { name: '', headline: '', email: '', phone: '', location: '', website: '', summary: '', experience: [{ role: '', company: '', dates: '', bullets: '' }], education: [{ school: '', degree: '', dates: '' }], skills: '', links: [], services: [], availability: '', pollOptions: '' });
@@ -1515,20 +1661,30 @@ async function doPublish() {
   if (pubBusy) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
   if (!pubConsent) { setPubMsg('err', 'Tick the box above to confirm you understand your page becomes public, then press Publish again.'); return; }
   if (!tsToken) { setPubMsg('err', tsFailed ? PUB_TS_HINT : 'The human check has not finished yet. Wait for it to show as complete, then press Publish again.'); return; }
-  setPubBusy(true); setPubMsg('note', 'Publishing…'); const snap = snapNow(), token = tsToken;
-  const res = await pubApi('POST', '/api/pages', { body: { data: JSON.parse(snap), turnstile: token } }); tsToken = '';
+  setPubBusy(true); setPubMsg('note', 'Publishing…'); const snap = snapNow(), token = tsToken, pend = D.projects.filter(localRef).length;
+  const res = await pubApi('POST', '/api/pages', { body: { data: serverData(snap), turnstile: token } }); tsToken = '';
   if (res.status === 201 && res.json && ID_RE.test(String(res.json.id)) && KEY_RE.test(String(res.json.editKey))) {
-    PUB = { id: res.json.id, key: res.json.editKey, api: PUBLISH.api, at: Date.now(), snap, saved: false }; savePub(); pubConsent = false;
-    setPubMsg('ok', 'Published. Copy your link, and save your recovery file now. It is the only way to update or unpublish from another device.'); setPubBusy(false); renderPanel(); const k = document.querySelector('[data-pub=saveKey]'); if (k) k.focus(); return;
+    PUB = { id: res.json.id, key: res.json.editKey, api: PUBLISH.api, at: Date.now(), snap: pend ? snap + ' ' : snap, saved: false }; savePub(); pubConsent = false;
+    let up = null, sentImages = true;
+    if (pend) { // a new page has no images yet: upload them now, then update the page so it shows them
+      up = await uploadImages(PUB.id, PUB.key); const s2 = snapNow(); setPubMsg('note', 'Saving the images on your page…');
+      const r2 = await pubApi('PUT', '/api/pages/' + PUB.id, { key: PUB.key, body: { data: serverData(s2) } }); sentImages = r2.status === 200 && r2.json && r2.json.id === PUB.id;
+      if (sentImages) { PUB.snap = D.projects.some(localRef) ? s2 + ' ' : s2; savePub(); }
+    }
+    const bad = up && (up.failed.length || !sentImages);
+    setPubMsg(bad ? 'err' : 'ok', 'Published. Copy your link, and save your recovery file now. It is the only way to update or unpublish from another device.' + imagesNote(up) + (up && !sentImages ? ' The images uploaded, but the page could not be updated to show them. Press Update published page.' : ''));
+    setPubBusy(false); renderPanel(); const k = document.querySelector('[data-pub=saveKey]'); if (k) k.focus(); return;
   }
   setPubMsg('err', failText(res, 'publish')); setPubBusy(false); resetTurnstile();
 }
 async function doUpdate() {
   if (pubBusy || !PUB) return; const problem = validateExport(); if (problem) { showFieldError(problem); setPubMsg('err', 'Fix this first: ' + (problem.mode || problem.msg)); return; }
-  setPubBusy(true); setPubMsg('note', 'Updating…'); const snap = snapNow();
-  const res = await pubApi('PUT', '/api/pages/' + PUB.id, { key: PUB.key, body: { data: JSON.parse(snap) } });
-  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = snap; savePub(); setPubMsg('ok', 'The service confirmed the update. Open your link to see what visitors get. If it still looks old, wait a little and reload.'); updatePubStatus(); checkLive(); }
-  else setPubMsg('err', failText(res, 'update'));
+  setPubBusy(true); let up = null;
+  if (D.projects.some(localRef)) up = await uploadImages(PUB.id, PUB.key);
+  setPubMsg('note', 'Updating…'); const snap = snapNow();
+  const res = await pubApi('PUT', '/api/pages/' + PUB.id, { key: PUB.key, body: { data: serverData(snap) } });
+  if (res.status === 200 && res.json && res.json.id === PUB.id) { PUB.snap = D.projects.some(localRef) ? snap + ' ' : snap; savePub(); setPubMsg(up && up.failed.length ? 'err' : 'ok', 'The service confirmed the update. Open your link to see what visitors get. If it still looks old, wait a little and reload.' + imagesNote(up)); renderPanel(); updatePubStatus(); checkLive(); }
+  else setPubMsg('err', failText(res, 'update') + (up && up.ok ? ' Your images did upload, so pressing Update published page again will finish the job.' : ''));
   setPubBusy(false);
 }
 async function doUnpublish() {
@@ -1636,9 +1792,10 @@ document.addEventListener('click', async e => {
 });
 // Open the second saved copy and use it when it is newer than the one in localStorage (it is, when localStorage was full)
 if (!VIEWER) {
+  loadLocalImages();
   idbGet('draft').then(rec => {
     if (!rec || typeof rec !== 'object' || !rec.D || touched || !(Number(rec.at) > loadedAt)) return;
-    D = normData(rec.D); ST = normStyle(rec.ST); loadedAt = Number(rec.at); renderPanel(); refresh(); toast('Folio restored your latest work from its second saved copy.');
+    D = normData(rec.D); ST = normStyle(rec.ST); loadedAt = Number(rec.at); renderPanel(); refresh(); loadLocalImages(); toast('Folio restored your latest work from its second saved copy.');
   }).catch(() => {});
   idbGet('pub').then(p => {
     if (!p || typeof p !== 'object' || !ID_RE.test(p.id) || !KEY_RE.test(p.key) || p.api !== PUBLISH.api) return;

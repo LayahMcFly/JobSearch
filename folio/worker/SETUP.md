@@ -92,3 +92,16 @@ For a more exact read, Folio asks Claude through the Worker. That needs:
 2. The same `CLAUDE_API_KEY` secret that AI magic uses, with API credit on it. Import shares AI magic's limits (3 per hour and 8 per day per visitor, 150 per day for everyone). If the key is missing, out of credit or refused, Folio says so and uses the built-in reader, and stops asking Claude for the rest of that visit.
 
 PDF files are read with pdf.js 3.11.174 from cdnjs.cloudflare.com, downloaded once, only when someone chooses a PDF. Word files are read with the browser's own decompressor. Nothing is uploaded unless Claude is used, and then only the extracted text is sent, and it is not saved.
+
+## 12. Projects with pictures (Folio v1.4.0, Worker 1.3.0)
+
+Projects (title, description, link, Vimeo video) work with **no setup**. Pictures need one binding so the Worker has somewhere to keep them.
+
+1. Deploy Worker **1.3.0** (Edit code → paste → Deploy).
+2. Worker → Settings → Bindings → Add → KV namespace. Variable name: `MEDIA`. Namespace: `folio-media`. Deploy.
+3. Optional (Type: Text): `MEDIA_GLOBAL_MB` caps all pictures on the Worker together (default 700).
+
+**Limits.** Each picture is 15 MB at most (JPEG, PNG, WebP or GIF; the Worker checks the file itself, not its name). Each page holds 12 pictures and 100 MB. 40 uploads per hour per page. Pictures upload when you press Publish or Update, using your edit key.
+**Without the binding.** Publishing still works; the page says pictures can't be stored yet and shows the project without the image.
+**Videos.** Vimeo links only. The page shows a Play button that loads Vimeo's player, plus a "Watch on Vimeo" link.
+**Free plan.** KV allows 1,000 writes a day and 1 GB total.

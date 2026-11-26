@@ -9,6 +9,8 @@
      variable  AI_PAUSED          optional, set to "true" to stop AI requests
    AI magic and Import a resume share the same limits. Import mode accepts up to 40,000 characters of resume text.
      binding   DB                 a D1 database
+     binding   MEDIA              optional, a KV namespace (the free one named folio-media). Turns on project images (up to 15 MB each).
+     variable  MEDIA_GLOBAL_MB    optional, total image space for everyone in MB, default 700 (the free KV limit is 1000)
      secret    TURNSTILE_SECRET   the Turnstile widget's secret key (never sent to a browser, never logged)
      variable  ALLOWED_ORIGIN     optional, default https://layahmcfly.github.io
      variable  TURNSTILE_HOSTNAMES optional, comma list, default layahmcfly.github.io
@@ -20,7 +22,7 @@
 
    Nothing here logs request headers, bodies, keys, hashes or secrets. */
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'; // 57 characters, no look-alikes
 const ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/;
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -31,14 +33,21 @@ const MAX_BODY = 100000; // bytes
 const DEFAULT_LIMITS = {
   publishIpHour: 5, publishIpDay: 12, publishGlobalDay: 300,
   updatePageHour: 30, failIpHour: 30, checkIpHour: 60,
-  aiIpHour: 3, aiIpDay: 8, aiGlobalDay: 150
+  aiIpHour: 3, aiIpDay: 8, aiGlobalDay: 150,
+  mediaPageHour: 40
 };
+const MAX_IMAGE = 15 * 1024 * 1024; // 15 MB. A hard cap, checked while the upload streams in, so it cannot be dodged by leaving out the length header.
+const IMAGE_TYPES = { 'image/jpeg': 1, 'image/png': 1, 'image/webp': 1, 'image/gif': 1 };
+const MEDIA_PAGE_MAX = 12, MEDIA_PAGE_BYTES = 100 * 1024 * 1024, MEDIA_GRACE_SECONDS = 600;
 
 const STR = { name: 120, headline: 200, email: 254, phone: 60, location: 120, website: 300, summary: 2000, skills: 2000, availability: 200, ctaLabel: 60, formTitle: 200, pollQuestion: 200, pollOptions: 1500, formEndpoint: 300, thanks: 400 };
 const LIST = {
   experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20],
-  links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20]
+  links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20],
+  projects: [{ title: 100, desc: 600, url: 300, video: 300, image: 12, alt: 160 }, 12]
 };
+const OPTIONAL_LISTS = { projects: 1 }; // pages published by older Folio versions have no projects
+const VIMEO_RE = /^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/[A-Za-z0-9_\/.?=&%#-]{1,200}$/i;
 const OPTIONAL_FIELDS = { extraPer: 1, extraPrice: 1 }; // pages published by older Folio versions do not have these
 const AI_MAX_TEXT = 6000, AI_MIN_TEXT = 40, AI_MAX_IMPORT = 40000;
 const MODES = ['email', 'formspree', 'web3forms', 'gscript'];
@@ -49,7 +58,9 @@ const PAPERS = ['white', 'warm', 'dark'];
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS pages (id TEXT PRIMARY KEY, key_hash TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
   'CREATE TABLE IF NOT EXISTS counters (k TEXT PRIMARY KEY, n INTEGER NOT NULL, win INTEGER NOT NULL)',
-  'CREATE TABLE IF NOT EXISTS used_tokens (h TEXT PRIMARY KEY, at INTEGER NOT NULL)'
+  'CREATE TABLE IF NOT EXISTS used_tokens (h TEXT PRIMARY KEY, at INTEGER NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, page_id TEXT NOT NULL, size INTEGER NOT NULL, type TEXT NOT NULL, created_at INTEGER NOT NULL)',
+  'CREATE INDEX IF NOT EXISTS media_page ON media(page_id)'
 ];
 
 /* ---------- small helpers ---------- */
@@ -60,7 +71,8 @@ const limits = env => ({
   publishIpHour: num(env.RL_PUBLISH_IP_HOUR, DEFAULT_LIMITS.publishIpHour), publishIpDay: num(env.RL_PUBLISH_IP_DAY, DEFAULT_LIMITS.publishIpDay),
   publishGlobalDay: num(env.RL_PUBLISH_GLOBAL_DAY, DEFAULT_LIMITS.publishGlobalDay), updatePageHour: num(env.RL_UPDATE_PAGE_HOUR, DEFAULT_LIMITS.updatePageHour),
   failIpHour: num(env.RL_FAIL_IP_HOUR, DEFAULT_LIMITS.failIpHour), checkIpHour: num(env.RL_CHECK_IP_HOUR, DEFAULT_LIMITS.checkIpHour),
-  aiIpHour: num(env.RL_AI_IP_HOUR, DEFAULT_LIMITS.aiIpHour), aiIpDay: num(env.RL_AI_IP_DAY, DEFAULT_LIMITS.aiIpDay), aiGlobalDay: num(env.RL_AI_GLOBAL_DAY, DEFAULT_LIMITS.aiGlobalDay)
+  aiIpHour: num(env.RL_AI_IP_HOUR, DEFAULT_LIMITS.aiIpHour), aiIpDay: num(env.RL_AI_IP_DAY, DEFAULT_LIMITS.aiIpDay), aiGlobalDay: num(env.RL_AI_GLOBAL_DAY, DEFAULT_LIMITS.aiGlobalDay),
+  mediaPageHour: num(env.RL_MEDIA_PAGE_HOUR, DEFAULT_LIMITS.mediaPageHour)
 });
 const allowedOrigin = env => String(env.ALLOWED_ORIGIN || 'https://layahmcfly.github.io');
 const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -109,16 +121,22 @@ function validateData(data) {
   if (Object.keys(data).length !== 2) return 'unexpected fields in data';
   const D = data.D, ST = data.ST, want = [...Object.keys(STR), 'formMode', ...Object.keys(LIST)];
   for (const k of Object.keys(D)) if (!want.includes(k)) return 'unexpected field D.' + k;
-  for (const k of want) if (!own(D, k)) return 'missing field D.' + k;
+  for (const k of want) if (!own(D, k) && !OPTIONAL_LISTS[k]) return 'missing field D.' + k;
   for (const k in STR) { if (typeof D[k] !== 'string') return 'D.' + k + ' must be text'; if (D[k].length > STR[k]) return 'D.' + k + ' is too long'; }
   if (!MODES.includes(D.formMode)) return 'D.formMode is not valid';
   for (const k in LIST) {
+    if (!own(D, k) && OPTIONAL_LISTS[k]) continue;
     const [shape, max] = LIST[k]; const arr = D[k];
     if (!Array.isArray(arr) || arr.length > max) return 'D.' + k + ' must be a list of at most ' + max;
     for (const e of arr) {
       if (!isObj(e)) return 'D.' + k + ' has an entry that is not an object';
       for (const f of Object.keys(e)) if (!own(shape, f)) return 'unexpected field in D.' + k;
       for (const f in shape) { if (!own(e, f) && OPTIONAL_FIELDS[f]) continue; if (typeof e[f] !== 'string') return 'D.' + k + '.' + f + ' must be text'; if (e[f].length > shape[f]) return 'D.' + k + '.' + f + ' is too long'; }
+      if (k === 'projects') {
+        if (e.image && !ID_RE.test(e.image)) return 'D.projects.image is not an uploaded image';
+        if (e.video && !VIMEO_RE.test(e.video)) return 'D.projects.video must be a Vimeo address';
+        if (e.url && !/^https?:\/\//i.test(e.url)) return 'D.projects.url must start with http:// or https://';
+      }
     }
   }
   for (const k of Object.keys(ST)) if (!['layout', 'font', 'color', 'paper'].includes(k)) return 'unexpected field ST.' + k;
@@ -126,6 +144,8 @@ function validateData(data) {
   if (typeof ST.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(ST.color)) return 'ST.color must look like #8a3f1f';
   return null;
 }
+
+const projectImages = data => [...new Set(((data && data.D && data.D.projects) || []).map(p => p.image).filter(Boolean))];
 
 async function readJson(request, env) {
   const ct = String(request.headers.get('content-type') || '').toLowerCase();
@@ -201,6 +221,7 @@ async function publish(request, env, now) {
   const b = body.json;
   if (!isObj(b) || Object.keys(b).some(k => k !== 'data' && k !== 'turnstile')) return fail(request, env, 400, 'bad_request');
   const why = validateData(b.data); if (why) return fail(request, env, 422, 'invalid_data', { detail: why });
+  if (projectImages(b.data).length) return fail(request, env, 422, 'invalid_data', { detail: 'images can only be added after the page is published' });
   if (typeof b.turnstile !== 'string' || !b.turnstile || b.turnstile.length > 2048) return fail(request, env, 400, 'verification_required');
   await ensureSchema(env);
   const L = limits(env), ip = await sha256(ipBucket(request)), ipk = ip.slice(0, 24);
@@ -245,10 +266,14 @@ async function updatePage(request, env, id, now) {
   const b = body.json;
   if (!isObj(b) || Object.keys(b).some(k => k !== 'data')) return fail(request, env, 400, 'bad_request');
   const why = validateData(b.data); if (why) return fail(request, env, 422, 'invalid_data', { detail: why });
+  const refs = projectImages(b.data);
+  if (refs.length) { const have = new Set(((await env.DB.prepare('SELECT id FROM media WHERE page_id = ?1').bind(id).all()).results || []).map(r => r.id)); if (refs.some(r => !have.has(r))) return fail(request, env, 422, 'invalid_data', { detail: 'D.projects refers to an image that was not uploaded to this page' }); }
   const u = await hit(env, 'upd:' + id, 3600, limits(env).updatePageHour, now); if (!u.ok) return tooMany(request, env, u);
   const t = Math.floor(now / 1000), kh = await sha256(key);
   const r = await env.DB.prepare('UPDATE pages SET data = ?1, updated_at = ?2 WHERE id = ?3 AND key_hash = ?4').bind(JSON.stringify({ D: b.data.D, ST: b.data.ST }), t, id, kh).run();
   if (!r.meta || r.meta.changes !== 1) return fail(request, env, 403, 'forbidden');
+  // Housekeeping: images this page no longer uses are removed. Fresh uploads get a grace period, so an upload in progress on another device is safe.
+  try { const keep = new Set(refs), rows = ((await env.DB.prepare('SELECT id FROM media WHERE page_id = ?1 AND created_at < ?2').bind(id, t - MEDIA_GRACE_SECONDS).all()).results || []).map(r => r.id).filter(m => !keep.has(m)); if (rows.length) await dropMedia(env, rows); } catch (e) { /* housekeeping only */ }
   return reply(request, env, 200, { id, updatedAt: t });
 }
 
@@ -258,6 +283,7 @@ async function deletePage(request, env, id, now) {
   const a = await authorize(request, env, id, key, now); if (a.res) return a.res;
   const r = await env.DB.prepare('DELETE FROM pages WHERE id = ?1 AND key_hash = ?2').bind(id, await sha256(key)).run();
   if (!r.meta || r.meta.changes !== 1) return fail(request, env, 403, 'forbidden');
+  try { const rows = ((await env.DB.prepare('SELECT id FROM media WHERE page_id = ?1').bind(id).all()).results || []).map(x => x.id); if (rows.length) await dropMedia(env, rows); } catch (e) { /* the page is gone; leftover images are harmless and unreachable */ }
   return reply(request, env, 200, { deleted: true });
 }
 
@@ -267,6 +293,69 @@ async function checkKey(request, env, id, now) {
   const c = await hit(env, 'chk:' + (await sha256(ipBucket(request))).slice(0, 24), 3600, limits(env).checkIpHour, now); if (!c.ok) return tooMany(request, env, c);
   const a = await authorize(request, env, id, key, now); if (a.res) return a.res;
   return reply(request, env, 200, { ok: true });
+}
+
+/* ---------- project images: up to 15 MB each, kept in a free KV namespace ---------- */
+async function dropMedia(env, ids) {
+  for (const id of ids) { try { if (env.MEDIA) await env.MEDIA.delete(id); } catch (e) { /* the row below is what matters */ } }
+  for (let i = 0; i < ids.length; i += 50) await env.DB.batch(ids.slice(i, i + 50).map(id => env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(id)));
+}
+/* Reads the request body, giving up as soon as it passes the cap. Returns null when it is too big. */
+async function readBytes(request, max) {
+  const chunks = []; let total = 0;
+  if (request.body) {
+    const rd = request.body.getReader();
+    for (;;) { const { done, value } = await rd.read(); if (done) break; total += value.byteLength; if (total > max) { try { await rd.cancel(); } catch (e) { /* ignore */ } return null; } chunks.push(value); }
+  }
+  const all = new Uint8Array(total); let o = 0; for (const c of chunks) { all.set(c, o); o += c.byteLength; } return all;
+}
+/* What the first bytes say the file is. A file that claims one type and is another is refused. SVG and HTML never match. */
+function sniffImage(b) {
+  if (b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image/jpeg';
+  if (b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 && b[4] === 0x0D && b[5] === 0x0A && b[6] === 0x1A && b[7] === 0x0A) return 'image/png';
+  if (b.length > 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 && (b[4] === 0x37 || b[4] === 0x39) && b[5] === 0x61) return 'image/gif';
+  if (b.length > 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  return '';
+}
+async function uploadMedia(request, env, id, now) {
+  const key = bearer(request); if (!key) return fail(request, env, 401, 'edit_key_required');
+  if (!env.MEDIA) return fail(request, env, 503, 'media_not_set_up');
+  const type = String(request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!IMAGE_TYPES[type]) return fail(request, env, 415, 'image_type');
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_IMAGE) return fail(request, env, 413, 'image_too_large', { maxBytes: MAX_IMAGE });
+  await ensureSchema(env);
+  const a = await authorize(request, env, id, key, now); if (a.res) return a.res;
+  const L = limits(env), u = await hit(env, 'mup:' + id, 3600, L.mediaPageHour, now); if (!u.ok) return tooMany(request, env, u);
+  const q = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS bytes FROM media WHERE page_id = ?1').bind(id).first();
+  if (Number(q.n) >= MEDIA_PAGE_MAX) return fail(request, env, 409, 'too_many_images', { max: MEDIA_PAGE_MAX });
+  const bytes = await readBytes(request, MAX_IMAGE);
+  if (bytes === null) return fail(request, env, 413, 'image_too_large', { maxBytes: MAX_IMAGE });
+  if (!bytes.length || sniffImage(bytes) !== type) return fail(request, env, 415, 'not_an_image');
+  if (Number(q.bytes) + bytes.length > MEDIA_PAGE_BYTES) return fail(request, env, 409, 'page_image_space', { maxBytes: MEDIA_PAGE_BYTES });
+  const g = await env.DB.prepare('SELECT COALESCE(SUM(size), 0) AS bytes FROM media').first();
+  if (Number(g.bytes) + bytes.length > num(env.MEDIA_GLOBAL_MB, 700) * 1024 * 1024) return fail(request, env, 503, 'media_full');
+  let mid = '';
+  for (let i = 0; i < 5 && !mid; i++) {
+    const c = randomId(), r = await env.DB.prepare('INSERT OR IGNORE INTO media(id, page_id, size, type, created_at) VALUES(?1, ?2, ?3, ?4, ?5)').bind(c, id, bytes.length, type, Math.floor(now / 1000)).run();
+    if (r.meta && r.meta.changes === 1) mid = c;
+  }
+  if (!mid) return fail(request, env, 503, 'could_not_create');
+  try { await env.MEDIA.put(mid, bytes, { metadata: { type } }); }
+  catch (e) { try { await env.DB.prepare('DELETE FROM media WHERE id = ?1').bind(mid).run(); } catch (e2) { /* ignore */ } return fail(request, env, 503, 'media_unavailable'); }
+  return reply(request, env, 201, { id: mid, size: bytes.length, type });
+}
+async function getMedia(request, env, id, ctx) {
+  const notFound = () => new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } });
+  if (!env.MEDIA) return notFound();
+  const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null, ck = new Request(new URL(request.url).origin + '/api/media/' + id);
+  if (cache) { const hit = await cache.match(ck); if (hit) return hit; }
+  const got = await env.MEDIA.getWithMetadata(id, { type: 'arrayBuffer' });
+  if (!got || !got.value) return notFound();
+  const type = got.metadata && IMAGE_TYPES[got.metadata.type] ? got.metadata.type : 'application/octet-stream';
+  const res = new Response(got.value, { status: 200, headers: { 'content-type': type, 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", 'cross-origin-resource-policy': 'cross-origin', 'access-control-allow-origin': '*' } });
+  if (cache && ctx && ctx.waitUntil) ctx.waitUntil(cache.put(ck, res.clone()));
+  return res;
 }
 
 /* ---------- AI magic: turns a person's own description into resume and hire-me text ---------- */
@@ -357,7 +446,7 @@ async function aiMagic(request, env, now) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       const url = new URL(request.url), now = Date.now(), method = request.method;
       const origin = request.headers.get('Origin');
@@ -367,10 +456,14 @@ export default {
       }
       if (method !== 'GET' && method !== 'HEAD' && origin && origin !== allowedOrigin(env)) return fail(request, env, 403, 'origin_not_allowed');
       const p = url.pathname.replace(/\/+$/, '');
-      if (p === '/api/status' && method === 'GET') return reply(request, env, 200, { ok: true, service: 'folio-pages', version: VERSION, publishing: String(env.PUBLISHING_PAUSED).toLowerCase() !== 'true', maxBytes: MAX_BODY });
+      if (p === '/api/status' && method === 'GET') return reply(request, env, 200, { ok: true, service: 'folio-pages', version: VERSION, publishing: String(env.PUBLISHING_PAUSED).toLowerCase() !== 'true', maxBytes: MAX_BODY, media: !!env.MEDIA, maxImageBytes: MAX_IMAGE });
+      const gm = /^\/api\/media\/([^/]+)$/.exec(p);
+      if (gm && ID_RE.test(gm[1])) return method === 'GET' ? await getMedia(request, env, gm[1], ctx) : fail(request, env, 405, 'method_not_allowed');
       if (!env.DB) return fail(request, env, 503, 'storage_unavailable');
       if (p === '/api/pages' && method === 'POST') return await publish(request, env, now);
       if (p === '/api/ai' && method === 'POST') return await aiMagic(request, env, now);
+      const mm = /^\/api\/pages\/([^/]+)\/media$/.exec(p);
+      if (mm && ID_RE.test(mm[1])) return method === 'PUT' ? await uploadMedia(request, env, mm[1], now) : fail(request, env, 405, 'method_not_allowed');
       const m = /^\/api\/pages\/([^/]+)(\/check)?$/.exec(p);
       if (m && ID_RE.test(m[1])) {
         const id = m[1];
