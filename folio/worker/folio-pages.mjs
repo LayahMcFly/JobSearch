@@ -158,7 +158,7 @@ async function readJson(request, env) {
     for (;;) { const { done, value } = await rd.read(); if (done) break; total += value.byteLength; if (total > MAX_BODY) { try { await rd.cancel(); } catch (e) { /* ignore */ } return { res: fail(request, env, 413, 'too_large', { maxBytes: MAX_BODY }) }; } chunks.push(value); }
   }
   const all = new Uint8Array(total); let o = 0; for (const c of chunks) { all.set(c, o); o += c.byteLength; }
-  try { return { json: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(all)) }; } catch (e) { return { res: fail(request, env, 400, 'bad_json') }; }
+  try { return { json: JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(all)) }; } catch (e) { return { res: fail(request, env, 400, 'bad_json') }; }
 }
 
 /* ---------- storage ---------- */
