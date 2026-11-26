@@ -1,0 +1,116 @@
+/* Tests for Folio v1.4.1: choosing services and the price slider in the hire-me section, and the "why you made it" label on projects.
+   Real Chromium runs the real page code. The Worker part runs the REAL Worker code (Worker 1.4.0) against SQLite. Run: node --no-warnings folio/tests/hire.test.cjs */
+const fs = require('fs'), path = require('path'), crypto = require('crypto'), { pathToFileURL } = require('url'); const { chromium } = require('playwright'); const { makeD1 } = require('./d1-shim.cjs');
+const results = []; const eq = (n, c, note) => { results.push(!!c); console.log((c ? 'PASS ' : 'FAIL ') + n + (c || !note ? '' : '  :: ' + note)); };
+const APP = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'), sha = s => crypto.createHash('sha256').update(s).digest('hex');
+const PDFJS = process.env.PDFJS_DIR || '';
+const SV = [{ title: 'SEO article', desc: 'Researched.', price: 'From $250', extraPer: 'word', extraPrice: '$0.05', extraMax: '10000' }, { title: 'Brand voice guide', desc: 'Short guide.', price: 'From $900', extraPer: '', extraPrice: '', extraMax: '' },
+  { title: 'Video edit', desc: '', price: '$0.66 per minute', extraPer: 'minute', extraPrice: '$0.66', extraMax: '' }];
+(async () => {
+  const browser = await chromium.launch(), errs = [];
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 }, isMobile: true, hasTouch: true }); await ctx.route('**/*', r => { const u = r.request().url(); if (u === 'http://x.test/folio/') return r.fulfill({ body: APP, contentType: 'text/html' }); if (u.startsWith('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/') && PDFJS) { const f = u.split('/').pop(); if (fs.existsSync(path.join(PDFJS, f))) return r.fulfill({ body: fs.readFileSync(path.join(PDFJS, f)), contentType: 'text/javascript' }); } r.abort(); });
+  const pg = await ctx.newPage(); pg.on('pageerror', e => errs.push(String(e))); await pg.goto('http://x.test/folio/'); await pg.waitForFunction('typeof buildSite!=="undefined"'); await pg.waitForTimeout(800);
+  const site = (services, projects, mode) => pg.evaluate(([sv, pr, mode]) => buildSite(Object.assign({}, D, { name: 'Jordan Lee', email: 'j@example.com', formMode: mode || 'email', services: sv, projects: pr || [], pollOptions: 'Articles\nCopy' }), Object.assign({}, ST), {}), [services, projects, mode]);
+  const show = async html => { await pg.setContent(html); await pg.waitForTimeout(300); };
+  await show(await site(SV));
+  const txt = s => pg.$eval(s, e => e.textContent.trim());
+  eq('slider: an extra-charge service gets a slider and a number box', await pg.$$eval('.svc', a => a.filter(s => s.querySelector('[data-rng]') && s.querySelector('[data-qty]')).length) === 2);
+  eq('slider: a service without an extra charge has no slider', await pg.$$eval('.svc', a => !a[1].querySelector('[data-rng]')));
+  eq('slider: every service has an "Add to my request" box', await pg.$$eval('.svc input[name=svc]', a => a.length) === 3);
+  eq('slider: before moving it, the estimate says where the price starts', /Starts at \$250/.test(await txt('.svc [data-est]')), await txt('.svc [data-est]'));
+  eq('slider: the 10,000 maximum is applied to the words slider', await pg.$eval('.svc [data-rng]', e => e.max) === '10000');
+  eq('slider: a words slider steps by 100', await pg.$eval('.svc [data-rng]', e => e.step) === '100');
+  await pg.$eval('.svc [data-rng]', e => { e.value = 10000; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  eq('slider: 10,000 words costs $250 + 10,000 x $0.05 = $750', /Estimate: \$750 for 10,000 words/.test(await txt('.svc [data-est]')), await txt('.svc [data-est]'));
+  eq('slider: the number box follows the slider', await pg.$eval('.svc [data-qty]', e => e.value) === '10000');
+  eq('slider: moving it ticks the service for the visitor', await pg.$eval('.svc input[name=svc]', e => e.checked) && await pg.$eval('.svc', e => e.classList.contains('on')));
+  await pg.fill('.svc [data-qty]', '2000');
+  eq('slider: typing 2000 words gives $350 and moves the slider', /Estimate: \$350 for 2,000 words/.test(await txt('.svc [data-est]')) && await pg.$eval('.svc [data-rng]', e => e.value) === '2000', await txt('.svc [data-est]'));
+  await pg.fill('.svc [data-qty]', '999999'); await pg.$eval('.svc [data-qty]', e => e.blur());
+  eq('slider: typing past the maximum is held at 10,000', await pg.$eval('.svc [data-qty]', e => e.value) === '10000');
+  await pg.fill('.svc [data-qty]', '1'); eq('slider: one word is singular', /for 1 word$/.test(await txt('.svc [data-est]')), await txt('.svc [data-est]'));
+  eq('slider: a price like "$0.66 per minute" is not mistaken for a starting price', await pg.$$eval('.svc', a => !a[2].hasAttribute('data-base') && a[2].getAttribute('data-rate') === '0.66'));
+  eq('slider: a service with no maximum set uses 100 for minutes', await pg.$$eval('.svc', a => a[2].getAttribute('data-max') === '100'));
+  // sending
+  await pg.$eval('.svc [data-qty]', e => { e.value = '2000'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  await pg.fill('[name=name]', 'Pat'); await pg.fill('[name=email]', 'pat@example.com'); await pg.fill('[name=message]', 'Need it by Friday.');
+  await pg.$$eval('.svc input[name=svc]', a => a[1].click());
+  await pg.click('.cta'); await pg.waitForTimeout(400);
+  const draft = await pg.$eval('#draftText', e => e.value).catch(() => '');
+  eq('send: choosing services is enough, no poll answer needed', draft.length > 0, draft);
+  eq('send: the message lists each picked service and the estimate', /Services I am interested in:/.test(draft) && /- SEO article: estimate \$350 for 2,000 words/.test(draft) && /- Brand voice guide \(From \$900\)/.test(draft), draft);
+  eq('send: the visitor\'s own words follow the services', /Need it by Friday\./.test(draft) && draft.indexOf('SEO article') < draft.indexOf('Need it by Friday'));
+  eq('send: a service that was not picked is left out', !/Video edit/.test(draft));
+  await pg.$$eval('.svc input[name=svc]', a => a.forEach(c => { if (c.checked) c.click(); })); await pg.fill('[name=name]', 'Pat');
+  await pg.click('.cta'); await pg.waitForTimeout(300);
+  eq('send: with no poll answer and no service, it still asks for one', /pick one option/i.test(await txt('.msg')), await txt('.msg'));
+  eq('controls: slider, number box and tick boxes are tall enough to touch', await pg.$$eval('.svc [data-rng], .svc [data-qty], .svc .pick', a => a.every(e => e.getBoundingClientRect().height >= 43)));
+  eq('layout: nothing runs off the side at phone width', await pg.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  await pg.screenshot({ path: '/tmp/hire_svc.png', fullPage: false });
+  // project labels
+  await show(await site([], [{ title: 'A', desc: '', url: '', video: '', image: '', alt: '', kind: 'own', client: '' }, { title: 'B', desc: '', url: '', video: '', image: '', alt: '', kind: 'client', client: 'Acme <b>Co</b>' }, { title: 'C', desc: '', url: '', video: '', image: '', alt: '', kind: 'client', client: '' }, { title: 'D', desc: 'x', url: '', video: '', image: '', alt: '' }]));
+  const kd = await pg.$$eval('.proj', a => a.map(x => (x.querySelector('.kd') || {}).textContent || ''));
+  eq('label: personal project says it was made to show skills', kd[0] === 'Personal project, made to show my skills', kd[0]);
+  eq('label: client work names the client, written as plain text', kd[1] === 'Client work for Acme <b>Co</b>' && !(await pg.$('.proj .kd b')), kd[1]);
+  eq('label: client work with no name just says Client work', kd[2] === 'Client work', kd[2]);
+  eq('label: a project with no choice shows no label', kd[3] === '');
+  // editor
+  await pg.goto('http://x.test/folio/'); await pg.waitForFunction('typeof D!=="undefined"');
+  await pg.evaluate(() => { D.projects = [{ title: 'Guide', desc: '', url: '', video: '', image: '', alt: '', kind: '', client: '' }]; openCards.projects = true; renderPanel(); });
+  const sel = '[data-l=projects][data-k=kind]', pick = v => pg.$eval(sel, (e, v) => { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); }, v);
+  eq('editor: each project has a "Why you made it" choice with three answers', await pg.$$eval(sel + ' option', a => a.length) === 3);
+  eq('editor: no client box until "client" is chosen', !(await pg.$('[data-l=projects][data-k=client]')));
+  await pick('client'); await pg.waitForTimeout(150);
+  eq('editor: choosing client shows the client name box', !!(await pg.$('[data-l=projects][data-k=client]')));
+  await pg.fill('[data-l=projects][data-k=client]', 'Acme'); await pick('own'); await pg.waitForTimeout(150);
+  eq('editor: switching to personal clears the client name', await pg.evaluate(() => D.projects[0].kind === 'own' && D.projects[0].client === ''));
+  await pg.waitForTimeout(900);
+  eq('editor: the choice survives a reload', (await pg.reload() && await pg.waitForFunction('typeof D!=="undefined"') && await pg.waitForFunction('D.projects.length', null, { timeout: 5000 }).catch(() => 0) && await pg.evaluate(() => (D.projects[0] || {}).kind)) === 'own');
+  eq('editor: services have a slider maximum box', await pg.evaluate(() => { openCards.hire = true; renderPanel(); return !!document.querySelector('[data-l=services][data-k=extraMax]'); }));
+  eq('data sent to a Worker 1.3.0 leaves out empty new fields', await pg.evaluate(() => { const j = serverData(JSON.stringify({ D: { projects: [{ title: 'a', kind: '', client: '' }], services: [{ title: 's', extraMax: '' }] }, ST: {} })); return !('kind' in j.D.projects[0]) && !('client' in j.D.projects[0]) && !('extraMax' in j.D.services[0]); }));
+  // poll import
+  await pg.evaluate(() => { D.pollQuestion = 'Old question?'; D.pollOptions = 'Old A\nOld B'; openCards.hire = true; renderPanel(); });
+  const live = () => pg.$eval('#pollLive', e => e.textContent.trim()).catch(() => '');
+  const poll = () => pg.evaluate(() => [D.pollQuestion, D.pollOptions]);
+  if (PDFJS) {
+    await pg.setInputFiles('#pollFile', path.join(__dirname, 'fixtures', 'google-form-poll.pdf')); await pg.waitForTimeout(2500);
+    const [q, o] = await poll();
+    eq('poll import: a Google Form saved as PDF gives the question', q === 'What do you need help with?', q);
+    eq('poll import: the choices are the options, without circles, "Other:" or form footer text', o === 'Articles or blog posts\nWebsite copy\nBrand voice', JSON.stringify(o));
+    eq('poll import: it says what it imported and that a second question was left out', /Imported "What do you need help with\?" with 3 choices/.test(await live()) && /1 more question/.test(await live()), await live());
+    eq('poll import: the imported poll shows on the page preview', await pg.evaluate(() => buildSite(D, ST, { preview: true }).includes('Website copy')));
+    await pg.click('#pollUndo'); const [q2, o2] = await poll();
+    eq('poll import: Undo brings the earlier poll back', q2 === 'Old question?' && o2 === 'Old A\nOld B', q2 + '|' + o2);
+  } else console.log('SKIP poll PDF  :: set PDFJS_DIR to run');
+  await pg.fill('#pollPaste', 'Pick one\n○ Alpha\n○ Beta\n○ Alpha\n○ Gamma'); await pg.click('#pollGo');
+  const [q3, o3] = await poll();
+  eq('poll import: plain "question, then one choice per line" works, repeats are dropped', q3 === 'Pick one' && o3 === 'Alpha\nBeta\nGamma', q3 + '|' + o3);
+  await pg.fill('#pollPaste', 'Which size? *\n( ) Small\n( ) Large\nRequired'); await pg.click('#pollGo');
+  const [q4, o4] = await poll(); eq('poll import: Google\'s star and ( ) marks are removed', q4 === 'Which size?' && o4 === 'Small\nLarge', q4 + '|' + o4);
+  await pg.fill('#pollPaste', 'just one line of text and nothing else'); await pg.click('#pollGo');
+  eq('poll import: text with no choices is refused, says why, and leaves the poll alone', /could not find a question/.test(await live()) && (await poll())[0] === 'Which size?', await live());
+  await pg.fill('#pollPaste', 'x'); await pg.click('#pollGo'); eq('poll import: an empty box asks for something to read', /Choose a poll file or paste/.test(await live()));
+  await pg.fill('#pollPaste', 'Q?\n' + Array.from({ length: 30 }, (_, i) => 'Choice number ' + i + ' ' + 'x'.repeat(60)).join('\n')); await pg.click('#pollGo');
+  eq('poll import: very long polls are cut to what the form allows', (await poll())[1].length <= 1500 && (await poll())[1].split('\n').length <= 20);
+  eq('poll import: the card shows the exact steps for Google Forms', /Print, then Save as PDF/.test(await pg.$eval('#pollImp', e => e.textContent)));
+  eq('page had no script errors', errs.length === 0, errs.join(' | '));
+  await browser.close();
+  // Worker 1.4.0
+  const worker = (await import(pathToFileURL(path.join(__dirname, '..', 'worker', 'folio-pages.mjs')).href)).default, ORIGIN = 'https://layahmcfly.github.io';
+  const env = { DB: makeD1(), TURNSTILE_SECRET: 's', ALLOWED_ORIGIN: ORIGIN }, KEY = 'k'.repeat(43), PID = 'AbCdEfGhJkMn'; let n = 1;
+  const R = (m, u, body, key) => worker.fetch(new Request('https://w.test' + u, { method: m, headers: Object.assign({ Origin: ORIGIN, 'CF-Connecting-IP': '203.0.113.' + n++, 'content-type': 'application/json' }, key ? { Authorization: 'Bearer ' + key } : {}), body: body && JSON.stringify(body) }), env);
+  await R('GET', '/api/pages/' + PID); await env.DB.prepare('INSERT INTO pages(id, key_hash, data, created_at, updated_at) VALUES(?1, ?2, ?3, 1, 1)').bind(PID, sha(KEY), '{}').run();
+  const data = (pr, sv) => ({ D: { name: 'A', headline: '', email: '', phone: '', location: '', website: '', summary: '', skills: '', availability: '', ctaLabel: 'Hire', formTitle: 't', pollQuestion: '', pollOptions: '', formEndpoint: '', thanks: 't', formMode: 'email', experience: [], education: [], links: [], services: sv || [], projects: pr || [] }, ST: { layout: 'modern', font: 'clean', color: '#8a3f1f', paper: 'white' } });
+  const P = o => Object.assign({ title: 'P', desc: '', url: '', video: '', image: '', alt: '' }, o), S = o => Object.assign({ title: 'S', desc: '', price: '', extraPer: '', extraPrice: '' }, o);
+  const put = d => R('PUT', '/api/pages/' + PID, { data: d }, KEY);
+  eq('worker: version is 1.4.0', (await (await R('GET', '/api/status')).json()).version === '1.4.0');
+  eq('worker: projects marked personal or client are accepted', (await put(data([P({ kind: 'own' }), P({ kind: 'client', client: 'Acme' })]))).status === 200);
+  eq('worker: an empty kind is accepted', (await put(data([P({ kind: '', client: '' })]))).status === 200);
+  eq('worker: an unknown kind is refused', (await put(data([P({ kind: 'other' })]))).status === 422);
+  eq('worker: a client name over 100 characters is refused', (await put(data([P({ kind: 'client', client: 'x'.repeat(101) })]))).status === 422);
+  eq('worker: services with a slider maximum are accepted', (await put(data([], [S({ extraMax: '10000' })]))).status === 200);
+  eq('worker: a slider maximum over 10 characters is refused', (await put(data([], [S({ extraMax: '1'.repeat(11) })]))).status === 422);
+  eq('worker: old data without the new fields is still accepted', (await put(data([P()], [S()]))).status === 200);
+  eq('worker: the saved page keeps the new fields', (await (await R('GET', '/api/pages/' + PID)).json()).data.D !== undefined && (await put(data([P({ kind: 'own' })], [S({ extraMax: '500' })]))).status === 200 && (await (await R('GET', '/api/pages/' + PID)).json()).data.D.services[0].extraMax === '500');
+  const f = results.filter(x => !x).length; console.log(`\n${results.length - f} passed, ${f} failed`); process.exit(f ? 1 : 0);
+})();

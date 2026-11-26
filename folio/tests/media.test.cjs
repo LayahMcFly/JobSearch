@@ -21,7 +21,7 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
   const put = (env, key, data, id) => req(env, 'PUT', '/api/pages/' + (id || PID), { headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + key }, body: JSON.stringify({ data }) });
 
   let env = mkEnv(); await makePages(env);
-  let r = await req(env, 'GET', '/api/status'), j = await r.json(); eq('status says image storage is on and names the 15 MB limit', j.version === '1.3.0' && j.media === true && j.maxImageBytes === MAX, JSON.stringify(j));
+  let r = await req(env, 'GET', '/api/status'), j = await r.json(); eq('status says image storage is on and names the 15 MB limit', j.version === '1.4.0' && j.media === true && j.maxImageBytes === MAX, JSON.stringify(j));
   r = await req(mkEnv({ MEDIA: undefined }), 'GET', '/api/status'); eq('status says image storage is off when the binding is missing', (await r.json()).media === false);
 
   /* uploads and serving */

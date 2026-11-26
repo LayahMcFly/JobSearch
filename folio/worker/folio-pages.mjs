@@ -22,7 +22,7 @@
 
    Nothing here logs request headers, bodies, keys, hashes or secrets. */
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'; // 57 characters, no look-alikes
 const ID_RE = /^[2-9A-HJ-NP-Za-km-z]{12}$/;
 const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -43,12 +43,12 @@ const MEDIA_PAGE_MAX = 12, MEDIA_PAGE_BYTES = 100 * 1024 * 1024, MEDIA_GRACE_SEC
 const STR = { name: 120, headline: 200, email: 254, phone: 60, location: 120, website: 300, summary: 2000, skills: 2000, availability: 200, ctaLabel: 60, formTitle: 200, pollQuestion: 200, pollOptions: 1500, formEndpoint: 300, thanks: 400 };
 const LIST = {
   experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20],
-  links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20],
-  projects: [{ title: 100, desc: 600, url: 300, video: 300, image: 12, alt: 160 }, 12]
+  links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40, extraMax: 10 }, 20],
+  projects: [{ title: 100, desc: 600, url: 300, video: 300, image: 12, alt: 160, kind: 10, client: 100 }, 12]
 };
 const OPTIONAL_LISTS = { projects: 1 }; // pages published by older Folio versions have no projects
 const VIMEO_RE = /^(?:https?:\/\/)?(?:www\.|player\.)?vimeo\.com\/[A-Za-z0-9_\/.?=&%#-]{1,200}$/i;
-const OPTIONAL_FIELDS = { extraPer: 1, extraPrice: 1 }; // pages published by older Folio versions do not have these
+const OPTIONAL_FIELDS = { extraPer: 1, extraPrice: 1, kind: 1, client: 1, extraMax: 1 }; // pages published by older Folio versions do not have these
 const AI_MAX_TEXT = 6000, AI_MIN_TEXT = 40, AI_MAX_IMPORT = 40000;
 const MODES = ['email', 'formspree', 'web3forms', 'gscript'];
 const LAYOUTS = ['modern', 'classic', 'minimal', 'bold', 'compact', 'elegant'];
@@ -133,6 +133,7 @@ function validateData(data) {
       for (const f of Object.keys(e)) if (!own(shape, f)) return 'unexpected field in D.' + k;
       for (const f in shape) { if (!own(e, f) && OPTIONAL_FIELDS[f]) continue; if (typeof e[f] !== 'string') return 'D.' + k + '.' + f + ' must be text'; if (e[f].length > shape[f]) return 'D.' + k + '.' + f + ' is too long'; }
       if (k === 'projects') {
+        if (own(e, 'kind') && e.kind !== '' && e.kind !== 'own' && e.kind !== 'client') return 'D.projects.kind must be own or client';
         if (e.image && !ID_RE.test(e.image)) return 'D.projects.image is not an uploaded image';
         if (e.video && !VIMEO_RE.test(e.video)) return 'D.projects.video must be a Vimeo address';
         if (e.url && !/^https?:\/\//i.test(e.url)) return 'D.projects.url must start with http:// or https://';

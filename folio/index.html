@@ -254,8 +254,9 @@ input[readonly]{background:var(--surface-2)}.tsbox{min-height:68px;margin:.6rem 
 
 <script>
 'use strict';
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.4.1';
 const RELEASES = [
+  ['v1.4.1', 'In the hire-me section, visitors can now tick the services they want, and a service with an extra charge gets a slider (plus a number box) so they can pick an amount, such as 10,000 words, and watch the estimate change. Their picks and estimates are written into the message you receive. You can also import a poll from Google Forms (saved as PDF, or pasted) into your poll. Each project also gets a choice: a personal project made to show your skills, or work made for a client or employer.'],
   ['v1.4.0', 'A Projects section: add examples of your work with a title, description, link, a picture (up to 15 MB) and a Vimeo video. Projects show on your published page between your resume and the hire-me section. Pictures stay in your browser until you publish, then upload to your Folio service. Image uploads need the free folio-media storage connected to the Worker (Worker 1.3.0). Projects, links and Vimeo videos work without it.'],
   ['v1.3.0', 'Import a resume: choose one or several files (PDF, Word or text) or paste the text, and Folio reads them, merges them into one, and fills in your name, contact details, profile, jobs, education, skills and links. You see the result first, and Undo brings your old version back. Claude does the reading when it is available. Otherwise Folio\'s built-in reader does it, free but less exact.'],
   ['v1.2.2', 'The notice that browser storage is full is now wide and readable, and names the app using the most space.'],
@@ -312,8 +313,8 @@ const SAMPLE = {
   links: [{ label: 'Portfolio', url: 'https://example.com/portfolio' }],
   projects: [],
   services: [
-    { title: 'SEO article', desc: '1,500 words, researched, with sources and an outline you approve first.', price: 'From $250', extraPer: '', extraPrice: '' },
-    { title: 'Brand voice guide', desc: 'A short guide your whole team can write from.', price: 'From $900', extraPer: '', extraPrice: '' }
+    { title: 'SEO article', desc: '1,500 words, researched, with sources and an outline you approve first.', price: 'From $250', extraPer: '', extraPrice: '', extraMax: '' },
+    { title: 'Brand voice guide', desc: 'A short guide your whole team can write from.', price: 'From $900', extraPer: '', extraPrice: '', extraMax: '' }
   ],
   availability: 'Taking new clients in January', ctaLabel: 'Hire me', formTitle: 'Tell me about your project',
   pollQuestion: 'What do you need help with?', pollOptions: 'Articles or blog posts\nWebsite copy\nBrand voice\nSomething else',
@@ -435,7 +436,16 @@ function resumeHtml(d) {
       </div></div></section>`;
 }
 function hireHtml(d, opt) {
-  const services = (d.services || []).filter(s => s.title).map(s => `<div class="svc"><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}${s.extraPrice && s.extraPer ? `<span class="extra">+ ${esc(s.extraPrice)} per ${esc(String(s.extraPer).replace(/^per\s+/i, ''))}</span>` : ''}</div>`).join('');
+  const money = v => { const m = /^([^\d-]*)(\d[\d,]*(?:\.\d+)?)(.*)$/.exec(String(v || '').trim()); return m ? { pre: m[1], n: parseFloat(m[2].replace(/,/g, '')), post: m[3] } : null; };
+  const services = (d.services || []).filter(s => s.title).map((s, i) => {
+    const unit = String(s.extraPer || '').replace(/^per\s+/i, '').trim(), rate = s.extraPrice && unit ? money(s.extraPrice) : null, ok = rate && rate.n > 0 && rate.pre.length <= 4 && rate.post.length <= 4;
+    const base = ok && /^(?:from\s+)?[^\d\s]{0,4}\s?\d[\d,]*(?:\.\d+)?\s*$/i.test(String(s.price || '').trim()) ? money(String(s.price).replace(/^from\s+/i, '')) : null;
+    let max = parseInt(String(s.extraMax || '').replace(/[^\d]/g, ''), 10); if (!(max >= 1)) max = /word|char/i.test(unit) ? 10000 : 100; max = Math.min(max, 1000000);
+    const step = max > 10000 ? 1000 : max > 1000 ? 100 : max > 100 ? 10 : 1;
+    const calc = ok ? `<div class="calc"><label class="qlbl" for="qty${i}">How many ${esc(unit)}s?</label><div class="qrow"><input class="rng" type="range" min="0" max="${max}" step="${step}" value="0" aria-label="Number of ${esc(unit)}s" data-rng><input class="qty" id="qty${i}" type="number" inputmode="numeric" min="0" max="${max}" step="1" value="0" data-qty></div><p class="est" aria-live="polite" data-est></p></div>` : '';
+    const attrs = ok ? ` data-rate="${rate.n}" data-pre="${esc(rate.pre.trim())}" data-post="${esc(rate.post.trim())}" data-unit="${esc(unit)}" data-max="${max}"${base ? ` data-base="${base.n}"` : ''}` : '';
+    return `<div class="svc" data-title="${esc(s.title)}" data-price="${esc(s.price || '')}"${attrs}><h4>${esc(s.title)}</h4><p>${esc(s.desc)}</p>${s.price ? `<b class="price">${esc(s.price)}</b>` : ''}${s.extraPrice && s.extraPer ? `<span class="extra">+ ${esc(s.extraPrice)} per ${esc(unit)}</span>` : ''}${calc}<label class="pick"><input type="checkbox" name="svc" value="${i}"><span class="box" aria-hidden="true"></span><span>Add to my request</span></label></div>`;
+  }).join('');
   const opts = lines(d.pollOptions), mail = validEmail(d.email), email = String(d.email || '').trim();
   const poll = opts.length ? `<fieldset class="q poll"><legend>${esc(d.pollQuestion || 'What do you need?')}<i class="req" aria-hidden="true"> *</i></legend><div class="pollopts">${opts.map((o, i) => `<label class="pill"><input type="radio" name="need" value="${esc(o)}"${i === 0 ? ' required' : ''}><span class="dotr" aria-hidden="true"></span><span class="ot">${esc(o)}</span></label>`).join('')}</div><p class="qerr" hidden>This is a required question</p></fieldset>` : '';
   const emailMode = d.formMode === 'email';
@@ -510,12 +520,39 @@ function siteScript() {
     var text = b.getAttribute('data-copy') === 'draft' ? ((document.getElementById('draftText') || {}).value || '') : C.email;
     copyText(text, function (ok) { var s = b.parentNode.querySelector('.copied'); if (s) s.textContent = ok ? 'Copied.' : 'Could not copy. Select the text and copy it yourself.'; });
   });
+  function money(n, pre, post) { var r = Math.round(n * 100) / 100, t = r.toLocaleString('en-US', { minimumFractionDigits: r % 1 ? 2 : 0, maximumFractionDigits: 2 }); return pre + t + post; }
+  function svcLine(c) {
+    var t = c.getAttribute('data-title'), price = c.getAttribute('data-price') || '', rate = parseFloat(c.getAttribute('data-rate'));
+    if (!(rate > 0)) return '- ' + t + (price ? ' (' + price + ')' : '');
+    var q = parseInt(c.querySelector('[data-qty]').value, 10) || 0, unit = c.getAttribute('data-unit'), base = parseFloat(c.getAttribute('data-base')) || 0;
+    var total = money(base + rate * q, c.getAttribute('data-pre'), c.getAttribute('data-post'));
+    return '- ' + t + ': ' + (q ? 'estimate ' + total + ' for ' + q.toLocaleString('en-US') + ' ' + unit + (q === 1 ? '' : 's') : (price || 'price to be agreed'));
+  }
+  function pickedServices() { var out = [], cs = document.querySelectorAll('.svc'); for (var i = 0; i < cs.length; i++) { var cb = cs[i].querySelector('input[name=svc]'); if (cb && cb.checked) out.push(svcLine(cs[i])); } return out; }
+  (function () {
+    var cs = document.querySelectorAll('.svc');
+    for (var i = 0; i < cs.length; i++) (function (c) {
+      var cb = c.querySelector('input[name=svc]'), rng = c.querySelector('[data-rng]'), qty = c.querySelector('[data-qty]'), est = c.querySelector('[data-est]');
+      function mark() { if (cb) c.classList.toggle('on', cb.checked); }
+      if (cb) cb.addEventListener('change', mark);
+      if (!rng) return;
+      var max = parseInt(c.getAttribute('data-max'), 10) || 100, rate = parseFloat(c.getAttribute('data-rate')), base = parseFloat(c.getAttribute('data-base')) || 0, pre = c.getAttribute('data-pre'), post = c.getAttribute('data-post'), unit = c.getAttribute('data-unit');
+      function show(q) { est.textContent = q ? 'Estimate: ' + money(base + rate * q, pre, post) + ' for ' + q.toLocaleString('en-US') + ' ' + unit + (q === 1 ? '' : 's') : (base ? 'Starts at ' + money(base, pre, post) + '. Move the slider to see the price change.' : 'Move the slider to see the price.'); }
+      function setQ(q, from) { q = Math.max(0, Math.min(max, Math.round(q) || 0)); if (from !== 'rng') rng.value = q; if (from !== 'qty') qty.value = q; show(q); if (q && cb && !cb.checked) { cb.checked = true; mark(); } }
+      rng.addEventListener('input', function () { setQ(parseFloat(rng.value), 'rng'); });
+      qty.addEventListener('input', function () { var v = parseFloat(qty.value); if (qty.value !== '' && !isNaN(v)) setQ(v, 'qty'); });
+      qty.addEventListener('blur', function () { setQ(parseFloat(qty.value), ''); });
+      f.addEventListener('reset', function () { setTimeout(function () { setQ(0, ''); mark(); }, 0); });
+      show(0);
+    })(cs[i]);
+  })();
   function readForm() {
-    var need = f.querySelector('input[name=need]:checked'), hasPoll = !!f.querySelector('input[name=need]');
+    var need = f.querySelector('input[name=need]:checked'), hasPoll = !!f.querySelector('input[name=need]'), picked = pickedServices();
     if (!val('name')) return bad(el('name'), 'Please enter your name.');
     if (!/^\S+@\S+\.\S+$/.test(val('email'))) return bad(el('email'), 'Please enter a valid email address so I can reply.');
-    if (hasPoll && !need) return bad(f.querySelector('input[name=need]'), 'Please pick one option.');
-    return { name: val('name'), email: val('email'), need: need ? need.value : '', message: val('message') };
+    if (hasPoll && !need && !picked.length) return bad(f.querySelector('input[name=need]'), 'Please pick one option, or add a service above.');
+    var msg = picked.length ? ('Services I am interested in:\n' + picked.join('\n')).slice(0, 700) + (val('message') ? '\n\n' : '') : '';
+    return { name: val('name'), email: val('email'), need: need ? need.value : (picked.length ? 'Services (see message)' : ''), message: msg + val('message') };
   }
   // Decide what a form service reply means. Only an explicit acceptance counts as success.
   function classify(mode, status, text) {
@@ -607,7 +644,8 @@ function projectsHtml(items) {
     if (v) media = `<div class="pm vid" data-embed="${esc(v.embed)}" data-title="${esc(p.title || 'Video')}">${src ? `<img src="${esc(src)}" alt="" loading="lazy" decoding="async">` : ''}<button type="button" class="play" aria-label="Play video${p.title ? ': ' + esc(p.title) : ''}"><svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></button></div>`;
     else if (src) media = full ? `<a class="pm" href="${esc(full)}" target="_blank" rel="noopener noreferrer" aria-label="Open the full image${p.title ? ' of ' + esc(p.title) : ''}"><img src="${esc(src)}" alt="${alt}" loading="lazy" decoding="async"></a>` : `<div class="pm"><img src="${esc(src)}" alt="${alt}"></div>`;
     const links = [link && `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">View project</a>`, v && `<a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">Watch on Vimeo</a>`].filter(Boolean).join('');
-    return `<article class="proj">${media}<div class="pb">${p.title ? `<h3>${esc(p.title)}</h3>` : ''}${p.desc ? `<p>${esc(p.desc)}</p>` : ''}${links ? `<p class="pl">${links}</p>` : ''}</div></article>`;
+    const kd = p.kind === 'own' ? 'Personal project, made to show my skills' : p.kind === 'client' ? 'Client work' + (p.client ? ' for ' + p.client : '') : '';
+    return `<article class="proj">${media}<div class="pb">${kd ? `<p class="kd">${esc(kd)}</p>` : ''}${p.title ? `<h3>${esc(p.title)}</h3>` : ''}${p.desc ? `<p>${esc(p.desc)}</p>` : ''}${links ? `<p class="pl">${links}</p>` : ''}</div></article>`;
   }).join('');
   return `<section class="work no-print" id="work"><div class="work-in"><h2>Projects</h2><div class="projs">${cards}</div></div></section>`;
 }
@@ -654,7 +692,17 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .hire{max-width:860px;margin:1.2rem auto 3rem;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
 .hire-in{padding:2.2rem 2.6rem}@media (max-width:640px){.hire-in{padding:1.6rem 1.2rem}}
 .hire h2{font-size:1.8rem}.avail{display:inline-flex;align-items:center;gap:.5rem;background:var(--soft);padding:.25rem .8rem;border-radius:999px;margin:.6rem 0 0;font-size:.92em}.dot{width:9px;height:9px;border-radius:50%;background:#2f9e5b}
-.svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.extra{display:block;color:var(--muted);font-size:.92em;margin-top:.2rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}
+.svcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.9rem;margin:1.3rem 0}.svc{border:1.5px solid var(--line);border-radius:12px;padding:1rem}.extra{display:block;color:var(--muted);font-size:.92em;margin-top:.2rem}.svc p{margin:.3rem 0;color:var(--muted);font-size:.95em}.price{color:var(--acc)}.svc.on{border-color:var(--acc)}
+.pick{display:flex;align-items:center;gap:.6rem;position:relative;min-height:44px;margin-top:.7rem;cursor:pointer;font-weight:600}.pick input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.pick .box{width:24px;height:24px;flex:none;border:2px solid var(--line);border-radius:7px;display:inline-grid;place-items:center;background:transparent;transition:background .15s,border-color .15s}
+.pick input:checked~.box{background:var(--fill);border-color:var(--fill)}.pick input:checked~.box::after{content:"";width:6px;height:12px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}.pick input:focus-visible~.box{outline:3px solid var(--acc);outline-offset:3px}
+.calc{margin-top:.8rem}.qlbl{display:block;font-weight:600;font-size:.92em;margin-bottom:.1rem}.qrow{display:flex;align-items:center;gap:.7rem}
+input.rng{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:44px;background:transparent;cursor:pointer;margin:0}
+input.rng::-webkit-slider-runnable-track{height:8px;border-radius:99px;background:var(--line)}input.rng::-moz-range-track{height:8px;border-radius:99px;background:var(--line)}
+input.rng::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;margin-top:-10px;border-radius:50%;background:var(--fill);border:3px solid var(--paper);box-shadow:0 1px 5px rgba(0,0,0,.35)}input.rng::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--fill);border:3px solid var(--paper);box-shadow:0 1px 5px rgba(0,0,0,.35)}
+input.rng:focus-visible{outline:3px solid var(--acc);outline-offset:2px;border-radius:8px}
+input.qty{width:6.2rem;flex:none;min-height:44px;font:inherit;color:inherit;padding:.4rem .6rem;border:1.5px solid var(--line);border-radius:10px;background:transparent}input.qty:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.est{margin:.3rem 0 0;font-weight:700;color:var(--acc)}
 .work{max-width:860px;margin:1.2rem auto;background:var(--paper);border-radius:6px;box-shadow:0 2px 22px rgba(0,0,0,.12)}
 .work-in{padding:2.2rem 2.6rem}@media (max-width:640px){.work-in{padding:1.6rem 1.2rem}}.work h2{font-size:1.8rem}
 .projs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin-top:1.2rem}
@@ -665,6 +713,7 @@ section h3,.side h3{font-size:.82rem;letter-spacing:.12em;text-transform:upperca
 .pb{padding:.9rem 1rem 1rem;display:grid;gap:.4rem;align-content:start}.pb h3{font-size:1.1rem;margin:0}.pb p{margin:0;color:var(--muted);font-size:.95em}
 .pl{display:flex;flex-wrap:wrap;gap:.2rem 1rem}.pl a{font-weight:600;min-height:44px;display:inline-flex;align-items:center}
 .tpl-elegant .work h2{text-align:center;text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+.kd{font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin:0 0 .35rem}
 .tb{display:flex;align-items:center;gap:.3rem}.tb .alt{font-weight:600;color:var(--ink);text-decoration:none;min-height:44px;display:inline-flex;align-items:center;padding:0 .8rem;border-radius:999px}.tb .alt:hover{text-decoration:underline}
 .direct{margin:1rem 0 0;color:var(--muted)}.direct a{color:var(--acc)}
 .copy{font:inherit;font-weight:600;min-height:44px;padding:.4rem 1rem;border-radius:999px;border:1.5px solid var(--ctl);background:var(--paper);color:var(--acc);cursor:pointer;margin:.3rem .4rem .3rem 0}
@@ -737,7 +786,7 @@ function normData(x) {
   const strs = { name: 120, headline: 200, email: 254, phone: 60, location: 120, website: 300, summary: 2000, skills: 2000, availability: 200, ctaLabel: 60, formTitle: 200, pollQuestion: 200, pollOptions: 1500, formEndpoint: 300, thanks: 400 };
   for (const k in strs) o[k] = own(x, k) ? (typeof x[k] === 'string' ? x[k].slice(0, strs[k]) : '') : SAMPLE[k];
   o.formMode = own(x, 'formMode') && FORM_MODES.includes(x.formMode) ? x.formMode : SAMPLE.formMode;
-  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40 }, 20], projects: [{ title: 100, desc: 600, url: 300, video: 300, image: 20, alt: 160 }, 12] };
+  const lists = { experience: [{ role: 120, company: 120, dates: 60, bullets: 4000 }, 30], education: [{ school: 120, degree: 120, dates: 60 }, 20], links: [{ label: 80, url: 300 }, 20], services: [{ title: 100, desc: 600, price: 60, extraPer: 40, extraPrice: 40, extraMax: 10 }, 20], projects: [{ title: 100, desc: 600, url: 300, video: 300, image: 20, alt: 160, kind: 10, client: 100 }, 12] };
   for (const k in lists) {
     const [shape, max] = lists[k];
     o[k] = !own(x, k) ? JSON.parse(JSON.stringify(SAMPLE[k])) : Array.isArray(x[k]) ? x[k].filter(e => e && typeof e === 'object' && !Array.isArray(e)).slice(0, max).map(e => { const r = {}; for (const f in shape) r[f] = e && typeof e === 'object' && own(e, f) && typeof e[f] === 'string' ? e[f].slice(0, shape[f]) : ''; return r; }) : [];
@@ -746,7 +795,7 @@ function normData(x) {
 }
 function normProjects(o) { // an image is either a published id or a picture chosen in this browser; a Vimeo link and a web address are written in one standard form
   o.projects = o.projects.map(p => { const v = vimeoRef(p.video), u = safeUrl(p.url);
-    return Object.assign(p, { image: /^(?:[2-9A-HJ-NP-Za-km-z]{12}|local:[a-z0-9]{8})$/.test(p.image) ? p.image : '', video: v ? v.url : p.video, url: /^https?:/i.test(u) ? u : p.url }); });
+    return Object.assign(p, { kind: p.kind === 'own' || p.kind === 'client' ? p.kind : '', client: p.kind === 'client' ? p.client : '', image: /^(?:[2-9A-HJ-NP-Za-km-z]{12}|local:[a-z0-9]{8})$/.test(p.image) ? p.image : '', video: v ? v.url : p.video, url: /^https?:/i.test(u) ? u : p.url }); });
   return o;
 }
 function normStyle(x) {
@@ -1169,6 +1218,47 @@ function impApply() {
   ['experience', 'education', 'links'].forEach(k => { if (d[k] && d[k].length) D[k] = d[k].map(e => Object.assign({}, e)); });
   D = normData(D); impDraft = null; impMsg = { kind: 'ok', text: 'Imported. Read it over, then edit anything in the sections below.' }; save(); renderPanel(); refresh();
 }
+/* ---------- Import a poll (for example a Google Form saved as PDF, or copied from the form) ---------- */
+function parsePoll(text) {
+  const junk = /^(required|\*|\* ?indicates required question|indicates required question|your answer|short answer text|long answer text|submit|clear form|next|back|page \d+( of \d+)?|sign in to google.*|switch account|not shared|draft saved|never submit passwords.*|this content is neither created nor endorsed by google.*|report abuse|terms of service|privacy policy|google forms?|forms|untitled (form|question)|choose|other:?|option \d+|\d+\s*\/\s*\d+|https?:\/\/\S+|.*docs\.google\.com\/forms.*|.*forms\.gle\/.*)$/i;
+  const lines = tidyText(text).split('\n').map(l => l.replace(/^[\s○◯◦●•▪■□☐▢◻⚪⭕\-–—*·o]\s+/, '').replace(/^\([ x]?\)\s*/, '').replace(/\s+/g, ' ').trim()).filter(l => l && !junk.test(l));
+  const isQ = l => /\?\s*\*?$/.test(l) || /\s\*$/.test(l);
+  const clean = l => l.replace(/\s*\*$/, '').trim();
+  const out = []; let cur = null;
+  for (const l of lines) { if (isQ(l) && l.length <= 200) { cur = { q: clean(l), o: [] }; out.push(cur); } else if (cur && l.length <= 80 && cur.o.length < 20) cur.o.push(clean(l)); }
+  let found = out.filter(x => x.o.length >= 2);
+  if (!found.length && lines.length >= 3 && lines.length <= 25 && lines.slice(1).every(l => l.length <= 80)) found = [{ q: clean(lines[0]).slice(0, 200), o: lines.slice(1).map(clean) }]; // plain "question, then one choice per line"
+  if (!found.length) return null;
+  const f = found[0], seen = new Set(), opts = f.o.filter(o => { const k = o.toLowerCase(); if (!o || seen.has(k)) return false; seen.add(k); return true; });
+  let joined = ''; const keep = []; for (const o of opts) { if ((joined + o + '\n').length > 1500) break; joined += o + '\n'; keep.push(o); }
+  return { question: f.q.slice(0, 200), options: keep, more: found.length - 1 };
+}
+let pollPaste = '', pollMsg = null, pollUndo = null;
+const pollImportBody = () => `<div class="impbox" id="pollImp"><b>Import a poll from Google Forms</b>
+  <p class="hint">Make your poll in Google Forms (a multiple choice question). Then open the form, choose the three dots, then Print, then Save as PDF, and choose that PDF here. You can also copy the question and its choices from the form and paste them below. Folio takes the first question and its choices. Folio cannot open a Google link for you, because browsers do not allow that.</p>
+  <div class="btnrow"><label class="btn" style="cursor:pointer">Choose a poll file<input type="file" id="pollFile" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden></label></div>
+  <label class="f">Or paste the poll<textarea id="pollPaste" rows="5" maxlength="4000" placeholder="What do you need help with?&#10;Articles or blog posts&#10;Website copy">${esc(pollPaste)}</textarea></label>
+  <div class="btnrow"><button type="button" class="btn btn-primary" id="pollGo">Use this poll</button></div>
+  <div id="pollLive" aria-live="polite">${pollLiveHtml()}</div></div>`;
+function pollLiveHtml() { return pollMsg ? `<p class="pubmsg ${pollMsg.kind}" role="${pollMsg.kind === 'err' ? 'alert' : 'status'}">${esc(pollMsg.text)}${pollMsg.kind === 'err' ? '<button type="button" class="copyerr" data-copyerr>Copy error</button>' : ''}</p>` + (pollUndo && pollMsg.kind === 'ok' ? '<div class="btnrow"><button type="button" class="btn" id="pollUndo">Undo</button></div>' : '') : ''; }
+const setPoll = (kind, text) => { pollMsg = text ? { kind, text } : null; const el = $('#pollLive'); if (el) el.innerHTML = pollLiveHtml(); };
+function pollApply(text) {
+  const r = parsePoll(text);
+  if (!r) return setPoll('err', 'Folio could not find a question with at least two choices. A poll needs one question line, then one choice per line. Check the file, or paste the question and choices.');
+  pollUndo = { q: D.pollQuestion, o: D.pollOptions }; D.pollQuestion = r.question; D.pollOptions = r.options.join('\n'); pollPaste = ''; save(); refresh(); if (typeof updatePubStatus === 'function') updatePubStatus();
+  pollMsg = { kind: 'ok', text: 'Imported "' + r.question + '" with ' + r.options.length + ' choices.' + (r.more > 0 ? ' The text had ' + r.more + ' more question' + (r.more === 1 ? '' : 's') + '. A Folio poll has one question, so only the first was used.' : '') }; renderPanel();
+}
+document.addEventListener('change', async e => {
+  const t = e.target; if (!t || t.id !== 'pollFile') return; const f = t.files && t.files[0]; t.value = ''; if (!f) return;
+  setPoll('note', 'Reading ' + f.name + '...');
+  try { pollApply(await readResumeFile(f)); } catch (err) { setPoll('err', String((err && err.message) || err)); }
+});
+document.addEventListener('input', e => { if (e.target && e.target.id === 'pollPaste') pollPaste = e.target.value; });
+document.addEventListener('click', e => {
+  const t = e.target && e.target.closest ? e.target.closest('button') : null; if (!t) return;
+  if (t.id === 'pollGo') { if (tidyText(pollPaste).length < 5) return setPoll('err', 'Choose a poll file or paste the question and its choices first.'); pollApply(pollPaste); }
+  else if (t.id === 'pollUndo' && pollUndo) { D.pollQuestion = pollUndo.q; D.pollOptions = pollUndo.o; pollUndo = null; pollMsg = { kind: 'ok', text: 'Your earlier poll is back.' }; save(); refresh(); renderPanel(); }
+});
 document.addEventListener('change', e => {
   const t = e.target; if (!t || !t.id) return;
   if (t.id === 'impFile') { const files = [...t.files]; t.value = ''; addImportFiles(files); }
@@ -1305,7 +1395,7 @@ const mediaNoteHtml = () => mediaOn === false ? '<p class="pubmsg err" role="not
 const projectFields = (p, i) => {
   const lid = localRef(p), real = MEDIA_ID_RE.test(p.image || ''), meta = lid ? IMG_META[lid] : null, thumb = lid ? (WEB_THUMBS[lid] || '') : real && PUBLISH.api ? PUBLISH.api + '/api/media/' + p.image : '';
   const status = lid ? (meta ? esc(meta.name) + ', ' + impFileSize(meta.size) + '. It uploads when you press Publish or Update.' : 'This picture is no longer saved in this browser. Choose it again.') : real ? 'Uploaded to your Folio service.' : 'No image yet.';
-  return LF('projects', i, 'title', 'Project title', { ph: 'Brand voice guide for a software company' }) + LF('projects', i, 'desc', 'What it is and what you did', { area: true, rows: 3 }) + LF('projects', i, 'url', 'Link to the project (optional)', { ph: 'https://' }) +
+  return LF('projects', i, 'title', 'Project title', { ph: 'Brand voice guide for a software company' }) + `<label class="f">Why you made it<span class="selwrap"><select data-l="projects" data-i="${i}" data-k="kind"><option value=""${!p.kind ? ' selected' : ''}>Not shown on the page</option><option value="own"${p.kind === 'own' ? ' selected' : ''}>A personal project, made to show my skills</option><option value="client"${p.kind === 'client' ? ' selected' : ''}>Made for a client or employer</option></select></span></label>` + (p.kind === 'client' ? LF('projects', i, 'client', 'Who it was for (optional)', { ph: 'Acme Software' }) + '<p class="hint">Only add a name if you have permission to share it.</p>' : '') + LF('projects', i, 'desc', 'What it is and what you did', { area: true, rows: 3 }) + LF('projects', i, 'url', 'Link to the project (optional)', { ph: 'https://' }) +
     `<div class="pimg"><span class="lbl">Image</span><p class="hint">JPEG, PNG, WebP or GIF, up to 15 MB.</p>${thumb ? `<img class="pthumb" src="${esc(thumb)}" alt="Preview of the chosen image">` : ''}
     <div class="btnrow"><label class="btn" style="cursor:pointer">${p.image ? 'Replace image' : 'Choose image'}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" data-pimg="${i}" hidden></label>${p.image ? `<button type="button" class="btn" data-pimgrm="${i}">Remove image</button>` : ''}</div>
     <p class="hint" id="pimgSt${i}" role="status">${status}</p></div>` + (p.image ? LF('projects', i, 'alt', 'Describe the image for people who cannot see it', { ph: 'Cover of the brand voice guide' }) : '') +
@@ -1347,7 +1437,7 @@ async function uploadImages(pageId, key) {
   return out;
 }
 const imagesNote = up => !up ? '' : (up.ok ? ' ' + up.ok + ' image' + (up.ok === 1 ? '' : 's') + ' uploaded.' : '') + (up.failed.length ? ' ' + up.failed.length + ' image' + (up.failed.length === 1 ? ' was' : 's were') + ' not uploaded: ' + up.failed.map(f => '"' + f.title + '": ' + f.why).join(' ') + (up.fatal === 'media_not_set_up' ? ' The page is published without them. Turn on image storage (see the note in the Projects card), then press Update published page.' : ' Press Update published page to try again.') : '');
-const serverData = snap => { const j = JSON.parse(snap); j.D.projects = (j.D.projects || []).map(p => localRef(p) ? Object.assign({}, p, { image: '' }) : p); return j; };
+const serverData = snap => { const j = JSON.parse(snap); j.D.projects = (j.D.projects || []).map(p => (localRef(p) ? Object.assign({}, p, { image: '' }) : Object.assign({}, p))).map(p => { if (!p.kind) delete p.kind; if (!p.client) delete p.client; return p; }); j.D.services = (j.D.services || []).map(v => { const o = Object.assign({}, v); if (!o.extraMax) delete o.extraMax; return o; }); return j; };
 const stripLocal = d => Object.assign({}, d, { projects: (d.projects || []).map(p => localRef(p) ? Object.assign({}, p, { image: '', alt: '' }) : p) });
 let openCards = { about: true };
 function miniLayout(k) {
@@ -1384,9 +1474,9 @@ function renderPanel() {
       `<div><b>Paper</b><div class="choices" style="margin-top:.5rem">${Object.entries(PAPERS).map(([k, p]) => `<button type="button" class="choice" data-st="paper" data-v="${k}" aria-pressed="${ST.paper === k}"><span class="aa" aria-hidden="true" style="--mp:${p[1]};--mk:${p[2]};--mc:${ST.color}"><em style="font-family:${FONTS[ST.font] ? FONTS[ST.font][3] : 'serif'}">Aa</em><small>Aa</small></span><b>${p[0]}</b><span>${k === 'dark' ? 'Light text on dark' : 'Dark text'}</span></button>`).join('')}</div></div>` + `<p class="hint" id="colorNote" aria-live="polite">${esc(colorNote(ST.color, ST.paper))}</p>`) +
     card('hire', '7. Hire-me section',
       F('Availability note', 'availability', { ph: 'Taking new clients in January' }) +
-      D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div><div class="row2">${LF('services', i, 'extraPrice', 'Extra charge (optional)', { ph: '$0.66' })}${LF('services', i, 'extraPer', 'For each', { ph: 'minute' })}</div><p class="hint">Shows as "+ $0.66 per minute" on the page.</p>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
+      D.services.map((s, i) => entry('services', i, s.title, `<div class="row2">${LF('services', i, 'title', 'Service')}${LF('services', i, 'price', 'Price', { ph: 'From $250' })}</div><div class="row2">${LF('services', i, 'extraPrice', 'Extra charge (optional)', { ph: '$0.66' })}${LF('services', i, 'extraPer', 'For each', { ph: 'minute' })}</div>${LF('services', i, 'extraMax', 'Slider maximum (optional)', { ph: '10000' })}<p class="hint">Shows as "+ $0.66 per minute" on the page, with a slider so visitors can pick an amount (for example 2,000 words) and watch the price change. The slider maximum is the most a visitor can pick. Leave it empty to use 10,000 for words and 100 for anything else.</p>${LF('services', i, 'desc', 'Short description', { area: true, rows: 2 })}`)).join('') +
       `<button type="button" class="btn" data-add="services">Add a service</button>` +
-      F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) +
+      F('Poll question', 'pollQuestion', { hint: ' Visitors pick one answer with their message.' }) + F('Poll choices', 'pollOptions', { area: true, rows: 4, hint: ' One per line. Leave empty to hide the poll.' }) + pollImportBody() +
       `<div class="row2">${F('Form heading', 'formTitle')}${F('Button label', 'ctaLabel')}</div>` + F('Message shown once the form service accepts a message', 'thanks')) +
     card('send', '8. Where form messages go',
       `<span class="fielderr" data-err="mode" role="alert" hidden></span><label class="f">How should messages reach you?<span class="selwrap"><select data-f="formMode"><option value="email"${D.formMode === 'email' ? ' selected' : ''}>Open the visitor's email app (no setup)</option><option value="formspree"${D.formMode === 'formspree' ? ' selected' : ''}>Formspree (free account, messages land in your inbox)</option><option value="gscript"${D.formMode === 'gscript' ? ' selected' : ''}>Google Apps Script (free, emails you from your own Google account)</option><option value="web3forms"${D.formMode === 'web3forms' ? ' selected' : ''}>Web3Forms (free access key)</option></select></span></label>` +
@@ -1419,7 +1509,7 @@ function change() { save(); refresh(); if (typeof updatePubStatus === 'function'
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.dataset.f !== undefined) { const ks = t.dataset.f.split('.'); let o = D; while (ks.length > 1) o = o[ks.shift()]; o[ks[0]] = t.value; if (t.dataset.f === 'formMode') renderPanel(); clearFieldError(t.dataset.f); change(); }
-  else if (t.dataset.l) { D[t.dataset.l][+t.dataset.i][t.dataset.k] = t.value; change(); }
+  else if (t.dataset.l) { D[t.dataset.l][+t.dataset.i][t.dataset.k] = t.value; if (t.dataset.l === 'projects' && t.dataset.k === 'kind') { if (t.value !== 'client') D.projects[+t.dataset.i].client = ''; renderPanel(); } change(); }
   else if (t.dataset.stInput) { ST[t.dataset.stInput] = t.value; document.querySelectorAll('.sw').forEach(s => s.setAttribute('aria-pressed', 'false')); document.querySelectorAll('.mini,.aa').forEach(m => m.style.setProperty('--mc', ST.color)); const n = $('#colorNote'); if (n) n.textContent = colorNote(ST.color, ST.paper); change(); }
 });
 document.addEventListener('change', e => { if (e.target.dataset.f === 'formMode') { D.formMode = e.target.value; renderPanel(); change(); } if (e.target.id === 'restoreFile') restore(e.target.files[0]); });
@@ -1427,7 +1517,7 @@ document.addEventListener('toggle', e => { const c = e.target.closest && e.targe
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.st) { ST[b.dataset.st] = b.dataset.v; renderPanel(); change(); }
-  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'projects' ? { title: '', desc: '', url: '', video: '', image: '', alt: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '', extraPer: '', extraPrice: '' }); renderPanel(); change(); }
+  else if (b.dataset.add) { const k = b.dataset.add; D[k].push(k === 'experience' ? { role: '', company: '', dates: '', bullets: '' } : k === 'education' ? { school: '', degree: '', dates: '' } : k === 'projects' ? { title: '', desc: '', url: '', video: '', image: '', alt: '', kind: '', client: '' } : k === 'links' ? { label: '', url: '' } : { title: '', desc: '', price: '', extraPer: '', extraPrice: '', extraMax: '' }); renderPanel(); change(); }
   else if (b.dataset.rm) {
     const [k, i] = b.dataset.rm.split(':'), rec = D[k][+i], nm = rec.role || rec.school || rec.label || rec.title || 'this entry';
     confirmDialog({ title: 'Remove this entry?', message: `"${nm}" will be removed from your resume. This cannot be undone unless you have a backup.`, ok: 'Remove' }).then(yes => {

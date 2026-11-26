@@ -105,3 +105,10 @@ Projects (title, description, link, Vimeo video) work with **no setup**. Picture
 **Without the binding.** Publishing still works; the page says pictures can't be stored yet and shows the project without the image.
 **Videos.** Vimeo links only. The page shows a Play button that loads Vimeo's player, plus a "Watch on Vimeo" link.
 **Free plan.** KV allows 1,000 writes a day and 1 GB total.
+
+## 13. Project labels and service sliders (Folio v1.4.1, Worker 1.4.0)
+
+Worker **1.4.0** accepts three new optional fields: `kind` and `client` on each project (personal or client work) and `extraMax` on each service (the slider's top value). Deploy it the same way as before (Edit code, paste, Deploy). Nothing new to connect.
+
+Until the Worker is on 1.4.0, Folio leaves these fields out when it publishes, so publishing keeps working. A project label or slider maximum you set will not reach your live page until the Worker is updated.
+The service picks, the slider and the Google poll import run in the visitor's or your own browser and need no Worker change.

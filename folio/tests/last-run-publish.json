@@ -1,5 +1,5 @@
 {
- "at": "2026-11-24T03:48:04.168Z",
+ "at": "2026-11-26T17:29:35.380Z",
  "passed": 115,
  "failed": 0,
  "results": [
@@ -41,7 +41,7 @@
   {
    "name": "publish: link has the form /folio/?id=<12 chars>",
    "ok": true,
-   "note": "http://x.test/folio/?id=XZuJXciar6HU"
+   "note": "http://x.test/folio/?id=JEQdeuU8SzvB"
   },
   {
    "name": "publish: Turnstile rendered with the public site key and action folio-publish",
